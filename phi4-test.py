@@ -2,6 +2,7 @@ from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
 import os
 from dotenv import load_dotenv
 import tensorflow as tf
+from tensorflow.keras import mixed_precision
 
 gpus = tf.config.list_physical_devices('GPU')
 
@@ -10,6 +11,10 @@ if gpus:
         tf.config.set_visible_devices(gpus[0], 'GPU')
     except RuntimeError as e:
         print(e)
+        
+# Impostare la politica globale su mixed_float16
+policy = mixed_precision.Policy('mixed_float16')
+mixed_precision.set_global_policy(policy)
 
 # Carica le variabili dal file .env
 load_dotenv("key.env")
