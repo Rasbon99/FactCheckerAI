@@ -26,12 +26,12 @@ generator = pipeline(
     model=model,
     tokenizer=tokenizer,
     framework="tf",
-    device=gpus[0]
+    device_map="auto"
 )
 
 # Funzione di interazione
 def chat_with_phi3():
-    print("Benvenuto nel chat CLI con Phi-3.5! (Digita 'exit' per uscire)")
+    print("Benvenuto nel chat! (Digita 'exit' per uscire)")
     system_message = {
         "role": "system",
         "content": "You are a medieval knight and must provide explanations to modern people."
