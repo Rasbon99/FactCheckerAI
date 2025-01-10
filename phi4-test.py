@@ -1,4 +1,4 @@
-from transformers import pipeline
+from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
 import os
 from dotenv import load_dotenv
 import tensorflow as tf
@@ -17,11 +17,16 @@ load_dotenv("key.env")
 # Path del modello
 MODEL_PATH = os.getenv("MODEL_PATH")
 
+# Carica il modello e il tokenizer
+model = AutoModelForCausalLM.from_pretrained(MODEL_PATH)
+tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
+
 # Configura la pipeline con il modello locale
-pipeline = pipeline(
+generator = pipeline(
     "text-generation",
-    model=MODEL_PATH,
-    device=gpus,
+    model=model,
+    tokenizer=tokenizer,
+    device_map="auto"
 )
 
 # Funzione di interazione
@@ -44,7 +49,7 @@ def chat_with_phi4():
         ]
 
         # Genera una risposta
-        outputs = pipeline(messages, max_new_tokens=128)
+        outputs = generator(messages, max_new_tokens=128)
         response = outputs[0]["generated_text"]
         print(f"AI: {response}")
 
