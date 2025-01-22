@@ -64,17 +64,3 @@ r = vector_qa.invoke(
     }
 )
 print(r["result"])
-
-# Graph-Cypher-Chain w/ LangChain
-from langchain.chains import GraphCypherQAChain
-
-graph.refresh_schema()
-
-llm_model = ChatOllama(temperature=0, model="phi3.5:latest")
-
-cypher_chain = GraphCypherQAChain.from_llm(
-    cypher_llm=llm_model,
-    qa_llm=llm_model,
-    graph=graph,
-    verbose=True,
-)
