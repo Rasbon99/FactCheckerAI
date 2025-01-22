@@ -5,7 +5,7 @@ from langchain_neo4j import Neo4jGraph
 dotenv.load_dotenv("key.env", override=True)
 
 graph = Neo4jGraph(
-    url=os.environ["NEO4J_URI"].replace("http", "bolt"),  # Corregge lo schema URI
+    url=os.environ["NEO4J_URI"].replace("http", "bolt"),  
     username=os.environ["NEO4J_USERNAME"],
     password=os.environ["NEO4J_PASSWORD"],
 )
