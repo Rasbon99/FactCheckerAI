@@ -1,8 +1,6 @@
 import dotenv
 import os
 from langchain_neo4j import Neo4jGraph  
-import matplotlib.pyplot as plt
-import networkx as nx
 
 dotenv.load_dotenv("key.env", override=True)
 
