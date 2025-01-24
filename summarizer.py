@@ -1,8 +1,16 @@
 from transformers import pipeline
 from log import Logger
+import dotenv
+import os
+from langchain_neo4j import Neo4jGraph  
+
+dotenv.load_dotenv("key.env", override=True)
+
+# Path del modello
+MODEL_PATH = os.getenv("MODEL_PATH_BART")
 
 class Summarizer:
-    def __init__(self, model_name="facebook/bart-large-cnn"):
+    def __init__(self, model_name=MODEL_PATH):
         """
         Initializes the Summarizer class with a default or user-defined model
         and sets up the logger for logging events.
