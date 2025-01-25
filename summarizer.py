@@ -2,27 +2,28 @@ from transformers import pipeline
 from log import Logger
 import dotenv
 import os
-from langchain_neo4j import Neo4jGraph  
 
 dotenv.load_dotenv("key.env", override=True)
 
 # Path del modello
-MODEL_PATH = os.getenv("MODEL_PATH_BART")
+MODEL_PATH = os.getenv("SUMMARIZER_MODEL_NAME")
 
 class Summarizer:
-    def __init__(self, model_name=MODEL_PATH):
+    def __init__(self, env_file="key.env", model_name=MODEL_PATH):
         """
         Initializes the Summarizer class with a default or user-defined model
         and sets up the logger for logging events.
         
         Args:
             model_name (str): The name of the Hugging Face model to use for summarization. 
-                              Default is 'facebook/bart-large-cnn'.
+                              Default is a Bart model.
         
         Attributes:
             summarizer (pipeline): A pipeline for summarization using the specified model.
             logger (Logger): A logger instance for logging messages.
         """
+        dotenv.load_dotenv(env_file, override=True)
+
         # Initialize the summarization model pipeline with the specified model
         self.summarizer = pipeline("summarization", model=model_name)
         
@@ -76,7 +77,7 @@ class Summarizer:
             list: A list of summarized texts.
         
         Example:
-            summarized_texts = summarizer.summarize_texts(corpi, max_length=150, min_length=100)
+            summarized_texts = summarizer.summarize_texts(body, max_length=150, min_length=100)
         """
         self.logger.info("Starting batch summarization process...")
         summarized_texts = []
