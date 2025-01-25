@@ -40,7 +40,7 @@ class Neo4jPipeline:
         self.llm_model = ChatOllama(model=self.model_name)
         self.index_name = index_name
 
-    def load_data(self, csv_path):
+    def _load_data(self, csv_path):
         """
         Carica i dati da un file CSV nel grafo Neo4j.
 
@@ -78,7 +78,7 @@ class Neo4jPipeline:
         
         self.graph.refresh_schema()
 
-    def query_similarity(self, query):
+    def _query_similarity(self, query):
         """Create a vector index on the Neo4j graph and perform a similarity-based query on the vector index."""
         
         node_label="Article"
