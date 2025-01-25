@@ -40,12 +40,12 @@ class Neo4jPipeline:
         self.llm_model = ChatOllama(model=self.model_name)
         self.index_name = index_name
 
-    def load_data(self, csv_url):
+    def load_data(self, csv_path):
         """
         Carica i dati da un file CSV nel grafo Neo4j.
 
         Args:
-            csv_url (str): L'URL del file CSV contenente gli articoli da caricare.
+            csv_path (str): Path del file CSV contenente gli articoli da caricare.
         
         Raises:
             Exception: Se c'è un errore durante il caricamento dei dati.
@@ -53,7 +53,7 @@ class Neo4jPipeline:
 
         q_load_articles = f"""
         LOAD CSV WITH HEADERS
-        FROM '{csv_url}'
+        FROM '{csv_path}'
         AS row 
         FIELDTERMINATOR ';'
         MERGE (a:Article {{title:row.Title}})
@@ -67,7 +67,7 @@ class Neo4jPipeline:
             MERGE (a)-[:IN_TOPIC]->(t))
         """
         
-        self.logger.info(f"Avvio caricamento dati da {csv_url}...")
+        self.logger.info(f"Avvio caricamento dati da {csv_path}...")
         try:
             start_time = time.time()
             self.graph.query(q_load_articles)
@@ -107,19 +107,30 @@ class Neo4jPipeline:
             return result.get("result", "Nessun risultato trovato.")
         except Exception as e:
             self.logger.error(f"Errore durante la query di similarità: {e}")
-            return "Errore nell'elaborazione della query."
+            return None  
+        
+    def run_pipeline(self, csv_path, query):
+            """
+            Esegui l'intera pipeline: carica i dati dal CSV e poi esegui la query di similarità.
+
+            Args:
+                csv_path (str): Percorso del file CSV.
+                query (str): La query di similarità da eseguire.
+            
+            Returns:
+                str: Risultato della query di similarità.
+            """
+            
+            self._load_data(csv_path)
+            return self._query_similarity(query)
 
 # Usage example
 if __name__ == "__main__":
     # Instantiate the pipeline
     pipeline = Neo4jPipeline()
-
-    pipeline.load_data(
-        csv_url="https://raw.githubusercontent.com/dcarpintero/generative-ai-101/main/dataset/synthetic_articles.csv"
-    )
-
-    # Perform a similarity query
-    query_result = pipeline.query_similarity(
-        "which articles discuss how AI might affect our daily life? include the article titles and abstracts."
+    
+    query_result = pipeline.run_pipeline(
+        csv_path="https://raw.githubusercontent.com/dcarpintero/generative-ai-101/main/dataset/synthetic_articles.csv",
+        query="which articles discuss how AI might affect our daily life? include the article titles and abstracts."
     )
     print(query_result)
