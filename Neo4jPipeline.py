@@ -7,12 +7,12 @@ from langchain.chains import RetrievalQA
 import time
 from log import Logger
 
-class Neo4jPipeline:
+class RAG_Pipeline:
     def __init__(self, env_file="key.env", index_name="articles"):
         # Load environment variables
         dotenv.load_dotenv(env_file, override=True)
         
-        self.logger = Logger("Neo4jPipeline").get_logger()
+        self.logger = Logger(self.__class__.__name__).get_logger()
         
         self.model_name = os.environ["MODEL_LLM_NEO4J"]
 
@@ -127,7 +127,7 @@ class Neo4jPipeline:
 # Usage example
 if __name__ == "__main__":
     # Instantiate the pipeline
-    pipeline = Neo4jPipeline()
+    pipeline = RAG_Pipeline()
     
     query_result = pipeline.run_pipeline(
         csv_path="https://raw.githubusercontent.com/dcarpintero/generative-ai-101/main/dataset/synthetic_articles.csv",
