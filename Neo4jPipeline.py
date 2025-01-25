@@ -129,8 +129,11 @@ if __name__ == "__main__":
     # Instantiate the pipeline
     pipeline = RAG_Pipeline()
     
+    csv_path = "https://raw.githubusercontent.com/dcarpintero/generative-ai-101/main/dataset/synthetic_articles.csv"
+    query = "which articles discuss how AI might affect our daily life? include the article titles and abstracts."
+    
     query_result = pipeline.run_pipeline(
-        csv_path="https://raw.githubusercontent.com/dcarpintero/generative-ai-101/main/dataset/synthetic_articles.csv",
-        query="which articles discuss how AI might affect our daily life? include the article titles and abstracts."
+        csv_path=csv_path,
+        query=query
     )
     print(query_result)
