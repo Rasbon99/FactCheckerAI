@@ -6,6 +6,10 @@ from langchain_ollama import OllamaEmbeddings, ChatOllama
 from langchain.chains import RetrievalQA
 import time
 from log import Logger
+from py2neo import Graph
+import networkx as nx
+import matplotlib.pyplot as plt
+from pyvis.network import Network
 
 class RAG_Pipeline:
     def __init__(self, env_file="key.env", index_name="articles"):
@@ -67,6 +71,11 @@ class RAG_Pipeline:
             MERGE (a)-[:IN_TOPIC]->(t))
         """
         
+        # TITLE, URL, SOURCE, BODY, ENTITY
+        
+        #Title;URL;Source;Body;Entities;
+        #"OpenAI lancia GPT-4";"https://example.com/openai-gpt4";"TechCrunch";"OpenAI, GPT-4, Intelligenza Artificiale"
+        
         self.logger.info(f"Avvio caricamento dati da {csv_path}...")
         try:
             start_time = time.time()
@@ -77,6 +86,84 @@ class RAG_Pipeline:
             self.logger.error(f"Errore durante il caricamento dati: {e}")
         
         self.graph.refresh_schema()
+
+    def _extract_and_save_graph(self,  output_file_topic="graph_topic.jpg", output_file_published="graph_published.jpg"):
+        """
+        Esegue una query su Neo4j, crea il grafo e lo salva su file JPEG.
+        """ 
+        try:
+            graph = Graph(self.neo4j_url, auth=(self.neo4j_username, self.neo4j_password))
+            
+            # Primo grafico: (Article)-[:IN_TOPIC]->(Topic)
+            query_topic = """
+            MATCH (a:Article)-[:IN_TOPIC]->(t:Topic)
+            RETURN a.title AS Articolo,
+                   t.name AS Topic
+            """
+            results_topic = graph.run(query_topic).to_data_frame()
+            
+            G_topic = nx.DiGraph()
+            for _, row in results_topic.iterrows():
+                G_topic.add_edge(row['Articolo'], row['Topic'])
+            
+            # Abbreviazione etichette se troppo lunghe
+            max_len = 15
+            labels_top = {}
+            for node in G_topic.nodes():
+                label_text = node if len(node) <= max_len else node[:max_len] + "..."
+                labels_top[node] = label_text
+                
+            pos_topic = nx.spring_layout(G_topic, k=2, iterations=50)
+            
+            plt.figure(figsize=(10, 7))
+            nx.draw(
+                G_topic,
+                labels=labels_top,
+                pos=pos_topic,
+                with_labels=True,
+                node_color="skyblue",
+                node_size=3000,
+                edge_color="black",
+                font_size=10
+            )
+            plt.savefig(output_file_topic)
+
+            # Secondo grafico: (Ricercatore)-[:PUBLISHED]->(Article)
+            query_published = """
+            MATCH (p:Researcher)-[:PUBLISHED]->(a:Article)
+            RETURN p.name AS Ricercatore,
+                   a.title AS Articolo
+            """
+            results_pub = graph.run(query_published).to_data_frame()
+            G_pub = nx.DiGraph()
+            for _, row in results_pub.iterrows():
+                G_pub.add_edge(row['Ricercatore'], row['Articolo'])
+                
+            # Abbreviazione etichette se troppo lunghe
+            max_len = 15
+            labels_pub = {}
+            for node in G_pub.nodes():
+                label_text = node if len(node) <= max_len else node[:max_len] + "..."
+                labels_pub[node] = label_text
+                
+            pos_pub = nx.spring_layout(G_pub, k=2, iterations=50)
+            
+            plt.figure(figsize=(10, 7))
+            nx.draw(
+                G_pub,
+                labels=labels_pub,
+                pos=pos_pub,
+                with_labels=True,
+                node_color="lightgreen",
+                node_size=3000,
+                edge_color="black",
+                font_size=10
+            )
+            plt.savefig(output_file_published)
+            plt.show()
+            
+        except Exception as e:
+            self.logger.error(f"Errore durante l'estrazione e il salvataggio del grafo: {e}")
 
     def _query_similarity(self, query):
         """Create a vector index on the Neo4j graph and perform a similarity-based query on the vector index."""
@@ -99,11 +186,13 @@ class RAG_Pipeline:
         vector_qa = RetrievalQA.from_chain_type(
             llm=self.llm_model, chain_type="stuff", retriever=retriever
         )
-        
+                    
         self.logger.info(f"Esecuzione query di similarità: {query}")
         try:
+            start_time_similarity = time.time()
             result = vector_qa.invoke({"query": query})
-            self.logger.info("Query di similarità completata.")
+            elapsed_time = time.time() - start_time_similarity
+            self.logger.info(f"Query di similarità completata in {elapsed_time:.2f} secondi.")
             return result.get("result", "Nessun risultato trovato.")
         except Exception as e:
             self.logger.error(f"Errore durante la query di similarità: {e}")
@@ -122,6 +211,7 @@ class RAG_Pipeline:
             """
             
             self._load_data(csv_path)
+            self._extract_and_save_graph()
             return self._query_similarity(query)
 
 # Usage example
