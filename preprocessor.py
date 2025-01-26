@@ -1,6 +1,8 @@
-from googletrans import Translator
 from log import Logger
 from summarizer import Summarizer
+from ner import NER
+from groq import Groq
+from langdetect import detect
 import dotenv
 import os
 
@@ -9,58 +11,67 @@ class Preprocessor():
         dotenv.load_dotenv(env_file, override=True)
 
         self.logger = Logger(self.__class__.__name__).get_logger()
-        self.translator = Translator()
+        self.ner = NER()
         self.summarizer = Summarizer()
 
         self.config = {
             "translation": True,
+            "NER": True,
             "summarize": True
         }
         if config:
             self.config.update(config)
 
         self.preprocessed_data_path = os.getenv("SOURCES_DATA_PATH")
+        self.client = Groq()
 
     def translate_to_english(self, text):
         """
-        Translate a text to English only if it is not already in English.
+        Translate a text to English using langdetect first, then fall back to Groq if not in English.
         Args:
             text (str): The text to translate.
 
         Returns:
             str: The text translated into English (or unchanged if it is already in English).
         """
-
         self.logger.info("Starting translation process.")
 
-        charc_to_detect = int(len(text)/4)
-
-        detected_language = self.translator.detect(text[:charc_to_detect])
-        self.logger.info(f"Detected language: {detected_language.lang}")
-
-        # If the language is English, return the original text
-        if detected_language.lang == 'en':
-            self.logger.info("Text is already in English, no translation needed.")
-            return text
-        
-        chunk_size = 500  # Define the chunk size
-        chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]  # Split text into chunks
-        translated_chunks = []
-
         try:
-            for chunk in chunks:
-                translated_chunk = self.translator.translate(chunk, src='auto', dest='en').text
-                translated_chunks.append(translated_chunk)
-            translated_text = ' '.join(translated_chunks)  # Concatenate translated chunks
-            return translated_text
+            # Detect language using langdetect
+            detected_language = detect(text)
+            self.logger.info(f"Detected language: {detected_language}")
+
+            # If the detected language is English, return the text as is
+            if detected_language == 'en':
+                self.logger.info("Text is already in English, no translation needed.")
+                return text
+
+            # If it's not in English, fall back to Groq for translation
+            self.logger.info("Text is not in English, using Groq model for translation.")
+            response = self.client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": "You are a translation model."},
+                    {"role": "user", "content": f"Translate the following text to English and return only the translated text: {text}."}
+                ],
+                model=os.getenv("GROQ_MODEL_NAME"),  # The Groq model to use for translation
+                temperature=0.5,
+                max_completion_tokens=500
+            )
+
+            result = response.choices[0].message.content.strip()
+
+            # Assuming Groq's response is just the translated text
+            self.logger.info(f"Text translated to English: {result[:200]}...")
+            return result
+
         except Exception as e:
-            self.logger.error(f"Translation failed for text: {text}. Error: {e}")
-            return text  # If translation fails, return the original text
+            self.logger.error(f"Translation failed for text: {text[:200]}... Error: {e}")
+            return text  # If translation fails, return the origina
     
     def sources_to_csv(self, summarized_sources):
         pass
 
-    def pipe_claim_preprocessing(self, claim, max_lenght=250, min_lenght=100):
+    def pipe_claim_preprocessing(self, claim, max_lenght=150, min_lenght=50):
         """
         Process a claim by translating it to English and summarizing it.
         Args:
@@ -76,12 +87,17 @@ class Preprocessor():
         if self.config.get("translation", True):
             claim = self.translate_to_english(claim)
 
-        #TODO Try to implement NER
+        if self.config.get("NER", True):
+            topic_and_entities = self.ner.extract_entities_and_topic(claim)
 
         if self.config.get("summarize", True):
-            claim = self.summarizer.summarize(claim, max_lenght, min_lenght)
+            claim = self.summarizer.summarize(claim, max_lenght)
 
         self.logger.info("Claim preprocessing completed.")
+
+        if self.config.get("NER", True):
+            return claim, topic_and_entities
+
         return claim
 
     def pipe_sources_preprocessing(self, sources):
