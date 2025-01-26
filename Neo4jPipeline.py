@@ -71,9 +71,9 @@ class RAG_Pipeline:
             MERGE (a)-[:IN_TOPIC]->(t))
         """
         
-        # TITLE, URL, SOURCE, BODY, ENTITY
+        # TITLE, URL, SITE, BODY, ENTITY
         
-        #Title;URL;Source;Body;Entities;
+        #Title;URL;Site;Body;Entities;
         #"OpenAI lancia GPT-4";"https://example.com/openai-gpt4";"TechCrunch";"OpenAI, GPT-4, Intelligenza Artificiale"
         
         self.logger.info(f"Avvio caricamento dati da {csv_path}...")
