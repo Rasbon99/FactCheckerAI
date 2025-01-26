@@ -9,7 +9,7 @@ from log import Logger
 from py2neo import Graph
 import networkx as nx
 import matplotlib.pyplot as plt
-from pyvis.network import Network
+import matplotlib.colors as mcolors
 
 class RAG_Pipeline:
     def __init__(self, env_file="key.env", index_name="articles"):
@@ -92,6 +92,10 @@ class RAG_Pipeline:
         Esegue una query su Neo4j, crea il grafo e lo salva su file JPEG.
         """ 
         try:
+            
+            blue_light = "#add8e6"  # Blu chiaro
+            green_light = "#90ee90"  # Verde chiaro
+
             graph = Graph(self.neo4j_url, auth=(self.neo4j_username, self.neo4j_password))
             
             # Primo grafico: (Article)-[:IN_TOPIC]->(Topic)
@@ -105,28 +109,53 @@ class RAG_Pipeline:
             G_topic = nx.DiGraph()
             for _, row in results_topic.iterrows():
                 G_topic.add_edge(row['Articolo'], row['Topic'])
-            
+
+            # Generare una lista di colori per i topic
+            colors = list(mcolors.TABLEAU_COLORS.values())  # Puoi scegliere anche altri set di colori
+            color_map = {}
+
+            # Assegna un colore unico a ogni topic
+            unique_topics = results_topic['Topic'].unique()
+            for i, topic in enumerate(unique_topics):
+                color_map[topic] = colors[i % len(colors)]  # Ricicla i colori se i topic sono più dei colori disponibili
+
+            # Colori per i nodi
+            node_colors = []
+            for node in G_topic.nodes():
+                if node in color_map:  # Se è un topic
+                    node_colors.append(color_map[node])
+                else:  # Se è un articolo, assegna un colore neutro (ad esempio grigio)
+                    node_colors.append(blue_light)
+
+            # Colori per le frecce (edge)
+            edge_colors = []
+            for u, v in G_topic.edges():
+                edge_colors.append(color_map[v])  # Colore della freccia basato sul topic (nodo di destinazione)
+
             # Abbreviazione etichette se troppo lunghe
             max_len = 15
             labels_top = {}
             for node in G_topic.nodes():
                 label_text = node if len(node) <= max_len else node[:max_len] + "..."
                 labels_top[node] = label_text
-                
+
+            # Layout del grafico
             pos_topic = nx.spring_layout(G_topic, k=2, iterations=50)
-            
-            plt.figure(figsize=(10, 7))
+
+            # Disegna il grafico
+            plt.figure(figsize=(12, 9))
             nx.draw(
                 G_topic,
                 labels=labels_top,
                 pos=pos_topic,
                 with_labels=True,
-                node_color="skyblue",
-                node_size=3000,
-                edge_color="black",
-                font_size=10
+                node_color=node_colors,  # Assegna i colori ai nodi
+                edge_color=edge_colors,  # Assegna i colori alle frecce
+                node_size=3500,
+                font_size=10,
+                width=2  # Aumenta la larghezza delle frecce per migliorarne la visibilità
             )
-            plt.savefig(output_file_topic)
+            plt.savefig(output_file_topic, dpi=500)
 
             # Secondo grafico: (Ricercatore)-[:PUBLISHED]->(Article)
             query_published = """
@@ -138,30 +167,55 @@ class RAG_Pipeline:
             G_pub = nx.DiGraph()
             for _, row in results_pub.iterrows():
                 G_pub.add_edge(row['Ricercatore'], row['Articolo'])
-                
+
+            # Generare una lista di colori
+            colors = list(mcolors.TABLEAU_COLORS.values())  # Puoi scegliere anche altri set di colori
+            color_map = {}
+
+            # Assegna un colore unico a ogni ricercatore
+            unique_researchers = results_pub['Ricercatore'].unique()
+            for i, researcher in enumerate(unique_researchers):
+                color_map[researcher] = colors[i % len(colors)]  # Ricicla i colori se i ricercatori sono più dei colori disponibili
+
+            # Colori per i nodi
+            node_colors = []
+            for node in G_pub.nodes():
+                if node in color_map:  # Se è un ricercatore
+                    node_colors.append(color_map[node])
+                else:  # Se è un articolo, assegna un colore neutro (ad esempio grigio)
+                    node_colors.append(green_light)
+
+            # Colori per le frecce (edge)
+            edge_colors = []
+            for u, v in G_pub.edges():
+                edge_colors.append(color_map[u])  # Colore della freccia basato sul ricercatore (nodo di partenza)
+
             # Abbreviazione etichette se troppo lunghe
-            max_len = 15
+            max_len = 10
             labels_pub = {}
             for node in G_pub.nodes():
                 label_text = node if len(node) <= max_len else node[:max_len] + "..."
                 labels_pub[node] = label_text
-                
+
+            # Layout del grafico
             pos_pub = nx.spring_layout(G_pub, k=2, iterations=50)
-            
-            plt.figure(figsize=(10, 7))
+
+            # Disegna il grafico
+            plt.figure(figsize=(12, 9))
             nx.draw(
                 G_pub,
                 labels=labels_pub,
                 pos=pos_pub,
                 with_labels=True,
-                node_color="lightgreen",
-                node_size=3000,
-                edge_color="black",
-                font_size=10
+                node_color=node_colors,  # Assegna i colori ai nodi
+                edge_color=edge_colors,  # Assegna i colori alle frecce
+                node_size=3500,
+                font_size=10,
+                width=2  # Aumenta la larghezza delle frecce per migliorarne la visibilità
             )
-            plt.savefig(output_file_published)
+            plt.savefig(output_file_published, dpi=500)
             plt.show()
-            
+
         except Exception as e:
             self.logger.error(f"Errore durante l'estrazione e il salvataggio del grafo: {e}")
 
