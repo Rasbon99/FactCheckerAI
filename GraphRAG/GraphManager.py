@@ -13,7 +13,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from log import Logger
 os.chdir(current_dir)
 
-
 class GraphManager:
     def __init__(self, env_file="RAGkey.env"):
         dotenv.load_dotenv(env_file, override=True)
