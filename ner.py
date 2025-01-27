@@ -2,6 +2,7 @@ from groq import Groq
 import dotenv
 import os
 import json
+from log import Logger  
 
 class NER:
     def __init__(self, env_file="key.env", model=None):
@@ -15,6 +16,7 @@ class NER:
             model (str): The specified model for Groq.
             client (Groq): Instance of the Groq client for API requests.
         """
+        self.logger = Logger(self.__class__.__name__).get_logger()
         dotenv.load_dotenv(env_file, override=True)
         self.model = os.getenv("GROQ_MODEL_NAME")
         self.client = Groq()
@@ -35,6 +37,9 @@ class NER:
         Returns:
             dict: A dictionary with extracted "topic" and "entities".
         """
+        self.logger.info("Starting entity and topic extraction process.")
+        self.logger.debug("Input text: %s...", text[:200]) 
+
         try:
             response = self.client.chat.completions.create(
                 messages=[
@@ -47,18 +52,20 @@ class NER:
                 max_completion_tokens=max_tokens,
                 stop=stop
             )
-
+            self.logger.info("Groq API call successful.")
+            
             result = response.choices[0].message.content.strip()
+            self.logger.debug("Raw API response: %s", result)
+
             try:
                 # Convert the result into a dictionary by parsing the structured response
                 result_dict = json.loads(result)
+                self.logger.info("Successfully parsed API response into JSON.")
                 return result_dict
             except json.JSONDecodeError:
-                print("Error: Response could not be parsed into a valid JSON format.")
+                self.logger.error("Error: Response could not be parsed into a valid JSON format.")
                 return None
 
         except Exception as e:
-            print(f"Error extracting topic and entities: {e}")
+            self.logger.error("Error extracting topic and entities: %s", e)
             return None
-        
-        #TODO Function Synthetize Keyword
