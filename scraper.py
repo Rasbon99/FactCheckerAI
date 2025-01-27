@@ -30,7 +30,7 @@ class Scraper:
                 - 'url' (str): The URL of the web page.
                 - 'body' (str): The text content of the page, with spaces separating content blocks.
         """
-        self.logger.info(f"...Start body extraction: {url} ...")
+        self.logger.info(f"Start body extraction: {url} ...")
         try:
             response = requests.get(url)
             response.raise_for_status()  # Raise an HTTPError for bad responses (4xx and 5xx)
@@ -67,7 +67,7 @@ class Scraper:
                 - 'body' (str): The body content extracted from the search result pages.
                 - 'site' (str): The domain name of the site.
         """
-        self.logger.info("...Start searching and extracting query...")
+        self.logger.info("Start searching and extracting query...")
         search_results = []
 
         try:
@@ -108,7 +108,7 @@ class Scraper:
         Note:
             This function does not extract the body content of the web pages. It only returns search result metadata.
         """
-        self.logger.info("...Start searching query...")
+        self.logger.info("Start searching query...")
         search_results = []
 
         try:

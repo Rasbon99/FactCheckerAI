@@ -22,7 +22,6 @@ class Preprocessor():
         if config:
             self.config.update(config)
 
-        self.preprocessed_data_path = os.getenv("SOURCES_DATA_PATH")
         self.client = Groq()
 
     def translate_to_english(self, text):
@@ -67,9 +66,6 @@ class Preprocessor():
         except Exception as e:
             self.logger.error(f"Translation failed for text: {text[:200]}... Error: {e}")
             return text  # If translation fails, return the origina
-    
-    def sources_to_csv(self, summarized_sources):
-        pass
 
     def pipe_claim_preprocessing(self, claim, max_lenght=150, min_lenght=50):
         """
