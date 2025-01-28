@@ -1,5 +1,4 @@
 from sqldb import Database
-from csv_exporter import CSVExporter
 import uuid
 from log import Logger
 
@@ -39,9 +38,6 @@ class Claim:
         self.db.execute_query("INSERT INTO claims (id, text) VALUES (?, ?)", (self.id, self.text))
         self.logger.info("Claim with ID %s saved to the database.", self.id)
 
-        # Export the claims to CSV after insertion
-        CSVExporter.export_claims(self.db)
-        self.logger.info("Claims exported to CSV after insertion.")
 
     def get_sources(self):
         """
@@ -64,7 +60,32 @@ class Claim:
         ) for row in rows]
         self.logger.info("Found %d sources for claim ID %s.", len(sources), self.id)
         return sources
+    
+    def get_dict_sources(self):
+        """
+        Retrieves all sources associated with the claim from the database.
 
+        Returns:
+            list: A list of dictionaries, each representing a source associated with this claim.
+        """
+        self.logger.info("Fetching sources for claim ID %s.", self.id)
+        rows = self.db.fetch_all("SELECT * FROM sources WHERE claim_id = ?", (self.id,))
+        sources = [
+            {
+                "source_id": row['id'],
+                "claim_id": row['claim_id'],
+                "title": row['title'],
+                "url": row['url'],
+                "site": row['site'],
+                "body": row['body'],
+                "entities": row['entities'],
+                "topic": row['topic']
+            }
+            for row in rows
+        ]
+        self.logger.info("Found %d sources for claim ID %s.", len(sources), self.id)
+        return sources
+    
     def add_sources(self, sources_data):
         """
         Adds multiple sources associated with the claim to the database and exports the data to CSV.
@@ -95,11 +116,6 @@ class Claim:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (str(uuid.uuid4()), self.id, data['title'], data['url'], data['site'],
                   data['body'], data['entities'], data['topic']))
-
-        # Export the sources to CSV after insertion
-        CSVExporter.export_sources(self.db)
-        self.logger.info("Sources for claim ID %s exported to CSV.", self.id)
-
 
 class Source:
     def __init__(self, claim_id, title, url, site, body, entities, topic, source_id=None, db=None):
