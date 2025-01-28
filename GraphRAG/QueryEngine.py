@@ -1,9 +1,9 @@
 import dotenv
 import os
-from langchain_neo4j import Neo4jGraph
 from langchain_community.vectorstores import Neo4jVector
-from langchain_ollama import OllamaEmbeddings, ChatOllama
+from langchain_ollama import OllamaEmbeddings
 from langchain.chains import RetrievalQA
+from langchain_groq import ChatGroq
 import time
 import sys
 
@@ -24,8 +24,9 @@ class QueryEngine:
 
         # Model configuration
         self.model_name = os.environ["MODEL_LLM_NEO4J"]
+        self.modelGroq_name = os.environ["MODELGROQ_LLM_NEO4J"]
         self.embedding_model = OllamaEmbeddings(model=self.model_name)
-        self.llm_model = ChatOllama(model=self.model_name)
+        self.llm_model = ChatGroq(model=self.modelGroq_name)
         self.index_name = index_name
 
     def query_similarity(self, query):
