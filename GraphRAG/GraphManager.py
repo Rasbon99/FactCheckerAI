@@ -131,12 +131,17 @@ class GraphManager:
                     label_text = f"{node} ({node_label})" if len(node) <= max_len else node[:max_len] + "..."
                     labels[node] = label_text
 
-                # Layout del grafico
-                #pos = nx.spring_layout(G, k=2, iterations=50)
-                #pos = nx.circular_layout(G)
-                #pos = nx.shell_layout(G)
-                pos = nx.planar_layout(G)
-
+                # TODO: Layout del grafico
+                pos = nx.spring_layout(G, k=2, iterations=50)   # Layout a molla, con parametri personalizzabili
+                #pos = nx.circular_layout(G)                    # Nodi distribuiti su un cerchio
+                #pos = nx.shell_layout(G)                       # Nodi organizzati in cerchi concentrici
+                #pos = nx.planar_layout(G)                      # Layout planare, se il grafo è planare
+                #pos = nx.fruchterman_reingold_layout(G)        # Alias per spring_layout
+                #pos = nx.spectral_layout(G)                    # Basato sull'analisi spettrale
+                #pos = nx.kamada_kawai_layout(G)                # Basato sul metodo Kamada-Kawai
+                #pos = nx.random_layout(G)                      # Posizioni casuali dei nodi
+                #pos = nx.spiral_layout(G)                      # Disposizione a spirale
+            
                 # Disegna il grafico
                 plt.figure(figsize=(12, 9))
                 nx.draw(
