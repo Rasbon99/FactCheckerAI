@@ -3,6 +3,7 @@ import sys
 import time
 import dotenv
 
+import numpy as np
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -126,23 +127,70 @@ class GraphManager:
                     edge_labels[(u, v)] = data['label']  # Etichetta dell'arco
 
                 # Abbreviazione etichette se troppo lunghe
-                max_len = 15
+                max_len = 15  # Lunghezza massima per ciascuna riga
+
                 labels = {}
+
+                def split_label(label, max_len):
+                    # Suddividi l'etichetta in due righe senza troncare le parole
+                    if len(label) <= max_len:
+                        return label  # Nessuna divisione necessaria
+                    
+                    # Dividi la prima parte senza superare il limite di lunghezza
+                    first_line = label[:max_len]
+                    
+                    # Trova l'ultimo spazio prima del limite per non troncare la parola
+                    if len(first_line) == max_len:
+                        first_line = first_line[:first_line.rfind(' ')]  # Trova l'ultimo spazio
+                        second_line = label[len(first_line):]
+                    else:
+                        second_line = label[len(first_line):]
+                    
+                    # Se la seconda parte è troppo lunga, abbreviala (solo se necessario)
+                    if len(second_line) > max_len:
+                        second_line = second_line[:max_len] + "..."
+                    
+                    return f"{first_line}\n{second_line}"
+
+                # Parametri di lunghezza
+                max_len = 15  # Lunghezza massima per ciascuna riga
+
+                labels = {}
+
                 for node in G.nodes():
-                    label_text = f"{node} ({node_label})" if len(node) <= max_len else node[:max_len] + "..."
+                    node_label = f"{node}"  # O qualsiasi altro testo da associare al nodo
+                    
+                    # Suddividi l'etichetta
+                    label_text = split_label(node_label, max_len)
+                    
                     labels[node] = label_text
 
-                # TODO: Layout del grafico
-                pos = nx.spring_layout(G, k=2, iterations=50)   # Layout a molla, con parametri personalizzabili
-                #pos = nx.circular_layout(G)                    # Nodi distribuiti su un cerchio
-                #pos = nx.shell_layout(G)                       # Nodi organizzati in cerchi concentrici
-                #pos = nx.planar_layout(G)                      # Layout planare, se il grafo è planare
-                #pos = nx.fruchterman_reingold_layout(G)        # Alias per spring_layout
-                #pos = nx.spectral_layout(G)                    # Basato sull'analisi spettrale
-                #pos = nx.kamada_kawai_layout(G)                # Basato sul metodo Kamada-Kawai
-                #pos = nx.random_layout(G)                      # Posizioni casuali dei nodi
-                #pos = nx.spiral_layout(G)                      # Disposizione a spirale
-            
+                # Layout del grafico
+                pos = nx.kamada_kawai_layout(G)
+
+                # Aggiungi un po' di "spinta" per evitare sovrapposizioni
+                def avoid_overlap(pos, G, threshold=0.1):
+                    nodes = list(G.nodes())
+                    overlap = True
+                    while overlap:
+                        overlap = False
+                        for i, node_i in enumerate(nodes):
+                            for j, node_j in enumerate(nodes):
+                                if i >= j:
+                                    continue
+                                # Calcola la distanza tra due nodi
+                                dist = np.linalg.norm(np.array(pos[node_i]) - np.array(pos[node_j]))
+                                if dist < threshold:
+                                    # Se troppo vicini, allontanali
+                                    pos[node_i] = [pos[node_i][0] + 0.1, pos[node_i][1] + 0.1]
+                                    pos[node_j] = [pos[node_j][0] - 0.1, pos[node_j][1] - 0.1]
+                                    overlap = True
+                                    break
+                    return pos
+
+                # Applica la funzione di evitamento delle sovrapposizioni
+                pos = avoid_overlap(pos, G)
+
                 # Disegna il grafico
                 plt.figure(figsize=(12, 9))
                 nx.draw(
@@ -153,7 +201,7 @@ class GraphManager:
                     node_color=node_colors,
                     edge_color=edge_colors,
                     node_size=3500,
-                    font_size=10,
+                    font_size=6,
                     width=2
                 )
 
@@ -162,7 +210,7 @@ class GraphManager:
                     G,
                     pos,
                     edge_labels=edge_labels,
-                    font_size=8,
+                    font_size=6,
                     font_color="black"
                 )
 
