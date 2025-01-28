@@ -33,7 +33,7 @@ class QueryEngine:
         """Create a vector index on the Neo4j graph and perform a similarity-based query on the vector index."""
         
         node_label="Article"
-        text_node_properties=["topic", "title", "abstract"]
+        text_node_properties = ["topic", "title", "body"] 
         embedding_node_property="embedding"
         
         retriever = Neo4jVector.from_existing_graph(
