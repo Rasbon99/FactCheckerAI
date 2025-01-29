@@ -92,19 +92,9 @@ class Scraper:
             # You could also choose to log this error if necessary.
             return True
 
-    def extract_domain(self, url):
-        """
-        Extracts the domain from a URL.
-        """
-        parsed_url = urlparse(url)
-        domain = parsed_url.netloc
-        domain = domain.replace('www.', '').lower()
-        return domain
-
     def search_and_extract(self, query, num_results=10):
         """
-        Performs a search using the provided query, and extracts the title, body, and site of the resulting pages,
-        ensuring that no results come from the same site.
+        Performs a search using the provided query, and extracts the title, body, and site of the resulting pages.
         
         Args:
             query (str): The search query to send to DuckDuckGo.
@@ -119,7 +109,6 @@ class Scraper:
         """
         self.logger.info("Start searching and extracting query...")
         search_results = []
-        seen_sites = set()  # Track visited sites by domain
 
         try:
             results = self.ddg.text(query, max_results=num_results)
@@ -130,28 +119,61 @@ class Scraper:
 
             for result in results:
                 url = result['href']
-                domain = self.extract_domain(url)  # Function to extract domain from URL
                 
                 # Check if scraping is allowed for the site
                 if not self.can_scrape(url):
                     self.logger.info(f"Skipping {url} due to scraping restrictions.")
                     continue
-
-                # Skip the result if the domain has already been seen
-                if domain in seen_sites:
-                    self.logger.info(f"Skipping {url} as the site has already been included.")
-                    continue
-                
+            
                 extracted_data = self.extract_context(url)
 
                 if extracted_data['title'] and extracted_data['body']:
                     self.logger.info(f'{extracted_data["title"]} - {extracted_data["url"]} - {extracted_data["site"]}')
                     self.logger.info(f"{extracted_data['body'][:200]}...")  # Preview body text
                     search_results.append(extracted_data)
-                    seen_sites.add(domain)  # Add the domain to the seen list
 
         except Exception as e:
             self.logger.error(f"Error during search and extract for query '{query}': {e}")
+
+        return search_results
+
+
+    def search(self, query, num_results=5):
+        """
+        Performs a search using the provided query and returns search results containing:
+        - title (str): The title of the search result.
+        - url (str): The URL of the search result.
+        - snippet (str): A brief summary of the search result.
+        
+        Args:
+            query (str): The search query to send to DuckDuckGo.
+            num_results (int): The number of search results to retrieve. Default is 5.
+        
+        Returns:
+            list: A list of dictionaries, each containing:
+                - 'title' (str): The title of the search result.
+                - 'url' (str): The URL of the search result.
+                - 'snippet' (str): The summary or snippet of the search result.
+        
+        Note:
+            This function does not extract the body content of the web pages. It only returns search result metadata.
+        """
+        self.logger.info("Start searching query...")
+        search_results = []
+
+        try:
+            results = self.ddg.text(query, max_results=num_results)
+
+            for result in results:
+                title = result.get('title', 'No title found')
+                url = result.get('href', '')
+                snippet = result.get('body', 'No snippet found')
+
+                search_results.append({'title': title, 'url': url, 'snippet': snippet})
+                self.logger.info(f"Title: {title} - URL: {url}")
+
+        except Exception as e:
+            self.logger.error(f"Error during search for query '{query}': {e}")
 
         return search_results
     
