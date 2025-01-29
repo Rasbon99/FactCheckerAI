@@ -1,9 +1,11 @@
+from urllib.parse import urlparse
+
 import requests
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
+
 from log import Logger
 from ng_client import NewsGuardClient
-from urllib.parse import urlparse
 
 class Scraper:
     def __init__(self):
@@ -84,7 +86,7 @@ class Scraper:
                 extracted_data = self.extract_context(url)
 
                 if extracted_data['title'] and extracted_data['body']:
-                    self.logger.info(f'{extracted_data["title"]} - {extracted_data["url"]} - {extracted_data['site']}')
+                    self.logger.info(f'{extracted_data["title"]} - {extracted_data["url"]} - {extracted_data["site"]}')
                     self.logger.info(f"{extracted_data['body'][:200]}...")  # Preview body text
                     search_results.append(extracted_data)
 

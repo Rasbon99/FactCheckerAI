@@ -1,5 +1,6 @@
-from sqldb import Database
 import uuid
+
+from sqldb import Database
 from log import Logger
 
 class Claim:

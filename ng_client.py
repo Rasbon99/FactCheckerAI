@@ -13,7 +13,7 @@ class NewsGuardClient:
         """
         Initializes the client by loading credentials from the .env file.
         """
-        load_dotenv("key.env")
+        load_dotenv("NGkey.env")
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.client_id = os.getenv("CLIENT_API_ID")
         self.client_secret = os.getenv("NG_API_KEY")
@@ -67,4 +67,3 @@ class NewsGuardClient:
         self.logger.info("Extract from %s, the NewsGuard ratings: {{rank: %s, score: %s}}", url, result["rank"], result["score"])
         
         return result
-
