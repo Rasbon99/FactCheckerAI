@@ -1,5 +1,7 @@
 import os
 import sys
+import urllib.robotparser
+import urllib.parse
 from urllib.parse import urlparse
 
 import requests
@@ -61,6 +63,34 @@ class Scraper:
             self.logger.error(f"Unexpected error while extracting body from URL '{url}': {e}")
 
         return {'title': 'Title not found', 'url': url, 'body': ''}
+    
+    def can_scrape(self, url):
+        """
+        Check if web scraping is allowed by the website's robots.txt.
+
+        Args:
+            url (str): The URL of the website to check.
+
+        Returns:
+            bool: True if scraping is allowed, False otherwise.
+        """
+        parsed_url = urllib.parse.urlparse(url)
+        robot_url = f"{parsed_url.scheme}://{parsed_url.netloc}/robots.txt"
+        
+        try:
+            rp = urllib.robotparser.RobotFileParser()
+            rp.set_url(robot_url)
+            rp.read()
+            
+            # Check if the robots.txt allows scraping for all user-agents ('*')
+            if rp.can_fetch('*', url):
+                return True
+            else:
+                return False
+        except Exception as e:
+            # If there is an error accessing the robots.txt, assume scraping is allowed.
+            # You could also choose to log this error if necessary.
+            return True
 
     def search_and_extract(self, query, num_results=10):
         """
@@ -89,6 +119,12 @@ class Scraper:
 
             for result in results:
                 url = result['href']
+                
+                # Check if scraping is allowed for the site
+                if not self.can_scrape(url):
+                    self.logger.info(f"Skipping {url} due to scraping restrictions.")
+                    continue
+            
                 extracted_data = self.extract_context(url)
 
                 if extracted_data['title'] and extracted_data['body']:
@@ -169,10 +205,13 @@ class Scraper:
                 rank = rating.get('rank')
                 score = rating.get('score')
                 
+                # Se il sito ha rank 'T' e score >= score_threshold, includilo
                 if rank == 'T' and score >= score_threshold:
-                    self.logger.info("Filtered site %s NewsGuard ratings with rank: %s, score: %s", cleared_site, rank, score)
                     filtered_sites.append(site)
-        
+                else:
+                    # Log per i siti che vengono esclusi
+                    self.logger.info("Excluded site %s with rank: %s, score: %s", cleared_site, rank, score)
+
         self.logger.info("Filtered websites: %s sites", len(filtered_sites))
 
         return filtered_sites

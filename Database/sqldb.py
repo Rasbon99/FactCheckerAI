@@ -12,7 +12,7 @@ os.chdir(current_dir)
 dotenv.load_dotenv("key.env", override=True)
 
 class Database:
-    def __init__(self, env_file="Pkey.env", db_file=os.getenv("SQLDB_PATH")):
+    def __init__(self, env_file="Dkey.env", db_file=os.getenv("SQLDB_PATH")):
         """
         Initializes the Database class with the database file path.
 
