@@ -136,46 +136,6 @@ class Scraper:
             self.logger.error(f"Error during search and extract for query '{query}': {e}")
 
         return search_results
-
-
-    def search(self, query, num_results=5):
-        """
-        Performs a search using the provided query and returns search results containing:
-        - title (str): The title of the search result.
-        - url (str): The URL of the search result.
-        - snippet (str): A brief summary of the search result.
-        
-        Args:
-            query (str): The search query to send to DuckDuckGo.
-            num_results (int): The number of search results to retrieve. Default is 5.
-        
-        Returns:
-            list: A list of dictionaries, each containing:
-                - 'title' (str): The title of the search result.
-                - 'url' (str): The URL of the search result.
-                - 'snippet' (str): The summary or snippet of the search result.
-        
-        Note:
-            This function does not extract the body content of the web pages. It only returns search result metadata.
-        """
-        self.logger.info("Start searching query...")
-        search_results = []
-
-        try:
-            results = self.ddg.text(query, max_results=num_results)
-
-            for result in results:
-                title = result.get('title', 'No title found')
-                url = result.get('href', '')
-                snippet = result.get('body', 'No snippet found')
-
-                search_results.append({'title': title, 'url': url, 'snippet': snippet})
-                self.logger.info(f"Title: {title} - URL: {url}")
-
-        except Exception as e:
-            self.logger.error(f"Error during search for query '{query}': {e}")
-
-        return search_results
     
     def filter_sites(self, sites_list, score_threshold=70):
         """
