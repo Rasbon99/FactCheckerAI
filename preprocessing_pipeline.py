@@ -6,7 +6,7 @@ from langdetect import detect
 import dotenv
 import os
 
-class Preprocessor():
+class Preprocessing_Pipeline():
     def __init__(self, env_file="key.env", config=None):
         dotenv.load_dotenv(env_file, override=True)
 
@@ -16,8 +16,8 @@ class Preprocessor():
 
         self.config = {
             "translation": True,
-            "NER": True,
-            "summarize": True
+            "summarize": True,
+            "NER": True
         }
         if config:
             self.config.update(config)
@@ -83,16 +83,10 @@ class Preprocessor():
         if self.config.get("translation", True):
             claim = self.translate_to_english(claim)
 
-        if self.config.get("NER", True):
-            topic_and_entities = self.ner.extract_entities_and_topic(claim)
-
         if self.config.get("summarize", True):
             claim = self.summarizer.summarize(claim, max_lenght)
 
         self.logger.info("Claim preprocessing completed.")
-
-        if self.config.get("NER", True):
-            return claim, topic_and_entities
 
         return claim
 

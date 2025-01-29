@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
 from log import Logger
+from ng_client import NewsGuardClient
 from urllib.parse import urlparse
 
 class Scraper:
@@ -15,6 +16,7 @@ class Scraper:
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.ddg = DDGS()
+        self.ng_client = NewsGuardClient()
 
     def extract_context(self, url):
         """
@@ -52,7 +54,7 @@ class Scraper:
 
         return {'title': 'Title not found', 'url': url, 'body': ''}
 
-    def search_and_extract(self, query, num_results=5):
+    def search_and_extract(self, query, num_results=10):
         """
         Performs a search using the provided query, and extracts the title, body, and site of the resulting pages.
         
@@ -72,6 +74,10 @@ class Scraper:
 
         try:
             results = self.ddg.text(query, max_results=num_results)
+
+            self.logger.info("Scraped websites: %i sites", len(results))
+
+            results = self.filter_sites(results)
 
             for result in results:
                 url = result['href']
@@ -126,3 +132,64 @@ class Scraper:
             self.logger.error(f"Error during search for query '{query}': {e}")
 
         return search_results
+    
+    def filter_sites(self, sites_list, score_threshold=70):
+        """
+        Filters a list of sites by their rating from the NewsGuard API.
+
+        :param sites_list: List of dictionaries containing site information, each with an 'href' key.
+        :param score_threshold: Minimum score threshold to filter sites (default is 70).
+        :return: List of sites that meet the criteria (rank == 'T' and score >= score_threshold).
+        """
+        filtered_sites = []
+
+        for site in sites_list:
+            # Estrazione dell'URL dalla posizione href nella lista
+            href = site.get('href')
+            if not href:
+                continue  # Se non c'è href, salta questa iterazione
+            
+            # Parsing dell'URL per avere un URL "pulito"
+            parsed_url = urlparse(href)
+            cleared_site = parsed_url.netloc
+
+            # Ottieni il rating del sito
+            rating = self.ng_client.get_rating(cleared_site)
+            
+            # Se il rating è valido, controlla il rank e lo score
+            if rating:
+                rank = rating.get('rank')
+                score = rating.get('score')
+                
+                if rank == 'T' and score >= score_threshold:
+                    self.logger.info("Filtered site %s NewsGuard ratings with rank: %s, score: %s", cleared_site, rank, score)
+                    filtered_sites.append(site)
+        
+        self.logger.info("Filtered websites: %s sites", len(filtered_sites))
+
+        return filtered_sites
+    
+def main():
+    # Create an instance of the Scraper class
+    scraper = Scraper()
+
+    # Define the search query and the number of results
+    query = "Trump federal workers resignation program deferred resignation COVID-19 pandemic US Office Personnel Management OPM"
+
+    # Call the search_and_extract method
+    results = scraper.search_and_extract(query)
+
+    # Print the extracted data
+    if results:
+        for idx, result in enumerate(results):
+            print(f"Result {idx + 1}:")
+            print(f"Title: {result['title']}")
+            print(f"URL: {result['url']}")
+            print(f"Site: {result['site']}")
+            print(f"Body: {result['body'][:200]}...")  # Preview of the body (first 200 characters)
+            print("-" * 50)
+    else:
+        print("No results found or an error occurred during extraction.")
+
+if __name__ == "__main__":
+    main()
