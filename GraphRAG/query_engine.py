@@ -15,6 +15,16 @@ os.chdir(current_dir)
 
 class QueryEngine:
     def __init__(self, env_file="RAGkey.env", index_name="articles"):
+        """
+        Initializes the QueryEngine by setting up the environment variables, models, and Neo4j connection.
+
+        Args:
+            env_file (str): Path to the .env file containing configuration settings for the Neo4j connection and models.
+            index_name (str): The name of the index in the Neo4j database to be used for querying.
+        
+        Raises:
+            KeyError: If required environment variables are missing.
+        """
         dotenv.load_dotenv(env_file, override=True)
         self.logger = Logger(self.__class__.__name__).get_logger()
 
@@ -31,11 +41,22 @@ class QueryEngine:
         self.index_name = index_name
 
     def query_similarity(self, query):
-        """Create a vector index on the Neo4j graph and perform a similarity-based query on the vector index."""
+        """
+        Creates a vector index on the Neo4j graph and performs a similarity-based query on the vector index.
+
+        Args:
+            query (str): The query string to be executed for similarity-based retrieval from the Neo4j graph.
         
-        node_label="Article"
-        text_node_properties = ["topic", "title", "body"] 
-        embedding_node_property="embedding"
+        Raises:
+            Exception: If there is an error during the execution of the similarity query.
+        
+        Returns:
+            str: The result of the similarity query, or a message indicating no results were found.
+        """
+        
+        node_label = "Article"
+        text_node_properties = ["topic", "title", "body"]
+        embedding_node_property = "embedding"
         
         retriever = Neo4jVector.from_existing_graph(
             self.embedding_model,
@@ -51,14 +72,14 @@ class QueryEngine:
         vector_qa = RetrievalQA.from_chain_type(
             llm=self.llm_model, chain_type="stuff", retriever=retriever
         )
-                    
-        self.logger.info(f"Esecuzione query di similarità: {query}")
+        
+        self.logger.info(f"Executing similarity query: {query}")
         try:
             start_time_similarity = time.time()
             result = vector_qa.invoke({"query": query})
             elapsed_time = time.time() - start_time_similarity
-            self.logger.info(f"Query di similarità completata in {elapsed_time:.2f} secondi.")
-            return result.get("result", "Nessun risultato trovato.")
+            self.logger.info(f"Similarity query completed in {elapsed_time:.2f} seconds.")
+            return result.get("result", "No results found.")
         except Exception as e:
-            self.logger.error(f"Errore durante la query di similarità: {e}")
-            return None  
+            self.logger.error(f"Error during similarity query: {e}")
+            return None

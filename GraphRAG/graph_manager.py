@@ -17,6 +17,15 @@ os.chdir(current_dir)
 
 class GraphManager:
     def __init__(self, env_file="RAGkey.env"):
+        """
+        Initializes the GraphManager by setting up the Neo4j connection.
+
+        Args:
+            env_file (str): Path to the .env file containing Neo4j credentials.
+        
+        Raises:
+            ConnectionError: If there is an error during the connection to Neo4j.
+        """
         dotenv.load_dotenv(env_file, override=True)
         self.logger = Logger(self.__class__.__name__).get_logger()
         
@@ -34,22 +43,24 @@ class GraphManager:
 
         try:
             self.graph.query("RETURN 1")
-            self.logger.info("Connessione a Neo4j stabilita con successo.")
+            self.logger.info("Successfully connected to Neo4j.")
         except Exception as e:
-            self.logger.error(f"Errore durante la connessione a Neo4j: {e}")
-            raise ConnectionError(f"Errore durante la connessione a Neo4j: {e}")
+            self.logger.error(f"Error during Neo4j connection: {e}")
+            raise ConnectionError(f"Error during Neo4j connection: {e}")
 
     def load_data(self, data):
         """
-        Carica i dati nel grafo Neo4j.
+        Loads data into the Neo4j graph.
 
         Args:
-            data (list): Lista di dictionary contenenti le news.
+            data (list): List of dictionaries containing news articles, including TITLE, URL, BODY, SITE, ENTITY, and TOPIC.
         
         Raises:
-            Exception: Se c'è un errore durante il caricamento dei dati.
+            Exception: If there is an error during data loading.
+        
+        Returns:
+            None
         """
-
         q_load_articles = """
             UNWIND $data AS article
             MERGE (a:Article {title: article.TITLE})
@@ -59,117 +70,165 @@ class GraphManager:
             MERGE (a)-[:PUBLISHED_ON]->(s)
 
             WITH a, article
-            // Gestisci le entità
+            // Handle entities
             UNWIND article.ENTITY AS entity
             MERGE (e:Entity {name: entity})
             MERGE (a)-[:MENTIONS]->(e)
 
             WITH a, article, e
-            // Gestisci i topic
+            // Handle topics
             UNWIND article.TOPIC AS topic
             MERGE (t:Topic {name: topic})
             MERGE (a)-[:HAS_TOPIC]->(t)
         """
         
-        self.logger.info(f"Avvio caricamento dati da {data}...")
+        self.logger.info(f"Starting data load from {data}...")
         try:
             start_time = time.time()
-            # Passa i dati come parametro, senza interpolazione diretta nella query
             self.graph.query(q_load_articles, params={"data": data})
             elapsed_time = time.time() - start_time
-            self.logger.info(f"Caricamento completato in {elapsed_time:.2f} secondi.")
+            self.logger.info(f"Loading completed in {elapsed_time:.2f} seconds.")
         except Exception as e:
-            self.logger.error(f"Errore durante il caricamento dati: {e}")
+            self.logger.error(f"Error during data loading: {e}")
         
         self.graph.refresh_schema()
 
     def extract_and_save_graph(self, output_file_topic, output_file_entity, output_file_site):
         """
-        Esegue una query su Neo4j, crea il grafo e lo salva su file JPEG.
-        """ 
+        Executes a query on Neo4j, creates the graph, and saves it as a JPEG file.
+
+        Args:
+            output_file_topic (str): Path to save the topic graph.
+            output_file_entity (str): Path to save the entity graph.
+            output_file_site (str): Path to save the site graph.
+        
+        Raises:
+            Exception: If there is an error during graph creation or saving.
+        
+        Returns:
+            None
+        """
         try:
-            
-            blue_light = "#add8e6"  # Blu chiaro
+            blue_light = "#add8e6"  
 
             graph = Graph(self.neo4j_url, auth=(self.neo4j_username, self.neo4j_password))
         
             def create_and_save_graph(query, node_relation, node_label, edge_label, output_file):
                 """
-                Crea e salva un grafo basato su una query Cypher e una relazione.
+                Creates and saves a graph based on a Cypher query and a relationship.
+
+                Args:
+                    query (str): The Cypher query to execute.
+                    node_relation (tuple): A tuple containing the relation between the nodes (e.g., ('Article', 'Topic')).
+                    node_label (str): Label for the nodes.
+                    edge_label (str): Label for the edges.
+                    output_file (str): Path to save the generated graph image.
+                
+                Raises:
+                    Exception: If there is an error during graph creation or saving.
+                
+                Returns:
+                    None
                 """
                 results = graph.run(query).to_data_frame()
                 G = nx.DiGraph()
                 
-                # Aggiungi gli archi al grafo
+                # Add edges to the graph
                 for _, row in results.iterrows():
                     G.add_edge(row[node_relation[0]], row[node_relation[1]], label=edge_label)
 
-                # Generare una lista di colori per i nodi
+                # Generate a list of colors for the nodes
                 colors = list(mcolors.TABLEAU_COLORS.values())
                 color_map = {}
-                unique_nodes = results[node_relation[1]].unique()  # Associa nodi al secondo parametro della relazione
+                unique_nodes = results[node_relation[1]].unique()  # Associate nodes with the second parameter of the relation
                 for i, node in enumerate(unique_nodes):
-                    color_map[node] = colors[i % len(colors)]  # Ricicla i colori se i nodi sono più dei colori disponibili
+                    color_map[node] = colors[i % len(colors)]  # Recycle colors if nodes exceed available colors
 
-                # Colori per i nodi
+                # Node colors
                 node_colors = []
                 for node in G.nodes():
                     if node in color_map:
                         node_colors.append(color_map[node])
-                    else:  # Se è un articolo, assegna un colore neutro
+                    else:  # If it is an article, assign a neutral color
                         node_colors.append(blue_light)
 
-                # Colori per le frecce (edge)
+                # Edge colors
                 edge_colors = []
-                edge_labels = {}  # Per memorizzare le etichette degli archi
+                edge_labels = {}  # To store edge labels
                 for u, v, data in G.edges(data=True):
-                    edge_colors.append(color_map[v])  # Colore della freccia basato sul nodo di destinazione
-                    edge_labels[(u, v)] = data['label']  # Etichetta dell'arco
+                    edge_colors.append(color_map[v])  # Arrow color based on the target node
+                    edge_labels[(u, v)] = data['label']  # Edge label
 
-                # Abbreviazione etichette se troppo lunghe
-                max_len = 15  # Lunghezza massima per ciascuna riga
+                # Truncate labels if too long
+                max_len = 15  # Maximum length for each line
 
                 labels = {}
 
                 def split_label(label, max_len):
-                    # Suddividi l'etichetta in due righe senza troncare le parole
-                    if len(label) <= max_len:
-                        return label  # Nessuna divisione necessaria
+                    """
+                    Splits the label into two lines without truncating words.
+
+                    Args:
+                        label (str): The label to split.
+                        max_len (int): The maximum length for each line.
                     
-                    # Dividi la prima parte senza superare il limite di lunghezza
+                    Raises:
+                        None
+                    
+                    Returns:
+                        str: The split label with two lines.
+                    """
+                    if len(label) <= max_len:
+                        return label  # No split necessary
+                    
+                    # Split the first part without exceeding the length limit
                     first_line = label[:max_len]
                     
-                    # Trova l'ultimo spazio prima del limite per non troncare la parola
+                    # Find the last space before the limit to avoid cutting off the word
                     if len(first_line) == max_len:
-                        first_line = first_line[:first_line.rfind(' ')]  # Trova l'ultimo spazio
+                        first_line = first_line[:first_line.rfind(' ')]  # Find the last space
                         second_line = label[len(first_line):]
                     else:
                         second_line = label[len(first_line):]
                     
-                    # Se la seconda parte è troppo lunga, abbreviala (solo se necessario)
+                    # If the second part is too long, shorten it (only if necessary)
                     if len(second_line) > max_len:
                         second_line = second_line[:max_len] + "..."
                     
                     return f"{first_line}\n{second_line}"
 
-                # Parametri di lunghezza
-                max_len = 15  # Lunghezza massima per ciascuna riga
+                # Length parameters
+                max_len = 15  # Maximum length for each line
 
                 labels = {}
 
                 for node in G.nodes():
-                    node_label = f"{node}"  # O qualsiasi altro testo da associare al nodo
+                    node_label = f"{node}"  # Or any other text to associate with the node
                     
-                    # Suddividi l'etichetta
+                    # Split the label
                     label_text = split_label(node_label, max_len)
                     
                     labels[node] = label_text
 
-                # Layout del grafico
+                # Graph layout
                 pos = nx.kamada_kawai_layout(G)
 
-                # Aggiungi un po' di "spinta" per evitare sovrapposizioni
+                # Add a bit of "push" to avoid overlaps
                 def avoid_overlap(pos, G, threshold=0.1):
+                    """
+                    Avoids overlap between nodes in the graph layout.
+
+                    Args:
+                        pos (dict): Dictionary containing node positions.
+                        G (networkx.Graph): The graph object.
+                        threshold (float): Minimum distance between nodes to avoid overlap.
+                    
+                    Raises:
+                        None
+                    
+                    Returns:
+                        dict: Updated positions of the nodes.
+                    """
                     nodes = list(G.nodes())
                     overlap = True
                     while overlap:
@@ -178,20 +237,20 @@ class GraphManager:
                             for j, node_j in enumerate(nodes):
                                 if i >= j:
                                     continue
-                                # Calcola la distanza tra due nodi
+                                # Calculate the distance between two nodes
                                 dist = np.linalg.norm(np.array(pos[node_i]) - np.array(pos[node_j]))
                                 if dist < threshold:
-                                    # Se troppo vicini, allontanali
+                                    # If too close, push them apart
                                     pos[node_i] = [pos[node_i][0] + 0.1, pos[node_i][1] + 0.1]
                                     pos[node_j] = [pos[node_j][0] - 0.1, pos[node_j][1] - 0.1]
                                     overlap = True
                                     break
                     return pos
 
-                # Applica la funzione di evitamento delle sovrapposizioni
+                # Apply the overlap avoidance function
                 pos = avoid_overlap(pos, G)
 
-                # Disegna il grafico
+                # Draw the graph
                 plt.figure(figsize=(12, 9))
                 nx.draw(
                     G,
@@ -205,7 +264,7 @@ class GraphManager:
                     width=2
                 )
 
-                # Disegna le etichette degli archi
+                # Draw edge labels
                 nx.draw_networkx_edge_labels(
                     G,
                     pos,
@@ -216,31 +275,31 @@ class GraphManager:
 
                 plt.savefig(output_file, dpi=500)
 
-            # Primo grafico: (Article)-[:HAS_TOPIC]->(Topic)
+            # First graph: (Article)-[:HAS_TOPIC]->(Topic)
             query_topic = """
             MATCH (a:Article)-[:HAS_TOPIC]->(t:Topic)
-            RETURN a.title AS Articolo,
+            RETURN a.title AS Article,
                 t.name AS Topic
             """
-            create_and_save_graph(query_topic, node_relation=("Articolo", "Topic"), node_label="Topic", edge_label="HAS_TOPIC", output_file=output_file_topic)
+            create_and_save_graph(query_topic, node_relation=("Article", "Topic"), node_label="Topic", edge_label="HAS_TOPIC", output_file=output_file_topic)
 
-            # Secondo grafico: (Article)-[:MENTIONS]->(Entity)
+            # Second graph: (Article)-[:MENTIONS]->(Entity)
             query_mentions = """
             MATCH (a:Article)-[:MENTIONS]->(e:Entity)
-            RETURN a.title AS Articolo,
+            RETURN a.title AS Article,
                 e.name AS Entity
             """
-            create_and_save_graph(query_mentions, node_relation=("Articolo", "Entity"), node_label="Entity", edge_label="MENTIONS", output_file=output_file_entity)
+            create_and_save_graph(query_mentions, node_relation=("Article", "Entity"), node_label="Entity", edge_label="MENTIONS", output_file=output_file_entity)
 
-            # Terzo grafico: (Article)-[:PUBLISHED_ON]->(Site)
+            # Third graph: (Article)-[:PUBLISHED_ON]->(Site)
             query_site = """
             MATCH (a:Article)-[:PUBLISHED_ON]->(s:Site)
-            RETURN a.title AS Articolo,
+            RETURN a.title AS Article,
                 s.name AS Site
             """
-            create_and_save_graph(query_site, node_relation=("Articolo", "Site"), node_label="Site", edge_label="PUBLISHED_ON", output_file=output_file_site)
+            create_and_save_graph(query_site, node_relation=("Article", "Site"), node_label="Site", edge_label="PUBLISHED_ON", output_file=output_file_site)
 
             plt.show()
-            self.logger.info("Grafi generati e salvati con successo.")
+            self.logger.info("Graphs generated and saved successfully.")
         except Exception as e:
-            self.logger.error(f"Errore durante l'estrazione e il salvataggio del grafo: {e}")
+            self.logger.error(f"Error during graph extraction and saving: {e}")

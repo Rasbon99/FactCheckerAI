@@ -15,6 +15,20 @@ os.chdir(current_dir)
 
 class Preprocessing_Pipeline():
     def __init__(self, env_file="Pkey.env", config=None):
+        """
+        Initializes the preprocessing pipeline, setting up the necessary components like NER, Summarizer, and translation configuration.
+        
+        Args:
+            env_file (str, optional): The environment file containing API keys. Default is "Pkey.env".
+            config (dict, optional): Configuration options for translation, summarization, and NER. 
+                                      Default is {"translation": True, "summarize": True, "NER": True}.
+        
+        Returns:
+            None
+        
+        Raises:
+            KeyError: If the environment variables for the API keys cannot be found.
+        """
         dotenv.load_dotenv(env_file, override=True)
 
         self.logger = Logger(self.__class__.__name__).get_logger()
@@ -33,12 +47,16 @@ class Preprocessing_Pipeline():
 
     def translate_to_english(self, text):
         """
-        Translate a text to English using langdetect first, then fall back to Groq if not in English.
+        Translates a text to English using langdetect first, then falls back to Groq if the text is not in English.
+
         Args:
             text (str): The text to translate.
 
         Returns:
             str: The text translated into English (or unchanged if it is already in English).
+        
+        Raises:
+            Exception: If there is an error during the translation process.
         """
         self.logger.info("Starting translation process.")
 
@@ -72,18 +90,22 @@ class Preprocessing_Pipeline():
 
         except Exception as e:
             self.logger.error(f"Translation failed for text: {text[:200]}... Error: {e}")
-            return text  # If translation fails, return the origina
+            return text  # If translation fails, return the original text
 
     def pipe_claim_preprocessing(self, claim, max_lenght=150, min_lenght=50):
         """
-        Process a claim by translating it to English and summarizing it.
+        Processes a claim by translating it to English and summarizing it.
+
         Args:
             claim (str): The claim text to preprocess.
-            max_lenght (int): The maximum length for the summary.
-            min_lenght (int): The minimum length for the summary.
+            max_lenght (int, optional): The maximum length for the summary. Default is 150.
+            min_lenght (int, optional): The minimum length for the summary. Default is 50.
 
         Returns:
-            str: The preprocessed claim.
+            str: The preprocessed claim, translated and/or summarized based on configuration.
+        
+        Raises:
+            Exception: If there is an error during preprocessing (translation or summarization).
         """
         self.logger.info("Starting claim preprocessing.")
 
@@ -99,14 +121,18 @@ class Preprocessing_Pipeline():
 
     def pipe_sources_preprocessing(self, sources):
         """
-        Process a list of sources by translating and/or summarizing each source as required.
+        Processes a list of sources by translating and/or summarizing each source as required.
+
         Args:
             sources (list): A list of source objects (e.g., text articles) to preprocess.
 
         Returns:
-            list: A list of preprocessed sources.
+            list: A list of preprocessed sources, each being a string of translated and/or summarized text.
+        
+        Raises:
+            NotImplementedError: If the implementation for sources preprocessing is not provided.
         """
         self.logger.info("Starting sources preprocessing.")
         
-        #TODO Placeholder for implementation
-        pass
+        # TODO: Placeholder for implementation
+        raise NotImplementedError("Sources preprocessing is not yet implemented.")

@@ -20,9 +20,11 @@ class Scraper:
         """
         Initializes the Scraper class, setting up the logger and DuckDuckGo search client.
         
-        Attributes:
-            logger (Logger): A logger instance for logging messages.
-            ddg (DDGS): An instance of DuckDuckGo search client.
+        Args:
+            None
+
+        Returns:
+            None
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.ddg = DDGS()
@@ -38,9 +40,13 @@ class Scraper:
         Returns:
             dict: A dictionary containing:
                 - 'title' (str): The title of the page, or 'Title not found' if not available.
-                - 'site' (str): The name of the site
+                - 'site' (str): The name of the site.
                 - 'url' (str): The URL of the web page.
                 - 'body' (str): The text content of the page, with spaces separating content blocks.
+        
+        Raises:
+            requests.RequestException: If there is an error during the HTTP request.
+            Exception: For unexpected errors during content extraction.
         """
         self.logger.info(f"Start body extraction: {url} ...")
         try:
@@ -55,7 +61,7 @@ class Scraper:
             parsed_url = urlparse(url)
             site = parsed_url.netloc
         
-            return {'title': title, 'site': site,'url': url, 'body': body}
+            return {'title': title, 'site': site, 'url': url, 'body': body}
 
         except requests.RequestException as e:
             self.logger.error(f"Request error for URL '{url}': {e}")
@@ -63,16 +69,19 @@ class Scraper:
             self.logger.error(f"Unexpected error while extracting body from URL '{url}': {e}")
 
         return {'title': 'Title not found', 'url': url, 'body': ''}
-    
+
     def can_scrape(self, url):
         """
         Check if web scraping is allowed by the website's robots.txt.
-
+        
         Args:
             url (str): The URL of the website to check.
-
+        
         Returns:
             bool: True if scraping is allowed, False otherwise.
+
+        Raises:
+            Exception: If there is an error accessing the robots.txt or if parsing fails.
         """
         parsed_url = urllib.parse.urlparse(url)
         robot_url = f"{parsed_url.scheme}://{parsed_url.netloc}/robots.txt"
@@ -98,7 +107,7 @@ class Scraper:
         
         Args:
             query (str): The search query to send to DuckDuckGo.
-            num_results (int): The number of search results to retrieve. Default is 5.
+            num_results (int): The number of search results to retrieve. Default is 10.
         
         Returns:
             list: A list of dictionaries, each containing:
@@ -106,6 +115,9 @@ class Scraper:
                 - 'url' (str): The URL extracted from the search result pages.
                 - 'body' (str): The body content extracted from the search result pages.
                 - 'site' (str): The domain name of the site.
+        
+        Raises:
+            Exception: If there is an error during the search and extract process.
         """
         self.logger.info("Start searching and extracting query...")
         search_results = []
@@ -140,10 +152,16 @@ class Scraper:
     def filter_sites(self, sites_list, score_threshold=70):
         """
         Filters a list of sites by their rating from the NewsGuard API.
-
-        :param sites_list: List of dictionaries containing site information, each with an 'href' key.
-        :param score_threshold: Minimum score threshold to filter sites (default is 70).
-        :return: List of sites that meet the criteria (rank == 'T' and score >= score_threshold).
+        
+        Args:
+            sites_list (list): List of dictionaries containing site information, each with an 'href' key.
+            score_threshold (int): Minimum score threshold to filter sites (default is 70).
+        
+        Returns:
+            list: A filtered list of sites that meet the criteria (rank == 'T' and score >= score_threshold).
+        
+        Raises:
+            None
         """
         filtered_sites = []
 
