@@ -19,6 +19,9 @@ class Claim:
             text (str): The text of the claim.
             claim_id (str, optional): The ID of the claim. If not provided, a new UUID is generated.
             db (Database, optional): The database object to use. Defaults to a new Database instance.
+        
+        Raises:
+            Exception: If there is an error during claim creation or database operation.
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.db = db if db else Database()  
@@ -32,7 +35,8 @@ class Claim:
         Saves the claim to the database, creating the table if it doesn't exist.
         After saving, it exports the claims data to a CSV file.
 
-        This method is also responsible for calling the `CSVExporter` to export claims data.
+        Raises:
+            Exception: If there is an error while saving the claim to the database.
         """
         self.logger.info("Saving claim to the database.")
         create_table_sql = """
@@ -45,13 +49,15 @@ class Claim:
         self.db.execute_query("INSERT INTO claims (id, text) VALUES (?, ?)", (self.id, self.text))
         self.logger.info("Claim with ID %s saved to the database.", self.id)
 
-
     def get_sources(self):
         """
         Retrieves all sources associated with the claim from the database.
 
         Returns:
             list: A list of Source objects associated with this claim.
+        
+        Raises:
+            Exception: If there is an error during fetching sources from the database.
         """
         self.logger.info("Fetching sources for claim ID %s.", self.id)
         rows = self.db.fetch_all("SELECT * FROM sources WHERE claim_id = ?", (self.id,))
@@ -74,6 +80,9 @@ class Claim:
 
         Returns:
             list: A list of dictionaries, each representing a source associated with this claim.
+        
+        Raises:
+            Exception: If there is an error during fetching sources from the database.
         """
         self.logger.info("Fetching sources for claim ID %s.", self.id)
         rows = self.db.fetch_all("SELECT * FROM sources WHERE claim_id = ?", (self.id,))
@@ -99,6 +108,9 @@ class Claim:
 
         Args:
             sources_data (list of dict): A list of dictionaries containing source data to insert.
+        
+        Raises:
+            Exception: If there is an error while inserting sources into the database.
         """
         self.logger.info("Adding sources for claim ID %s.", self.id)
         create_table_sql = """
@@ -139,6 +151,9 @@ class Source:
             topic (str): The topic of the source.
             source_id (str, optional): The ID of the source. If not provided, a new UUID is generated.
             db (Database, optional): The database object to use. Defaults to a new Database instance.
+        
+        Raises:
+            Exception: If there is an error during source object initialization.
         """
         self.db = db if db else Database()
         self.id = source_id if source_id else str(uuid.uuid4())
@@ -160,6 +175,9 @@ class Source:
 
         Returns:
             list: A list of Source objects loaded from the database.
+        
+        Raises:
+            Exception: If there is an error while fetching all sources from the database.
         """
         db = db if db else Database()
         rows = db.fetch_all("SELECT * FROM sources")
