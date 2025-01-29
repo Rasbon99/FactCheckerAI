@@ -14,107 +14,149 @@ os.chdir(current_dir)
 
 class RAG_Pipeline:
     def __init__(self, env_file="RAGkey.env", config=None):
-        # Carica variabili d'ambiente
+        """
+        Initializes the RAG Pipeline, setting up environment variables, logging, graph manager, and query engine.
+
+        Args:
+            env_file (str): Path to the .env file containing configuration settings.
+            config (dict, optional): Custom configuration to override default settings (load_data, generate_graphs, query_similarity).
+        
+        Raises:
+            KeyError: If required environment variables are missing.
+        """
         dotenv.load_dotenv(env_file, override=True)
 
         # Logger
         self.logger = Logger(self.__class__.__name__).get_logger()
 
-        # Configura il gestore dei grafi
+        # Configures the GraphManager
         self.graph_manager = GraphManager(env_file)
 
-        # Configura il motore di query
+        # Configures the QueryEngine
         self.query_engine = QueryEngine(env_file)
 
-        # Configurazione personalizzabile
+        # Customizable configuration
         self.config = {
-            "load_data": True,             # Abilita/disabilita il caricamento dei dati
-            "generate_graphs": True,       # Abilita/disabilita la generazione dei grafi
-            "query_similarity": True       # Abilita/disabilita la query di similarità
+            "load_data": True,             # Enables/disables data loading
+            "generate_graphs": True,       # Enables/disables graph generation
+            "query_similarity": True       # Enables/disables similarity queries
         }
         if config:
             self.config.update(config)
 
     def load_data(self, data):
         """
-        Carica i dati nel grafo tramite il GraphManager.
+        Loads the provided data into the graph via the GraphManager.
+
+        Args:
+            data (any): The data to be loaded into the graph.
+
+        Raises:
+            Exception: If there is an error during the data loading process.
         """
         if not self.config.get("load_data", True):
-            self.logger.info("Caricamento dei dati disabilitato dalla configurazione.")
+            self.logger.info("Data loading disabled by configuration.")
             return
 
-        self.logger.info("Avvio del caricamento dei dati...")
+        self.logger.info("Starting data loading...")
         try:
             self.graph_manager.load_data(data)
-            self.logger.info("Dati caricati con successo.")
+            self.logger.info("Data loaded successfully.")
         except Exception as e:
-            self.logger.error(f"Errore durante il caricamento dei dati: {e}")
+            self.logger.error(f"Error during data loading: {e}")
             raise
 
     def generate_and_save_graphs(self, output_file_topic="graph_topic.jpg", output_file_entity="graph_entity.jpg", output_file_site="graph_site.jpg"):
         """
-        Genera e salva i grafi tramite il GraphManager.
+        Generates and saves graphs using the GraphManager.
+
+        Args:
+            output_file_topic (str): The file name to save the topic graph.
+            output_file_entity (str): The file name to save the entity graph.
+            output_file_site (str): The file name to save the site graph.
+
+        Raises:
+            Exception: If there is an error during graph generation.
         """
         if not self.config.get("generate_graphs", True):
-            self.logger.info("Generazione dei grafi disabilitata dalla configurazione.")
+            self.logger.info("Graph generation disabled by configuration.")
             return
 
-        self.logger.info("Avvio della generazione dei grafi...")
+        self.logger.info("Starting graph generation...")
         try:
             self.graph_manager.extract_and_save_graph(output_file_topic, output_file_entity, output_file_site)
         except Exception as e:
-            self.logger.error(f"Errore durante la generazione dei grafi: {e}")
+            self.logger.error(f"Error during graph generation: {e}")
             raise
 
     def query_similarity(self, query):
         """
-        Esegue una query di similarità tramite il QueryEngine.
+        Executes a similarity query using the QueryEngine.
+
+        Args:
+            query (str): The query string to be executed for similarity-based retrieval.
+        
+        Raises:
+            Exception: If there is an error during the similarity query execution.
+        
+        Returns:
+            str: The result of the similarity query, or None if the query is disabled or an error occurs.
         """
         if not self.config.get("query_similarity", True):
-            self.logger.info("Query di similarità disabilitata dalla configurazione.")
+            self.logger.info("Similarity query disabled by configuration.")
             return None
 
-        self.logger.info("Avvio della query di similarità...")
+        self.logger.info("Starting similarity query...")
         try:
             result = self.query_engine.query_similarity(query)
-            self.logger.info("Query di similarità completata.")
+            self.logger.info("Similarity query completed.")
             return result
         except Exception as e:
-            self.logger.error(f"Errore durante l'esecuzione della query di similarità: {e}")
+            self.logger.error(f"Error during similarity query execution: {e}")
             return None
 
     def run_pipeline(self, data, question):
         """
-        Esegui l'intera pipeline: carica i dati, genera i grafi e rispondi alla query.
+        Executes the entire pipeline: load data, generate graphs, and respond to the query.
+
+        Args:
+            data (any): The data to be loaded into the graph.
+            question (str): The question to be asked in the similarity query.
+        
+        Raises:
+            Exception: If there is an error during any step of the pipeline.
+        
+        Returns:
+            str: The result of the similarity query, or None if an error occurs.
         """
-        self.logger.info("Avvio dell'intera pipeline...")
-        start_time = time.time()  # Inizio misurazione del tempo
+        self.logger.info("Starting the entire pipeline...")
+        start_time = time.time()  # Start time measurement
         try:
-            # Step 1: Carica i dati
+            # Step 1: Load the data
             self.load_data(data)
 
-            # Step 2: Genera e salva i grafi
+            # Step 2: Generate and save graphs
             self.generate_and_save_graphs()
 
-            # Step 3: Esegui la query di similarità
+            # Step 3: Execute the similarity query
             result = self.query_similarity(question)
 
-            # Calcola il tempo totale di esecuzione
+            # Calculate total execution time
             total_time = time.time() - start_time
-            self.logger.info(f"Pipeline completata con successo in {total_time:.2f} secondi.")
+            self.logger.info(f"Pipeline completed successfully in {total_time:.2f} seconds.")
 
             return result
         except Exception as e:
             total_time = time.time() - start_time
-            self.logger.error(f"Errore durante l'esecuzione della pipeline (tempo totale: {total_time:.2f} secondi): {e}")
+            self.logger.error(f"Error during pipeline execution (total time: {total_time:.2f} seconds): {e}")
             return None
 
-# Esempio di utilizzo
+# EXAMPLE
 if __name__ == "__main__":
-    # Crea un'istanza della pipeline
+
+    # Pipeline instance
     pipeline = RAG_Pipeline(config={"load_data": True, "generate_graphs": True, "query_similarity": True})
 
-    # Dati di esempio
     data = [
         {
             "TITLE": "Elon Musk's SpaceX Launches Another Starship Test Flight",
@@ -158,14 +200,13 @@ if __name__ == "__main__":
         }
     ]
 
-    # Claim di esempio
     claim = "Elon Musk's companies, such as SpaceX and Tesla, have failed to achieve any meaningful technological advancements, and Musk's ventures have been largely unsuccessful. There is no progress in space exploration, electric vehicles, or brain-computer interfaces. Musk's leadership has been marked by unfulfilled promises and controversies. His statements about artificial intelligence and his acquisition of Twitter are driven by personal gain rather than technological progress."
     
-    # Query fissa per la pipeline
+    # Fixed query for the pipeline
     query = "Do the articles confirm, deny, or are they neutral towards this claim?"
 
     question = claim + " " + query
     
-    # Esegui la pipeline
+    # Pipeline execution
     query_result = pipeline.run_pipeline(data=data, question=question)
     print(query_result)
