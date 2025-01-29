@@ -1,9 +1,13 @@
 import os
+import sys
 import sqlite3
 
 import dotenv
 
+current_dir = os.getcwd()
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from log import Logger
+os.chdir(current_dir)
 
 dotenv.load_dotenv("key.env", override=True)
 

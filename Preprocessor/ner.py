@@ -1,10 +1,14 @@
 import json
 import os
+import sys
 
 import dotenv
 from groq import Groq
 
-from log import Logger  
+current_dir = os.getcwd()
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from log import Logger
+os.chdir(current_dir) 
 
 class NER:
     def __init__(self, env_file="Pkey.env", model=None):

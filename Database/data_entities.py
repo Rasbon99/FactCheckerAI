@@ -1,7 +1,13 @@
+import os
+import sys
 import uuid
 
 from sqldb import Database
+
+current_dir = os.getcwd()
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from log import Logger
+os.chdir(current_dir)
 
 class Claim:
     def __init__(self, text, claim_id=None, db=None):
