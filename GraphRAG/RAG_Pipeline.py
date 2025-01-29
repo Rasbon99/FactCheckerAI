@@ -4,8 +4,8 @@ import time
 
 import dotenv
 
-from GraphManager import GraphManager
-from QueryEngine import QueryEngine
+from graph_manager import GraphManager
+from query_engine import QueryEngine
 
 current_dir = os.getcwd()
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
