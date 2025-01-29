@@ -1,9 +1,13 @@
-import requests
 import os
+import requests
+import sys
 from requests.auth import HTTPBasicAuth
 from dotenv import load_dotenv
-from log import Logger
 
+current_dir = os.getcwd()
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from log import Logger
+os.chdir(current_dir)
 
 class NewsGuardClient:
     """
