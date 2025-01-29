@@ -9,10 +9,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from log import Logger
 os.chdir(current_dir)
 
-dotenv.load_dotenv("key.env", override=True)
-
 class Database:
-    def __init__(self, env_file="Dkey.env", db_file=os.getenv("SQLDB_PATH")):
+    def __init__(self, env_file="Dkey.env"):
         """
         Initializes the Database class with the database file path.
 
@@ -21,9 +19,9 @@ class Database:
             db_file (str): The path to the SQLite database file.
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
-        self.db_file = db_file
+        self.db_file = os.environ["SQLDB_PATH"]
 
-        db_dir = os.path.dirname(db_file)  
+        db_dir = os.path.dirname(self.db_file)  
         if db_dir and not os.path.exists(db_dir):
             os.makedirs(db_dir)
             self.logger.info("Created directory for the database file: %s", db_dir)
