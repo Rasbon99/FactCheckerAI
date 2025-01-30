@@ -1,7 +1,7 @@
 from WebScraper.scraper import Scraper
 from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from Database.data_entities import Claim
-from Database.rag_pipeline import RAG_Pipeline
+from GraphRAG.rag_pipeline import RAG_Pipeline
 
 def main():
 
