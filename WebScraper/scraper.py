@@ -30,6 +30,7 @@ class Scraper:
         self.ddg = DDGS()
         self.ng_client = NewsGuardClient()
 
+
     def extract_context(self, url):
         """
         Extracts the title and body of a web page from the given URL.
@@ -39,36 +40,54 @@ class Scraper:
         
         Returns:
             dict: A dictionary containing:
-                - 'title' (str): The title of the page, or 'Title not found' if not available.
-                - 'site' (str): The name of the site.
+                - 'title' (str or None): The title of the page, or None if not available.
+                - 'site' (str or None): The name of the site, or None if unavailable.
                 - 'url' (str): The URL of the web page.
-                - 'body' (str): The text content of the page, with spaces separating content blocks.
+                - 'body' (str or None): The text content of the page, or None if access is restricted.
         
         Raises:
             requests.RequestException: If there is an error during the HTTP request.
             Exception: For unexpected errors during content extraction.
         """
-        self.logger.info(f"Start body extraction: {url} ...")
+        self.logger.info(f"Starting body extraction: {url} ...")
         try:
-            response = requests.get(url)
-            response.raise_for_status()  # Raise an HTTPError for bad responses (4xx and 5xx)
-
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            }
+            response = requests.get(url, headers=headers, timeout=5)
+            if response.status_code in [401, 403, 402]:
+                self.logger.warning(f"Access denied for URL '{url}' with status {response.status_code}.")
+                return {'title': None, 'site': None, 'url': url, 'body': None}
+            
             soup = BeautifulSoup(response.content, 'html.parser')
 
+            # Check if the content indicates a restriction message
+            blocked_keywords = ["subscribe", "log in", "sign in", "register", "access denied", "are you a robot"]
+            page_text = soup.get_text(separator=' ', strip=True).lower()
+            if any(keyword in page_text[:100] for keyword in blocked_keywords):
+                self.logger.warning(f"Content appears restricted for URL '{url}'.")
+                return {'title': None, 'site': None, 'url': url, 'body': None}
+
             # Extract title and body
-            title = soup.title.string if soup.title else 'Title not found'
+            title = soup.title.string if soup.title else None
             body = soup.get_text(separator=' ', strip=True)
             parsed_url = urlparse(url)
             site = parsed_url.netloc
         
             return {'title': title, 'site': site, 'url': url, 'body': body}
 
+        except requests.Timeout:
+            self.logger.error(f"Timeout error for URL '{url}'")
+            return {'title': None, 'site': None, 'url': url, 'body': None}
+        
         except requests.RequestException as e:
             self.logger.error(f"Request error for URL '{url}': {e}")
+            return {'title': None, 'site': None, 'url': url, 'body': None}
+
         except Exception as e:
             self.logger.error(f"Unexpected error while extracting body from URL '{url}': {e}")
+            return {'title': None, 'site': None, 'url': url, 'body': None}
 
-        return {'title': 'Title not found', 'url': url, 'body': ''}
 
     def can_scrape(self, url):
         """
@@ -132,15 +151,16 @@ class Scraper:
             for result in results:
                 url = result['href']
                 
-                # Check if scraping is allowed for the site
-                if not self.can_scrape(url):
-                    self.logger.info(f"Skipping {url} due to scraping restrictions.")
-                    continue
-            
                 extracted_data = self.extract_context(url)
 
+                # TODO - Verifiy the body
+
                 if extracted_data['title'] and extracted_data['body']:
-                    self.logger.info(f'{extracted_data["title"]} - {extracted_data["url"]} - {extracted_data["site"]}')
+                    
+                    # Append score to exctracted data
+                    extracted_data['score'] = result['score']
+
+                    self.logger.info(f'{extracted_data['title']} - {extracted_data['url']} - {extracted_data['site']}')
                     self.logger.info(f"{extracted_data['body'][:200]}...")  # Preview body text
                     search_results.append(extracted_data)
 
@@ -158,7 +178,7 @@ class Scraper:
             score_threshold (int): Minimum score threshold to filter sites (default is 70).
         
         Returns:
-            list: A filtered list of sites that meet the criteria (rank == 'T' and score >= score_threshold).
+            list: A filtered list of sites that meet the criteria (rank == 'T' and score >= score_threshold) with append the score.
         
         Raises:
             None
@@ -166,33 +186,40 @@ class Scraper:
         filtered_sites = []
 
         for site in sites_list:
-            # Estrazione dell'URL dalla posizione href nella lista
+            # Extract the URL from the href position in the list
             href = site.get('href')
             if not href:
-                continue  # Se non c'è href, salta questa iterazione
+                continue  # If there is no href, skip this iteration
             
-            # Parsing dell'URL per avere un URL "pulito"
+            # Parse the URL to get a "clean" URL
             parsed_url = urlparse(href)
-            cleared_site = parsed_url.netloc
+            cleared_url = parsed_url.netloc
 
-            # Ottieni il rating del sito
-            rating = self.ng_client.get_rating(cleared_site)
-            
-            # Se il rating è valido, controlla il rank e lo score
+            # Get the site's rating
+            rating = self.ng_client.get_rating(cleared_url)
+
+            # Check if scraping is allowed for the site
+            if not self.can_scrape(cleared_url):
+                self.logger.info(f"Skipping {cleared_url} due to scraping restrictions.")
+                continue
+                        
+            # If the rating is valid, check the rank and score
             if rating:
                 rank = rating.get('rank')
                 score = rating.get('score')
                 
-                # Se il sito ha rank 'T' e score >= score_threshold, includilo
+                # If the site has rank 'T' and score >= score_threshold, include it
                 if rank == 'T' and score >= score_threshold:
+                    site['score'] = score
                     filtered_sites.append(site)
                 else:
-                    # Log per i siti che vengono esclusi
-                    self.logger.info("Excluded site %s with rank: %s, score: %s", cleared_site, rank, score)
+                    # Log for sites that are excluded
+                    self.logger.info("Excluded site %s with rank: %s, score: %s", cleared_url, rank, score)
 
         self.logger.info("Filtered websites: %s sites", len(filtered_sites))
 
         return filtered_sites
+
     
 def main():
     # Create an instance of the Scraper class
@@ -202,7 +229,7 @@ def main():
     query = "Trump federal workers resignation program deferred resignation COVID-19 pandemic US Office Personnel Management OPM"
 
     # Call the search_and_extract method
-    results = scraper.search_and_extract(query)
+    results = scraper.search_and_extract(query, num_results=30)
 
     # Print the extracted data
     if results:
@@ -211,7 +238,8 @@ def main():
             print(f"Title: {result['title']}")
             print(f"URL: {result['url']}")
             print(f"Site: {result['site']}")
-            print(f"Body: {result['body'][:200]}...")  # Preview of the body (first 200 characters)
+            print(f"Body: {result['body'][:1000]}...")  # Preview of the body (first 200 characters)
+            print(f"Score: {result['score']}")
             print("-" * 50)
     else:
         print("No results found or an error occurred during extraction.")
