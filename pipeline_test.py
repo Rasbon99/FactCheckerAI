@@ -1,6 +1,7 @@
 from WebScraper.scraper import Scraper
 from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from Database.data_entities import Claim
+from Database.rag_pipeline import RAG_Pipeline
 
 def main():
 
@@ -19,6 +20,11 @@ def main():
 
     claim.add_sources(preprocessed_sources)
 
+    rag = RAG_Pipeline()
+    
+    query_result = rag.run_pipeline(preprocessed_sources, preprocessed_claim)
+    
+    print(query_result)
 
 if __name__ == "__main__":
     main()
