@@ -31,7 +31,7 @@ class QueryEngine:
 
         # Model configuration
         self.model_name = os.environ["MODEL_LLM_NEO4J"]
-        self.modelGroq_name = os.environ["MODELGROQ_LLM_NEO4J"]
+        self.modelGroq_name = os.environ["GROQ_MODEL_NAME"]
         self.embedding_model = OllamaEmbeddings(model=self.model_name)
         self.llm_model = ChatGroq(model=self.modelGroq_name)
         self.index_name = index_name

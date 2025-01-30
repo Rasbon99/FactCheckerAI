@@ -38,6 +38,8 @@ class RAG_Pipeline:
         }
         if config:
             self.config.update(config)
+        
+        self.graph_manager.reset_data()
 
     def load_data(self, data):
         """

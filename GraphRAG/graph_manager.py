@@ -43,6 +43,41 @@ class GraphManager:
         except Exception as e:
             self.logger.error(f"Error during Neo4j connection: {e}")
             raise ConnectionError(f"Error during Neo4j connection: {e}")
+    
+    def reset_data(self):
+        """
+        Resets the database by deleting all articles, topics, sites, and entities
+        that are no longer connected to any articles.
+
+        Logs the process and measures the execution time.
+        """
+        self.logger.info("Starting data reset process...")
+        
+        try:
+            start_time = time.time()
+            
+            # Define the reset queries
+            delete_queries = [
+                "MATCH (a:Article) DETACH DELETE a",
+                "MATCH (e:Entity) WHERE NOT (e)<-[:MENTIONS]-() DELETE e",
+                "MATCH (s:Site) WHERE NOT (s)<-[:PUBLISHED_ON]-() DELETE s",
+                "MATCH (t:Topic) WHERE NOT (t)<-[:HAS_TOPIC]-() DELETE t"
+            ]
+            
+            # Execute each query
+            for query in delete_queries:
+                self.logger.info(f"Executing query: {query}")
+                self.graph.query(query)
+
+            elapsed_time = time.time() - start_time
+            self.logger.info(f"Data reset completed in {elapsed_time:.2f} seconds.")
+            
+            # Optional schema refresh
+            self.graph.refresh_schema()
+            self.logger.info("Schema refreshed successfully.")
+
+        except Exception as e:
+            self.logger.error(f"Error during data reset: {e}")
 
     def load_data(self, data):
         """
@@ -58,24 +93,25 @@ class GraphManager:
             None
         """
         q_load_articles = """
-            UNWIND $data AS article
-            MERGE (a:Article {title: article.TITLE})
-            SET a.url = article.URL,
-                a.body = article.BODY
-            MERGE (s:Site {name: article.SITE})
-            MERGE (a)-[:PUBLISHED_ON]->(s)
+        UNWIND $data AS article
+        MERGE (a:Article {title: article.title})
+        SET a.url = article.url,
+            a.body = article.body,
+            a.score = article.score
 
-            WITH a, article
-            // Handle entities
-            UNWIND article.ENTITY AS entity
-            MERGE (e:Entity {name: entity})
-            MERGE (a)-[:MENTIONS]->(e)
+        MERGE (s:Site {name: article.site})
+        MERGE (a)-[:PUBLISHED_ON]->(s)
 
-            WITH a, article, e
-            // Handle topics
-            UNWIND article.TOPIC AS topic
-            MERGE (t:Topic {name: topic})
-            MERGE (a)-[:HAS_TOPIC]->(t)
+        // Gestione delle entità
+        WITH a, article
+        UNWIND article.entities AS entity
+        MERGE (e:Entity {name: entity})
+        MERGE (a)-[:MENTIONS]->(e)
+
+        // Gestione del topic
+        WITH a, article
+        MERGE (t:Topic {name: article.topic})
+        MERGE (a)-[:HAS_TOPIC]->(t)
         """
         
         self.logger.info(f"Starting data load from {data}...")
