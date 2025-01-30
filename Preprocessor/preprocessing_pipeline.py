@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 from langdetect import detect
 
@@ -61,21 +62,27 @@ class Preprocessing_Pipeline():
         self.logger.info("Starting translation process.")
 
         try:
+            # Clean the text before detecting language
+            cleaned_text = re.sub(r"[^a-zA-Z0-9\s.,:!?\“\”\'\"àèéìòùÀÈÉÌÒÙ]", "", text)
+            if not cleaned_text.strip():
+                self.logger.warning("Cleaned text is empty, cannot detect language.")
+                return None
+            
             # Detect language using langdetect
-            detected_language = detect(text)
+            detected_language = detect(cleaned_text)
             self.logger.info(f"Detected language: {detected_language}")
 
             # If the detected language is English, return the text as is
             if detected_language == 'en':
                 self.logger.info("Text is already in English, no translation needed.")
-                return text
+                return cleaned_text
 
             # If it's not in English, fall back to Groq for translation
             self.logger.info("Text is not in English, using Groq model for translation.")
             response = self.client.chat.completions.create(
                 messages=[
                     {"role": "system", "content": "You are a translation model."},
-                    {"role": "user", "content": f"Translate the following text to English and return only the translated text: {text}."}
+                    {"role": "user", "content": f"Translate the following text to English and return only the translated text: {cleaned_text}."}
                 ],
                 model=os.getenv("GROQ_MODEL_NAME"),  # The Groq model to use for translation
                 temperature=0.5,
@@ -89,7 +96,7 @@ class Preprocessing_Pipeline():
             return result
 
         except Exception as e:
-            self.logger.error(f"Translation failed for text: {text[:200]}... Error: {e}")
+            self.logger.error(f"Translation failed for text: {cleaned_text[:200]}... Error: {e}")
             return text  # If translation fails, return the original text
 
     def pipe_claim_preprocessing(self, claim, max_lenght=150, min_lenght=50):
