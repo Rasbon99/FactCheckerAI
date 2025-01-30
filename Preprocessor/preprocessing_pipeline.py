@@ -6,13 +6,10 @@ from langdetect import detect
 import dotenv
 from groq import Groq
 
-from ner import NER
-from summarizer import Summarizer
+from Preprocessor.ner import NER
+from Preprocessor.summarizer import Summarizer
 
-current_dir = os.getcwd()
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from log import Logger
-os.chdir(current_dir)
 
 class Preprocessing_Pipeline():
     def __init__(self, env_file="Pkey.env", config=None):

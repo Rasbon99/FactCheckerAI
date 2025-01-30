@@ -8,7 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
 
-from ng_client import NewsGuardClient
+from WebScraper.ng_client import NewsGuardClient
 
 current_dir = os.getcwd()
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -160,7 +160,7 @@ class Scraper:
                     # Append score to exctracted data
                     extracted_data['score'] = result['score']
 
-                    self.logger.info(f'{extracted_data['title']} - {extracted_data['url']} - {extracted_data['site']}')
+                    self.logger.info(f"{extracted_data['title']} - {extracted_data['url']} - {extracted_data['site']}")
                     self.logger.info(f"{extracted_data['body'][:200]}...")  # Preview body text
                     search_results.append(extracted_data)
 

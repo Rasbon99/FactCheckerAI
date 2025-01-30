@@ -20,8 +20,10 @@ class Database:
         Raises:
             KeyError: If the environment variable for the database file path is not set.
         """
+        
         self.logger = Logger(self.__class__.__name__).get_logger()
         try:
+            dotenv.load_dotenv(env_file, override=True)
             self.db_file = os.environ["SQLDB_PATH"]
         except KeyError as e:
             self.logger.error("Environment variable SQLDB_PATH not found.")
