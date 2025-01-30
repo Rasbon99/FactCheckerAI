@@ -10,7 +10,7 @@ from log import Logger
 os.chdir(current_dir)
 
 class Database:
-    def __init__(self, env_file="Dkey.env"):
+    def __init__(self, env_file="key.env"):
         """
         Initializes the Database class with the database file path.
 

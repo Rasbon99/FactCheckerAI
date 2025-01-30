@@ -1,5 +1,4 @@
 import os
-import sys
 import time
 import dotenv
 
@@ -10,13 +9,10 @@ import networkx as nx
 from py2neo import Graph
 from langchain_neo4j import Neo4jGraph
 
-current_dir = os.getcwd()
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from log import Logger
-os.chdir(current_dir)
 
 class GraphManager:
-    def __init__(self, env_file="RAGkey.env"):
+    def __init__(self, env_file="key.env"):
         """
         Initializes the GraphManager by setting up the Neo4j connection.
 

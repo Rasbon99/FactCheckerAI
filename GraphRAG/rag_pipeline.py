@@ -1,19 +1,14 @@
-import os
-import sys
 import time
 
 import dotenv
 
-from graph_manager import GraphManager
-from query_engine import QueryEngine
+from GraphRAG.graph_manager import GraphManager
+from GraphRAG.query_engine import QueryEngine
 
-current_dir = os.getcwd()
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from log import Logger
-os.chdir(current_dir)
 
 class RAG_Pipeline:
-    def __init__(self, env_file="RAGkey.env", config=None):
+    def __init__(self, env_file="key.env", config=None):
         """
         Initializes the RAG Pipeline, setting up environment variables, logging, graph manager, and query engine.
 

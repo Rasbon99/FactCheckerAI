@@ -1,5 +1,4 @@
 import os
-import sys
 
 import dotenv
 from groq import Groq
@@ -7,7 +6,7 @@ from groq import Groq
 from log import Logger
 
 class Summarizer:
-    def __init__(self, env_file="Pkey.env", model=None):
+    def __init__(self, env_file="key.env", model=None):
         """
         Initializes the Summarizer class with a specific model and configures the Groq API client.
 

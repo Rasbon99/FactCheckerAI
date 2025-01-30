@@ -1,6 +1,5 @@
 import os
 import requests
-import sys
 from requests.auth import HTTPBasicAuth
 from dotenv import load_dotenv
 
@@ -17,7 +16,7 @@ class NewsGuardClient:
         Raises:
             KeyError: If the environment variables for CLIENT_API_ID or NG_API_KEY are not found.
         """
-        load_dotenv("NGkey.env")
+        load_dotenv("key.env")
         self.logger = Logger(self.__class__.__name__).get_logger()
         try:
             self.client_id = os.getenv("CLIENT_API_ID")

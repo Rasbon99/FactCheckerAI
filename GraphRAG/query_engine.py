@@ -1,5 +1,4 @@
 import os
-import sys
 import time
 
 import dotenv
@@ -8,13 +7,10 @@ from langchain_community.vectorstores import Neo4jVector
 from langchain_ollama import OllamaEmbeddings
 from langchain_groq import ChatGroq
 
-current_dir = os.getcwd()
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from log import Logger
-os.chdir(current_dir)
 
 class QueryEngine:
-    def __init__(self, env_file="RAGkey.env", index_name="articles"):
+    def __init__(self, env_file="key.env", index_name="articles"):
         """
         Initializes the QueryEngine by setting up the environment variables, models, and Neo4j connection.
 
