@@ -99,7 +99,7 @@ class Preprocessing_Pipeline():
             self.logger.error(f"Translation failed for text: {cleaned_text[:200]}... Error: {e}")
             return text  # If translation fails, return the original text
 
-    def pipe_claim_preprocessing(self, claim, max_lenght=150, min_lenght=50):
+    def run_claim_pipe(self, claim, max_lenght=150, min_lenght=50):
         """
         Processes a claim by translating it to English and summarizing it.
 
@@ -114,7 +114,7 @@ class Preprocessing_Pipeline():
         Raises:
             Exception: If there is an error during preprocessing (translation or summarization).
         """
-        self.logger.info("Starting claim preprocessing.")
+        self.logger.info("Starting claim preprocessing...")
 
         if self.config.get("translation", True):
             claim = self.translate_to_english(claim)
@@ -126,7 +126,7 @@ class Preprocessing_Pipeline():
 
         return claim
 
-    def pipe_sources_preprocessing(self, sources):
+    def run_sources_pipe(self, sources, max_lenght=1024):
         """
         Processes a list of sources by translating and/or summarizing each source as required.
 
@@ -139,7 +139,17 @@ class Preprocessing_Pipeline():
         Raises:
             NotImplementedError: If the implementation for sources preprocessing is not provided.
         """
-        self.logger.info("Starting sources preprocessing.")
+        self.logger.info("Starting sources preprocessing...")
+
+        if self.config.get("summarize", True):
+            new_bodies = self.summarizer.summarize_texts([d['body'] for d in sources], max_lenght)
+            for d, new_body in zip(sources, new_bodies):
+                d['body'] = new_body
         
-        # TODO: Placeholder for implementation
-        raise NotImplementedError("Sources preprocessing is not yet implemented.")
+        if self.config.get("NER", True):
+            topic_and_entities = self.ner.extract_entities_and_topic([d['body'] for d in sources])
+            sources.update(topic_and_entities)
+
+        self.logger.info("Sources preprocessing completed.")
+        
+        return sources

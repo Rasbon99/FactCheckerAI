@@ -221,28 +221,3 @@ class Scraper:
         return filtered_sites
 
     
-def main():
-    # Create an instance of the Scraper class
-    scraper = Scraper()
-
-    # Define the search query and the number of results
-    query = "Trump federal workers resignation program deferred resignation COVID-19 pandemic US Office Personnel Management OPM"
-
-    # Call the search_and_extract method
-    results = scraper.search_and_extract(query, num_results=30)
-
-    # Print the extracted data
-    if results:
-        for idx, result in enumerate(results):
-            print(f"Result {idx + 1}:")
-            print(f"Title: {result['title']}")
-            print(f"URL: {result['url']}")
-            print(f"Site: {result['site']}")
-            print(f"Body: {result['body'][:1000]}...")  # Preview of the body (first 200 characters)
-            print(f"Score: {result['score']}")
-            print("-" * 50)
-    else:
-        print("No results found or an error occurred during extraction.")
-
-if __name__ == "__main__":
-    main()
