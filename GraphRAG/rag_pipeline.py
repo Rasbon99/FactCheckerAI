@@ -110,14 +110,14 @@ class RAG_Pipeline:
             self.logger.error(f"Error during similarity query execution: {e}")
             return None
 
-    def run_pipeline(self, data, question):
+    def run_pipeline(self, data, claim):
         """
         Executes the entire pipeline: load data, generate graphs, and respond to the query.
 
         Args:
             data (any): The data to be loaded into the graph.
             question (str): The question to be asked in the similarity query.
-        
+    
         Raises:
             Exception: If there is an error during any step of the pipeline.
         
@@ -132,7 +132,11 @@ class RAG_Pipeline:
 
             # Step 2: Generate and save graphs
             self.generate_and_save_graphs()
-
+            
+            # Fixed query for the pipeline
+            query = "Do the articles confirm, deny, or are they neutral towards this claim? Cite the titles"
+            question = claim + " " + query
+            
             # Step 3: Execute the similarity query
             result = self.query_similarity(question)
 
