@@ -6,4 +6,4 @@
 *.jpg
 *.csv
 __pycache__/
-/Database/data
+*.db
