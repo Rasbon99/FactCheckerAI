@@ -1,4 +1,5 @@
 import os
+import time
 
 import dotenv
 from groq import Groq
@@ -6,12 +7,12 @@ from groq import Groq
 from log import Logger
 
 class Summarizer:
-    def __init__(self, env_file="key.env", model=None):
+    def __init__(self, env_file="key.env"):
         """
         Initializes the Summarizer class with a specific model and configures the Groq API client.
 
         Args:
-            env_file (str, optional): The environment file containing the API keys. Default is "Pkey.env".
+            env_file (str, optional): The environment file containing the API keys. Default is "key.env".
             model (str, optional): The model to use for summarization. If not provided, defaults to the model set in the environment.
 
         Attributes:
@@ -27,14 +28,12 @@ class Summarizer:
         self.logger = Logger(self.__class__.__name__).get_logger()
         dotenv.load_dotenv(env_file, override=True)
         self.model = os.getenv("GROQ_MODEL_NAME")
+        self.low_model = os.getenv("GROQ_LOW_MODEL_NAME")
         self.client = Groq()
-        
-        if model:
-            self.model = model
 
-    def summarize(self, text, max_tokens=1024, temperature=0.5, stop=None):
+    def keywords_summarize(self, text, max_tokens=1024, temperature=0.5, stop=None):
         """
-        Generates a summary for the given text using the Groq API.
+        Generates a summary in keywords for the given claim using the Groq API.
 
         Args:
             text (str): The text to summarize.
@@ -97,13 +96,27 @@ class Summarizer:
             self.logger.info("Summarizing text %d/%d...", index + 1, len(texts))
             self.logger.debug("Text %d content: %s", index + 1, text[:200])
             
-            summary = self.summarize(text, max_tokens=max_tokens, temperature=temperature, stop=stop)
-
-            if summary:
-                summaries.append(summary)
-                self.logger.info("Text %d summarized successfully.", index + 1)
-            else:
-                self.logger.error("Error summarizing text %d.", index + 1)
+            try:
+                response = self.client.chat.completions.create(
+                    messages=[
+                        {"role": "system", "content": """You are a summarizer, be specific. Don't use lists or bullet points. 
+                                                        Provide only the string without specifying that it is a summary"""},
+                        {"role": "user", "content": text}
+                    ],
+                    model=self.low_model,
+                    temperature=temperature,
+                    max_completion_tokens=max_tokens,
+                    stop=stop
+                )
+                summary = response.choices[0].message.content.strip()
+                if summary:
+                    summaries.append(summary)
+                    self.logger.info("Text %d summarized successfully.", index + 1)
+                else:
+                    self.logger.warning("No summary returned for text %d.", index + 1)
+            except Exception as e:
+                self.logger.error("Error summarizing text %d: %s", index + 1, str(e))
+                summaries.append(None) 
 
         self.logger.info("Batch summarization process completed.")
         return summaries

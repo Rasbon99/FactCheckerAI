@@ -117,7 +117,7 @@ class Preprocessing_Pipeline():
             claim = self.translate_to_english(claim)
 
         if self.config.get("summarize", True):
-            claim = self.summarizer.summarize(claim, max_lenght)
+            claim = self.summarizer.keywords_summarize(claim, max_lenght)
 
         self.logger.info("Claim preprocessing completed.")
 
@@ -142,7 +142,7 @@ class Preprocessing_Pipeline():
             new_bodies = self.summarizer.summarize_texts([d['body'] for d in sources], max_lenght)
             for d, new_body in zip(sources, new_bodies):
                 d['body'] = new_body
-            print(sources)
+            self.logger.debug(sources)
         
         if self.config.get("NER", True):
             topic_and_entities = self.ner.extract_entities_and_topic([d['body'] for d in sources])
