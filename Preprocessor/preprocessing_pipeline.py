@@ -12,7 +12,7 @@ from Preprocessor.summarizer import Summarizer
 from log import Logger
 
 class Preprocessing_Pipeline():
-    def __init__(self, env_file="Pkey.env", config=None):
+    def __init__(self, env_file="key.env", config=None):
         """
         Initializes the preprocessing pipeline, setting up the necessary components like NER, Summarizer, and translation configuration.
         

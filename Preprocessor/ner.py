@@ -8,7 +8,7 @@ from groq import Groq
 from log import Logger
 
 class NER:
-    def __init__(self, env_file="Pkey.env", model=None):
+    def __init__(self, env_file="key.env", model=None):
         """
         Initializes the NER class with a specific model and configures the Groq API client.
 
