@@ -29,7 +29,8 @@ class Scraper:
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.ddg = DDGS()
         self.ng_client = NewsGuardClient()
-
+        #Magic trick
+        os.system("pip install --quiet -U duckduckgo_search==5.3.1b1")
 
     def extract_context(self, url):
         """

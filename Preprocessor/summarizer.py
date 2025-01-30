@@ -73,7 +73,7 @@ class Summarizer:
             self.logger.error("Error generating summary: %s", e)
             return None
 
-    def summarize_texts(self, texts, max_tokens=1024, temperature=0.5, stop=None):
+    def summarize_texts(self, texts, max_tokens=1024, temperature=0.5, stop=None, token_cut = 20000, sleep_temperature=0.0003):
         """
         Generates summaries for a list of texts.
 
@@ -96,12 +96,14 @@ class Summarizer:
             self.logger.info("Summarizing text %d/%d...", index + 1, len(texts))
             self.logger.debug("Text %d content: %s", index + 1, text[:200])
             
+            cutted_text = text[:token_cut]
+
             try:
                 response = self.client.chat.completions.create(
                     messages=[
                         {"role": "system", "content": """You are a summarizer, be specific. Don't use lists or bullet points. 
                                                         Provide only the string without specifying that it is a summary"""},
-                        {"role": "user", "content": text}
+                        {"role": "user", "content": cutted_text}
                     ],
                     model=self.low_model,
                     temperature=temperature,
@@ -112,6 +114,9 @@ class Summarizer:
                 if summary:
                     summaries.append(summary)
                     self.logger.info("Text %d summarized successfully.", index + 1)
+                    sleep_time = len(cutted_text)*sleep_temperature
+                    self.logger.info("Sleep of %f seconds", sleep_time)
+                    time.sleep(sleep_time)
                 else:
                     self.logger.warning("No summary returned for text %d.", index + 1)
             except Exception as e:

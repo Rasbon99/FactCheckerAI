@@ -64,8 +64,9 @@ class Claim:
             url=row['url'],
             site=row['site'],
             body=row['body'],
-            entities=row['entities'],
+            score=row['score'],
             topic=row['topic'],
+            entities=row['entities'],
             source_id=row['id']
         ) for row in rows]
         self.logger.info("Found %d sources for claim ID %s.", len(sources), self.id)
@@ -91,8 +92,10 @@ class Claim:
                 "url": row['url'],
                 "site": row['site'],
                 "body": row['body'],
-                "entities": row['entities'],
-                "topic": row['topic']
+                "score": row['score'],
+                "topic": row['topic'],
+                "entities": row['entities']
+                
             }
             for row in rows
         ]
@@ -118,8 +121,9 @@ class Claim:
                 url TEXT,
                 site TEXT,
                 body TEXT,
-                entities TEXT,
+                score FLOAT,
                 topic TEXT,
+                entities TEXT,
                 FOREIGN KEY (claim_id) REFERENCES claims(id)
             )
         """
@@ -128,13 +132,13 @@ class Claim:
         # Insert each source into the database
         for data in sources_data:
             self.db.execute_query("""
-                INSERT INTO sources (id, claim_id, title, url, site, body, entities, topic)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO sources (id, claim_id, title, url, site, body, score, topic, entities)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (str(uuid.uuid4()), self.id, data['title'], data['url'], data['site'],
-                  data['body'], data['entities'], data['topic']))
+                  data['body'], data['score'], data['topic'], str(data['entities'])))
 
 class Source:
-    def __init__(self, claim_id, title, url, site, body, entities, topic, source_id=None, db=None):
+    def __init__(self, claim_id, title, url, site, body, score, topic, entities, source_id=None, db=None):
         """
         Initializes a Source object with details about a specific source.
 
@@ -159,8 +163,9 @@ class Source:
         self.url = url
         self.site = site
         self.body = body
-        self.entities = entities
+        self.score = score
         self.topic = topic
+        self.entities = entities
 
     @staticmethod
     def load_all(db=None):
@@ -184,8 +189,9 @@ class Source:
             url=row['url'],
             site=row['site'],
             body=row['body'],
-            entities=row['entities'],
+            score=row['score'],
             topic=row['topic'],
+            entities=row['entities'],
             source_id=row['id'],
             db=db
         ) for row in rows]

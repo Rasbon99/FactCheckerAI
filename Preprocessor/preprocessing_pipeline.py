@@ -142,12 +142,12 @@ class Preprocessing_Pipeline():
             new_bodies = self.summarizer.summarize_texts([d['body'] for d in sources], max_lenght)
             for d, new_body in zip(sources, new_bodies):
                 d['body'] = new_body
-            self.logger.debug(sources)
         
         if self.config.get("NER", True):
-            topic_and_entities = self.ner.extract_entities_and_topic([d['body'] for d in sources])
-            for d, t_e in zip(sources, topic_and_entities):
-                d.update(t_e)
+            for source in sources:
+                topic_and_entities = self.ner.extract_entities_and_topic(source['body'])
+                source['topic'] = topic_and_entities['topic']
+                source['entities'] = topic_and_entities['entities']
 
         self.logger.info("Sources preprocessing completed.")
         
