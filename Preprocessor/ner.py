@@ -57,7 +57,6 @@ class NER:
             json.JSONDecodeError: If the response cannot be parsed into a valid JSON format.
         """
         self.logger.info("Starting entity and topic extraction process.")
-        self.logger.debug("Input text: %s...", text[:200]) 
 
         try:
             response = self.client.chat.completions.create(
