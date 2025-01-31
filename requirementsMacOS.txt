@@ -10,6 +10,7 @@ astunparse==1.6.3
 async-timeout==4.0.3
 attrs==24.3.0
 beautifulsoup4==4.12.3
+Brotli==1.1.0
 bs4==0.0.2
 cachetools==5.5.0
 certifi==2024.12.14
@@ -20,7 +21,7 @@ cycler==0.12.1
 dataclasses-json==0.6.7
 decorator==5.1.1
 distro==1.9.0
-duckduckgo_search==7.2.1
+duckduckgo_search==5.3.1b1
 EasyNMT==2.0.2
 exceptiongroup==1.2.2
 executing==2.2.0
@@ -38,11 +39,14 @@ greenlet==3.1.1
 groq==0.15.0
 grpcio==1.69.0
 h11==0.14.0
+h2==4.1.0
 h5py==3.12.1
+hpack==4.1.0
 httpcore==1.0.7
 httpx==0.28.1
 httpx-sse==0.4.0
 huggingface-hub==0.27.1
+hyperframe==6.1.0
 idna==3.10
 interchange==2021.0.4
 ipython==8.31.0
@@ -96,7 +100,7 @@ pansi==2024.11.0
 parso==0.8.4
 pexpect==4.9.0
 pillow==11.1.0
-primp==0.10.1
+primp==0.11.0
 prompt_toolkit==3.0.50
 propcache==0.2.1
 protobuf==5.29.3
@@ -127,6 +131,7 @@ scipy==1.15.1
 sentencepiece==0.2.0
 six==1.15.0
 sniffio==1.3.1
+socksio==1.0.0
 soupsieve==2.6
 SQLAlchemy==2.0.37
 stack-data==0.6.3
