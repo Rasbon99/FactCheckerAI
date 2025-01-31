@@ -1,7 +1,24 @@
+import platform
+
+# General imports
 from WebScraper.scraper import Scraper
 from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from Database.data_entities import Claim
 from GraphRAG.rag_pipeline import RAG_Pipeline
+
+# Check the operating system
+os_name = platform.system()
+
+if os_name == "Windows":
+    print("Operating System: Windows")
+    # Import the Windows-specific validator
+    from Validator.Windows_Validator import Validator
+elif os_name == "Darwin": 
+    print("Operating System: macOS (ARM Apple Silicon not tested)") 
+    # Import the Intel-specific validator
+    from Validator.MacOS_Validator import Validator
+else:
+    print(f"Operating System {os_name} not supported")
 
 def main():
 
@@ -26,6 +43,11 @@ def main():
     
     print(query_result)
 
+    # TODO: Implement the Validator class
+    validator = Validator()
+    
+    validator.run(preprocessed_sources, query_result)
+    
     return
 
 if __name__ == "__main__":
