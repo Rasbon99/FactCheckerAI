@@ -28,6 +28,8 @@ class GraphManager:
 
         self._start_console()
         
+        time.sleep(30)
+        
         # Neo4j connection parameters
         self.neo4j_url = os.environ["NEO4J_URI"].replace("http", "bolt")
         self.neo4j_username = os.environ["NEO4J_USERNAME"]
