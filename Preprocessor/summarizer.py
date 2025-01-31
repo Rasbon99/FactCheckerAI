@@ -53,9 +53,8 @@ class Summarizer:
         try:
             response = self.client.chat.completions.create(
                 messages=[
-                    {"role": "system", "content": """You are a news summarizer. Create a sentence with logic that contains the most important
-                                                    keywords to search for the given news on the web. Provide only the keywords string as output
-                                                    without quotation marks."""},
+                    {"role": "system", "content": """You are a summarizer of news, exctract only the news' title with the . 
+                                                     Provide only the string"""},
                     {"role": "user", "content": text}
                 ],
                 model=self.model,
@@ -101,8 +100,8 @@ class Summarizer:
             try:
                 response = self.client.chat.completions.create(
                     messages=[
-                        {"role": "system", "content": """You are a summarizer of news, exctract only the news' title.
-                                                        Provide only the string"""},
+                        {"role": "system", "content": """You are a summarizer, be specific. Don't use lists or bullet points. 
+                                                        Provide only the string without specifying that it is a summary"""},
                         {"role": "user", "content": cutted_text}
                     ],
                     model=self.low_model,
