@@ -26,5 +26,7 @@ def main():
     
     print(query_result)
 
+    return
+
 if __name__ == "__main__":
     main()

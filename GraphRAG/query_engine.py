@@ -1,4 +1,5 @@
 import os
+import subprocess
 import time
 
 import dotenv
@@ -29,12 +30,48 @@ class QueryEngine:
         self.neo4j_username = os.environ["NEO4J_USERNAME"]
         self.neo4j_password = os.environ["NEO4J_PASSWORD"]
 
+        self._start_server()
+
         # Model configuration
         self.model_name = os.environ["MODEL_LLM_NEO4J"]
         self.modelGroq_name = os.environ["GROQ_MODEL_NAME"]
         self.embedding_model = OllamaEmbeddings(model=self.model_name)
         self.llm_model = ChatGroq(model=self.modelGroq_name)
         self.index_name = index_name
+
+    def __del__(self):
+        self._stop_server()
+
+    def _start_server(self):
+        """
+        Starts the Ollama server as a separate background process.
+        """
+        self.logger.info("Starting Ollama server...")
+        try:
+            # Start the Ollama server in a separate process
+            self.process = subprocess.Popen(
+                ["ollama", "serve"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            self.logger.info("Ollama server started successfully as a background process.")
+        except FileNotFoundError:
+            self.logger.error("Error: 'ollama' command not found. Ensure Ollama is installed and in PATH.")
+        except Exception as e:
+            self.logger.error(f"An unexpected error occurred while starting the server: {e}")
+
+    def _stop_server(self):
+        """
+        Stops the Ollama server if it is running.
+        """
+        if self.process and self.process.poll() is None:  # Check if the process is still running
+            self.logger.info("Stopping the Ollama server...")
+            self.process.terminate()  # Send a terminate signal
+            self.process.wait()  # Wait for the process to terminate
+            self.logger.info("Ollama server stopped successfully.")
+        else:
+            self.logger.warning("Ollama server is not running.") 
 
     def query_similarity(self, query):
         """
@@ -79,3 +116,4 @@ class QueryEngine:
         except Exception as e:
             self.logger.error(f"Error during similarity query: {e}")
             return None
+        

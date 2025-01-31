@@ -62,7 +62,7 @@ class NER:
             response = self.client.chat.completions.create(
                 messages=[
                     {"role": "system", "content": """you are an NER model that extracts entities and the topic from a text. 
-                                                    the output must be like {"topic": "Technology", "entities": ["Elon Musk", "SpaceX", "Tesla", "Paris"]}"""},
+                                                    the output must be only like {"topic": "Technology", "entities": ["Elon Musk", "SpaceX", "Tesla", "Paris"]}"""},
                     {"role": "user", "content": text}
                 ],
                 model=self.model,

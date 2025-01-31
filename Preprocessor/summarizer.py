@@ -101,8 +101,8 @@ class Summarizer:
             try:
                 response = self.client.chat.completions.create(
                     messages=[
-                        {"role": "system", "content": """You are a summarizer, be specific. Don't use lists or bullet points. 
-                                                        Provide only the string without specifying that it is a summary"""},
+                        {"role": "system", "content": """You are a summarizer of news, exctract only the news' title.
+                                                        Provide only the string"""},
                         {"role": "user", "content": cutted_text}
                     ],
                     model=self.low_model,

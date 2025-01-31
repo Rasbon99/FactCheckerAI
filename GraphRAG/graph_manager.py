@@ -1,6 +1,7 @@
 import os
 import time
 import dotenv
+import subprocess
 
 import numpy as np
 import matplotlib.colors as mcolors
@@ -24,6 +25,8 @@ class GraphManager:
         """
         dotenv.load_dotenv(env_file, override=True)
         self.logger = Logger(self.__class__.__name__).get_logger()
+
+        self._start_console()
         
         # Neo4j connection parameters
         self.neo4j_url = os.environ["NEO4J_URI"].replace("http", "bolt")
@@ -43,6 +46,40 @@ class GraphManager:
         except Exception as e:
             self.logger.error(f"Error during Neo4j connection: {e}")
             raise ConnectionError(f"Error during Neo4j connection: {e}")
+    
+    def _start_console(self):
+        """
+        Starts the Neo4j console as a background process.
+        """
+        self.logger.info("Starting Neo4j console...")
+        try:
+            # Avvia il comando "neo4j console" in un processo separato
+            self.process = subprocess.Popen(
+                ["neo4j", "console"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            self.logger.info("Neo4j console started successfully as a background process.")
+        except FileNotFoundError:
+            self.logger.error("Error: 'neo4j' command not found.")
+        except Exception as e:
+            self.logger.error(f"An unexpected error occurred while starting Neo4j console: {e}")
+
+    def _stop_console(self):
+        """
+        Stops the Neo4j console if it is running.
+        """
+        if self.process and self.process.poll() is None:  # Check if the process is still running
+            self.logger.info("Stopping Neo4j console...")
+            self.process.terminate()  # Send a terminate signal
+            self.process.wait()  # Wait for the process to terminate
+            self.logger.info("Neo4j console stopped successfully.")
+        else:
+            self.logger.warning("Neo4j console is not running.")
+
+    def __del__(self):
+        self._stop_console()
     
     def reset_data(self):
         """
@@ -331,7 +368,6 @@ class GraphManager:
             """
             create_and_save_graph(query_site, node_relation=("Article", "Site"), node_label="Site", edge_label="PUBLISHED_ON", output_file=output_file_site)
 
-            plt.show()
             self.logger.info("Graphs generated and saved successfully.")
         except Exception as e:
             self.logger.error(f"Error during graph extraction and saving: {e}")
