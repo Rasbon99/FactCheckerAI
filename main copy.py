@@ -1,30 +1,14 @@
-from transformers import pipeline
+import platform
 
-class Validator:
-    def __init__(self, model_name: str):
-        """
-        Inizializza la classe Validator con il nome del modello.
-        
-        :param model_name: Il nome del modello pre-addestrato da utilizzare
-        """
-        self.model_name = model_name
-        # Creazione della pipeline zero-shot
-        self.zero_shot_classifier = pipeline("zero-shot-classification", model=self.model_name)
+# Check the operating system
+os_name = platform.system()
 
-    def predict(self, texts, hypothesis_template: str):
-        """
-        Esegue la previsione sul testo dato utilizzando la classificazione zero-shot.
-        
-        :param texts: Una lista di testi da classificare
-        :param hypothesis_template: La frase da utilizzare come ipotesi per la classificazione
-        :return: I risultati della classificazione
-        """
-        return self.zero_shot_classifier(texts, candidate_labels=["entailment", "semi_entailment", "not_entailment"], hypothesis_template=hypothesis_template)
+from Validator.validator import Validator
+
 
 # Esempio d'uso
 if __name__ == "__main__":
-    model_name = ""
-    validator = Validator(model_name)
+    validator = Validator()
 
     texts = [
         "Defending Australian Open champion Jannik Sinner has returned to the quarterfinals, navigating an illness and multiple delays. Sinner beat No. 13 seed Holger Rune 6-3, 3-6, 6- 3, 6 -2. The world No. 1 put a “strange morning behind him” in returning to the Australian Open quarterfinals. The 22-year-old is a combined 11-0 against his potential next opponents De Minaur and Michelsen.",
@@ -36,3 +20,4 @@ if __name__ == "__main__":
 
     results = validator.predict(texts, hypothesis)
     print(results)
+    

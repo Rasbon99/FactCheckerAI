@@ -1,6 +1,5 @@
 import json
 import os
-import sys
 
 import dotenv
 from groq import Groq

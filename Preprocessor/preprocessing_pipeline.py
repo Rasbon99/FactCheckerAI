@@ -1,6 +1,5 @@
 import os
 import re
-import sys
 from langdetect import detect
 
 import dotenv
