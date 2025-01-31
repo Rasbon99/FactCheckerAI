@@ -1,13 +1,9 @@
 import os
-import sys
 import sqlite3
 
 import dotenv
 
-current_dir = os.getcwd()
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from log import Logger
-os.chdir(current_dir)
 
 class Database:
     def __init__(self, env_file="key.env"):

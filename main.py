@@ -2,7 +2,7 @@ from WebScraper.scraper import Scraper
 from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from Database.data_entities import Claim
 from GraphRAG.rag_pipeline import RAG_Pipeline
-#from Validator.validator import Validator
+from Validator.validator import Validator
 
 def main():
 
@@ -27,11 +27,13 @@ def main():
     
     print(query_result)
 
-    #validator = Validator()
+    validator = Validator()
     
-    #classification_result = validator.predict(preprocessed_sources, query_result)
+    classification_result = validator.predict([item["body"] for item in preprocessed_sources], claim.text)
     
-    #print(classification_result)
+    print(classification_result)
+    
+    # TODO: Bisogna validare o meno la generazione della LLM e nel caso fargli rifare l'esecuzione di tutto il codice finchè non si trovano
     
     return
 
