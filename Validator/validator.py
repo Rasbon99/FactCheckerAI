@@ -1,19 +1,34 @@
 import dotenv
 import os
 from transformers import pipeline
-
 from log import Logger
 
 class Validator:
     def __init__(self, env_file="key.env"):
         """
-        Initializes the Validator class with the model name and sets up logging.
+        Initializes the Validator class with the model for zero-shot classification and sets up logging.
 
-        :param env_file: The environment file to load the credentials from (default: "key.env")
+        Args:
+            env_file (str): The environment file containing the model path. Default is "key.env".
+        
+        Attributes:
+            model_name (str): The name or path of the model used for zero-shot classification.
+            logger (Logger): Instance of the custom Logger for logging messages.
+            zero_shot_classifier (Pipeline): Zero-shot classification pipeline from Hugging Face.
+
+        Returns:
+            None
+        
+        Raises:
+            FileNotFoundError: If the specified environment file is not found.
+            ValueError: If the model path is not specified in the environment file.
         """
         dotenv.load_dotenv(env_file, override=True)
         self.model_name = os.getenv("MODEL_PATH_DEBERTA")
         
+        if not self.model_name:
+            raise ValueError("MODEL_PATH_DEBERTA is not specified in the environment file.")
+
         self.logger = Logger(self.__class__.__name__).get_logger()
 
         # Create zero-shot classification pipeline
@@ -23,19 +38,31 @@ class Validator:
 
     def predict(self, texts, claim):
         """
-        Makes predictions on the given texts using zero-shot classification.
+        Makes predictions on the provided texts using zero-shot classification.
 
-        :param texts: A list of texts to classify
-        :param claim: The claim to evaluate
-        :return: The average classification results across all texts
+        Args:
+            texts (list): A list of texts to evaluate against the claim.
+            claim (str): The claim to validate through classification.
+
+        Returns:
+            dict: A dictionary containing the average scores for each label:
+                - "confirm" (float): Average score for the "confirmed" label.
+                - "neutral" (float): Average score for the "neutral" label.
+                - "deny" (float): Average score for the "denied" label.
+
+        Raises:
+            ValueError: If the input texts are not a list.
+            Exception: For any error encountered during prediction.
         """
-        
-        # TODO: Aggiungere i pesi dei ratings di NewsGuard
+        # TODO: Add weighting factors based on NewsGuard ratings
         try:
+            if not isinstance(texts, list):
+                raise ValueError("The 'texts' parameter must be a list of strings.")
+            
             self.logger.info(f"Starting prediction for {len(texts)} texts.")
-            question = "The News: '" + claim + "' is {}"
+            question = f"The News: '{claim}' is {{}}"
 
-            # Classify texts with custom labels
+            # Perform zero-shot classification with custom labels
             all_results = self.zero_shot_classifier(
                 texts,
                 candidate_labels=["confirmed", "neutral", "denied"],
@@ -49,18 +76,17 @@ class Validator:
 
             # Loop through results and accumulate scores
             for result in all_results:
-                confirm_score += result['scores'][0]  # Assuming 'confirm' is the first label
+                confirm_score += result['scores'][0]  # Assuming 'confirmed' is the first label
                 neutral_score += result['scores'][1]  # Assuming 'neutral' is the second label
-                deny_score += result['scores'][2]    # Assuming 'deny' is the third label
+                deny_score += result['scores'][2]    # Assuming 'denied' is the third label
 
             # Calculate the average score for each label
             num_texts = len(texts)
-            avg_confirm_score = confirm_score / num_texts
-            avg_neutral_score = neutral_score / num_texts
-            avg_deny_score = deny_score / num_texts
+            avg_confirm_score = (confirm_score / num_texts) * 100
+            avg_neutral_score = (neutral_score / num_texts) * 100
+            avg_deny_score = (deny_score / num_texts) * 100
 
-            # Log the average results
-            self.logger.info(f"Average scores - Confirm: {avg_confirm_score}, Neutral: {avg_neutral_score}, Deny: {avg_deny_score}")
+            self.logger.info(f"Average scores - Confirm: {avg_confirm_score:.2f}%, Neutral: {avg_neutral_score:.2f}%, Deny: {avg_deny_score:.2f}%")
 
             # Return the average results
             return {
