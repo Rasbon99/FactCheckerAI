@@ -1,6 +1,9 @@
 import os
 import subprocess
 import time
+import platform
+import psutil
+import socket
 
 import dotenv
 from langchain.chains import RetrievalQA
@@ -24,6 +27,7 @@ class QueryEngine:
         """
         dotenv.load_dotenv(env_file, override=True)
         self.logger = Logger(self.__class__.__name__).get_logger()
+        self.platform = platform.system()
 
         # Neo4j connection parameters
         self.neo4j_url = os.environ["NEO4J_URI"].replace("http", "bolt")
@@ -48,30 +52,62 @@ class QueryEngine:
         """
         self.logger.info("Starting Ollama server...")
         try:
-            # Start the Ollama server in a separate process
-            self.process = subprocess.Popen(
-                ["ollama", "serve"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            self.logger.info("Ollama server started successfully as a background process.")
-        except FileNotFoundError:
-            self.logger.error("Error: 'ollama' command not found. Ensure Ollama is installed and in PATH.")
+            if self.platform == "Darwin":
+                try:
+                    # Start the Ollama server in a separate process
+                    self.process = subprocess.Popen(
+                        ["ollama", "serve"],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True
+                    )
+                    self.logger.info("Ollama server started successfully as a background process.")
+                except FileNotFoundError:
+                    self.logger.error("Error: 'ollama' command not found. Ensure Ollama is installed and in PATH.")
+                except Exception as e:
+                    self.logger.error(f"An unexpected error occurred while starting the server: {e}")
+            elif self.platform == "Windows":
+                try:
+                    # Start the Ollama server in a separate process
+                    powershell_command = ('Start-Process "cmd" -ArgumentList "/c ollama serve" -Verb runAs -WindowStyle Hidden')
+
+                    self.process = subprocess.Popen(["powershell", "-Command", powershell_command])
+
+                    self.logger.info("Ollama server started successfully as a background process.")
+                except FileNotFoundError:
+                    self.logger.error("Error: 'ollama' command not found. Ensure Ollama is installed and in PATH.")
+                except Exception as e:
+                    self.logger.error(f"An unexpected error occurred while starting the server: {e}")
         except Exception as e:
-            self.logger.error(f"An unexpected error occurred while starting the server: {e}")
+            self.logger.error(f"An unexpected error occurred while starting Neo4j console with your platform, make sure you are on Windows or macOS: {e}")
+
 
     def _stop_server(self):
         """
         Stops the Ollama server if it is running.
         """
-        if self.process and self.process.poll() is None:  # Check if the process is still running
+        def is_process_running(pid):
+            """Check if a process with a given PID is still running."""
+            return psutil.pid_exists(pid)
+        
+        def is_port_in_use(port):
+            """Check if a specific port is in use (useful for verifying if the server is active)."""
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                return s.connect_ex(("localhost", port)) == 0
+        
+        if self.process and is_process_running(self.process.pid):  # Check if the process is still active
             self.logger.info("Stopping the Ollama server...")
             self.process.terminate()  # Send a terminate signal
             self.process.wait()  # Wait for the process to terminate
-            self.logger.info("Ollama server stopped successfully.")
+            
+            # Double-check if the process is still running
+            if is_process_running(self.process.pid) or is_port_in_use(11434):  # Assuming Ollama runs on port 11434
+                self.logger.warning("Failed to stop the Ollama server. Forcing termination...")
+                self.process.kill()  # Force kill the process
+            else:
+                self.logger.info("Ollama server stopped successfully.")
         else:
-            self.logger.warning("Ollama server is not running.") 
+            self.logger.warning("Ollama server is not running.")
 
     def query_similarity(self, query):
         """
