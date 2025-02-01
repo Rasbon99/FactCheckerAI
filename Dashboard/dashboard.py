@@ -1,15 +1,11 @@
 import streamlit as st
 import pandas as pd
 import os
-<<<<<<< Updated upstream
 import sys
-=======
->>>>>>> Stashed changes
 from log import Logger
 from datetime import datetime, timedelta
 from PIL import Image
 
-<<<<<<< Updated upstream
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from Database.data_entities import Claim
 
@@ -17,23 +13,13 @@ from Database.data_entities import Claim
 # CONSTANTS
 AI_IMAGE_UI=r"./Dashboard/AI_image.png"
 
-=======
-# CONST VARIABLES
-AI_image_path = r'./Dashboard/AI_image.png'
-
-
->>>>>>> Stashed changes
 class DashboardPipeline:
     def __init__(self):
         # Inizializzazione del logger
         self.logger = Logger("DashboardLogger", log_file="logger.log").get_logger()
         
         # Carica immagine nella sidebar
-<<<<<<< Updated upstream
         self.image_sidebar = Image.open(AI_IMAGE_UI).resize((300, 300))
-=======
-        self.image_sidebar = Image.open(AI_image_path).resize((300, 300))
->>>>>>> Stashed changes
 
         # Inizializza lo stato della sessione per i messaggi
         if "messages" not in st.session_state:
@@ -46,18 +32,12 @@ class DashboardPipeline:
         if not st.session_state["log_initialized"]:
             self.logger.info("Dashboard initialized.")
             st.session_state["log_initialized"] = True
-<<<<<<< Updated upstream
     
     def get_claim(self,claim):
         claim_obj=Claim(claim)
 
     def generate_response(self, claim):
         image_graph = AI_IMAGE_UI  # Percorso dell'immagine generata
-=======
-
-    def generate_response(self, claim):
-        image_graph =   AI_image_path# Percorso dell'immagine generata
->>>>>>> Stashed changes
         self.logger.info(f"Generated response for claim: {claim}")
         return "HELLOHELLO", image_graph
 
@@ -145,11 +125,8 @@ class DashboardPipeline:
 
                     if len(st.session_state.messages) > 1:
                         claim = st.session_state.messages[-1]['content']
-<<<<<<< Updated upstream
                         # Save claim to db
                         self.get_claim(claim)
-=======
->>>>>>> Stashed changes
                         assistant_response, image_path = self.generate_response(claim)
                         st.session_state.messages.append({"role": "assistant", "content": assistant_response})
                         st.chat_message("assistant").write(assistant_response)
