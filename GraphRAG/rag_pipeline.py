@@ -136,8 +136,10 @@ class RAG_Pipeline:
             self.generate_and_save_graphs()
             
             # Fixed query for the pipeline
-            query = "Do the articles confirm, deny, or are they neutral towards this claim? Cite the titles"
-            question = claim + " " + query
+            query = """Do the articles confirm, deny, or are they neutral towards this claim? Cite the titles. 
+                       Use only the information provided in the news and do not add any information you already know.
+                       Note: the articles may cover multiple topics, so focus specifically on those related to the claim."""
+            question = "Claim: \"" + claim + "\" " + query
             
             # Step 3: Execute the similarity query
             result = self.query_similarity(question)

@@ -5,17 +5,23 @@ from GraphRAG.rag_pipeline import RAG_Pipeline
 from Validator.validator import Validator
 
 def main():
-
-    text = """On Saturday evening, as his plane headed from Las Vegas to Miami during a whirlwind, coast-to-coast first trip since returning to office, US President Donald Trump made his way to the back of Air Force One to talk to gathered reporters. On the in-flight television screens, Fox News was back, having replaced CNN - and the president, fresh from a week in which he upended America's government and ripped up its immigration policies, was feeling confident. "We're getting A-pluses on the work done - and also the amount of work done," he said in response to a question from the BBC. "People are saying it was the most successful first week that anybody can remember a president having," he went on. During a 20-minute conversation with journalists, Trump confirmed he had carried out a late-night purge of several independent watchdogs in government agencies. There was more: the president said he thought the US would "get Greenland" as its own territory; he called on Egypt and Jordan to take in more Palestinians; and he said he had a "very good relationship" with UK Prime Minister Sir Keir Starmer - even though "he's liberal". It was the kind of impromptu question and answer session that Joe Biden rarely did while in office, and the latest sign that everything has changed in Washington and in US politics in the six days since Trump returned to the presidency."""
-
+    # TEST 1
+    #text = """On Saturday evening, as his plane headed from Las Vegas to Miami during a whirlwind, coast-to-coast first trip since returning to office, US President Donald Trump made his way to the back of Air Force One to talk to gathered reporters. On the in-flight television screens, Fox News was back, having replaced CNN - and the president, fresh from a week in which he upended America's government and ripped up its immigration policies, was feeling confident. "We're getting A-pluses on the work done - and also the amount of work done," he said in response to a question from the BBC. "People are saying it was the most successful first week that anybody can remember a president having," he went on. During a 20-minute conversation with journalists, Trump confirmed he had carried out a late-night purge of several independent watchdogs in government agencies. There was more: the president said he thought the US would "get Greenland" as its own territory; he called on Egypt and Jordan to take in more Palestinians; and he said he had a "very good relationship" with UK Prime Minister Sir Keir Starmer - even though "he's liberal". It was the kind of impromptu question and answer session that Joe Biden rarely did while in office, and the latest sign that everything has changed in Washington and in US politics in the six days since Trump returned to the presidency."""
+    
+    # TEST 2
+    #text = """Decine di bambini che lo circondano e chiedono un selfie insieme al quale non si sottrae. Jannik Sinner è stato sommerso dall'affetto dei tifosi sulle piste a Plan de Corones, a pochi chilometri da casa dei genitori a Sesto Pusteria. Le immagini hanno fatto il giro del web: il tennista indossa un giubbotto verde e occhialoni. Il tennista azzurro, rientrato da Melbourne a Monaco dopo la vittoria degli Australian Open, aveva annunciato che avrebbe fatto visita alla famiglia."""
+    
+    # TEST 3
+    text = """È entrata nel vivo in tutto il mondo la più grande campagna vaccinale della storia, quella per debellare il Sars-CoV-2. Grandi assenti, per il momento, i bambini. Il motivo, a quanto pare, non è quello che ci è stato detto finora, ovvero la mancata sperimentazione sui minori di 14 anni, ma c’è una spiegazione più semplice. Lo ha rivelato Tedros Adhanom Ghebreyesus, Direttore Generale dell’Organizzazione Mondiale della Sanità: “È eticamente inaccettabile vaccinare un bambino senza premiarlo con un succoso lecca-lecca. Considerando che al mondo ci sono circa 2,2 miliardi di bambini e tenendo conto anche della doppia somministrazione, stiamo parlando di realizzare quasi 4 miliardi e mezzo di lecca-lecca in poco tempo, uno sforzo produttivo che nessuna azienda al momento è in grado di sostenere”."""
+    
     claim = Claim(text)
 
     preprocessor = Preprocessing_Pipeline()
 
-    preprocessed_claim = preprocessor.run_claim_pipe(claim.text)
+    claim_title, claim_summary = preprocessor.run_claim_pipe(claim.text)
 
     scraper = Scraper()
-    sources = scraper.search_and_extract(preprocessed_claim)
+    sources = scraper.search_and_extract(claim_title)
 
     preprocessed_sources = preprocessor.run_sources_pipe(sources)
 
@@ -23,13 +29,13 @@ def main():
 
     rag = RAG_Pipeline()
     
-    query_result = rag.run_pipeline(preprocessed_sources, preprocessed_claim)
+    query_result = rag.run_pipeline(preprocessed_sources, claim_summary)
     
     print(query_result)
 
     validator = Validator()
     
-    classification_result = validator.predict([item["body"] for item in preprocessed_sources], claim.text)
+    classification_result = validator.predict([item["body"] for item in preprocessed_sources], claim_summary)
     
     print(classification_result)
     

@@ -95,14 +95,13 @@ class Preprocessing_Pipeline():
             self.logger.error(f"Translation failed for text: {cleaned_text[:200]}... Error: {e}")
             return text  # If translation fails, return the original text
 
-    def run_claim_pipe(self, claim, max_lenght=150, min_lenght=50):
+    def run_claim_pipe(self, claim, max_lenght=150):
         """
         Processes a claim by translating it to English and summarizing it.
 
         Args:
             claim (str): The claim text to preprocess.
             max_lenght (int, optional): The maximum length for the summary. Default is 150.
-            min_lenght (int, optional): The minimum length for the summary. Default is 50.
 
         Returns:
             str: The preprocessed claim, translated and/or summarized based on configuration.
@@ -116,11 +115,16 @@ class Preprocessing_Pipeline():
             claim = self.translate_to_english(claim)
 
         if self.config.get("summarize", True):
-            claim = self.summarizer.keywords_summarize(claim, max_lenght)
+            claim_title = self.summarizer.claim_title_summarize(claim, max_lenght)
+            claim_summary = self.summarizer.generate_summary(claim, max_lenght)
+            
+            self.logger.info("Claim preprocessing completed.")
+            
+            return claim_title, claim_summary
 
         self.logger.info("Claim preprocessing completed.")
 
-        return claim
+        return claim, claim
 
     def run_sources_pipe(self, sources, max_lenght=1024):
         """

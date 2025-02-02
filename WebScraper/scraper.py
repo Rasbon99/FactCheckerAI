@@ -1,5 +1,5 @@
 import os
-import sys
+import time
 import urllib.robotparser
 import urllib.parse
 from urllib.parse import urlparse
@@ -27,7 +27,8 @@ class Scraper:
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.ddg = DDGS()
         self.ng_client = NewsGuardClient()
-        #Magic trick
+        
+        # Magic trick
         os.system("pip install --quiet -U duckduckgo_search==5.3.1b1")
 
     def extract_context(self, url):
@@ -119,13 +120,14 @@ class Scraper:
             # You could also choose to log this error if necessary.
             return True
 
-    def search_and_extract(self, query, num_results=10):
+    def search_and_extract(self, query, num_results=10, max_retries=3):
         """
         Performs a search using the provided query, and extracts the title, body, and site of the resulting pages.
         
         Args:
             query (str): The search query to send to DuckDuckGo.
             num_results (int): The number of search results to retrieve. Default is 10.
+            max_retries (int): The maximum number of retries in case of a rate limit or other errors. Default is 3.
         
         Returns:
             list: A list of dictionaries, each containing:
@@ -135,38 +137,54 @@ class Scraper:
                 - 'site' (str): The domain name of the site.
         
         Raises:
-            Exception: If there is an error during the search and extract process.
+            Exception: If there is an error during the search and extract process after all retries.
         """
         self.logger.info("Start searching and extracting query...")
         search_results = []
+        retries = 0
 
-        try:
-            results = self.ddg.text(query, max_results=num_results)
+        while retries < max_retries:
+            try:
+                results = self.ddg.text(query, max_results=num_results)
 
-            self.logger.info("Scraped websites: %i sites", len(results))
+                self.logger.info("Scraped websites: %i sites", len(results))
 
-            results = self.filter_sites(results)
+                results = self.filter_sites(results)
 
-            for result in results:
-                url = result['href']
-                
-                extracted_data = self.extract_context(url)
-
-                # TODO - Verifiy the body
-
-                if extracted_data['title'] and extracted_data['body']:
+                for result in results:
+                    url = result['href']
                     
-                    # Append score to exctracted data
-                    extracted_data['score'] = result['score']
+                    extracted_data = self.extract_context(url)
 
-                    self.logger.info(f"{extracted_data['title']} - {extracted_data['url']} - {extracted_data['site']}")
-                    self.logger.info(f"{extracted_data['body'][:200]}...")  # Preview body text
-                    search_results.append(extracted_data)
+                    if extracted_data['title'] and extracted_data['body']:
+                        
+                        # Append score to extracted data
+                        extracted_data['score'] = result['score']
 
-        except Exception as e:
-            self.logger.error(f"Error during search and extract for query '{query}': {e}")
+                        self.logger.info(f"{extracted_data['title']} - {extracted_data['url']} - {extracted_data['site']}")
+                        self.logger.info(f"{extracted_data['body']}...")  
+                        search_results.append(extracted_data)
 
-        return search_results
+                # If successful, break out of the retry loop
+                return search_results
+
+            except Exception as e:
+                self.logger.error(f"Error during search and extract for query '{query}': {e}")
+                
+                # Check for rate limit error
+                if "Ratelimit" in str(e):
+                    retries += 1
+                    if retries < max_retries:
+                        self.logger.warning(f"Rate limit encountered. Retrying in 30 seconds... (Retry {retries}/{max_retries})")
+                        
+                        os.system("pip install --quiet -U duckduckgo_search==5.3.1b1")
+                        
+                        time.sleep(30)
+                    else:
+                        self.logger.error("Max retries reached. Aborting.")
+                        raise e
+                else:
+                    raise e
     
     def filter_sites(self, sites_list, score_threshold=70):
         """
