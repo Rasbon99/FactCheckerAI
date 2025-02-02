@@ -55,7 +55,7 @@ class Summarizer:
                 messages=[
                     {"role": "system", "content": """You are an AI designed to rephrase a claim into a concise, specific, and highly searchable query. 
                                                     Focus on preserving all critical details such as names, dates, locations, or key terms, but avoid unnecessary words. 
-                                                    Provide only the text without any additional formatting"""},
+                                                    Provide only the text without any additional formatting only add at the beginning !g"""},
                     {"role": "user", "content": text}
                 ],
                 model=self.model,

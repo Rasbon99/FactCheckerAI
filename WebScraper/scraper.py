@@ -27,9 +27,6 @@ class Scraper:
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.ddg = DDGS()
         self.ng_client = NewsGuardClient()
-        
-        # Magic trick
-        os.system("pip install --quiet -U duckduckgo_search==5.3.1b1")
 
     def extract_context(self, url):
         """
@@ -162,7 +159,7 @@ class Scraper:
                         extracted_data['score'] = result['score']
 
                         self.logger.info(f"{extracted_data['title']} - {extracted_data['url']} - {extracted_data['site']}")
-                        self.logger.info(f"{extracted_data['body']}...")  
+                        self.logger.info(f"{extracted_data['body'][:200]}...")  
                         search_results.append(extracted_data)
 
                 # If successful, break out of the retry loop
@@ -177,9 +174,9 @@ class Scraper:
                     if retries < max_retries:
                         self.logger.warning(f"Rate limit encountered. Retrying in 30 seconds... (Retry {retries}/{max_retries})")
                         
-                        os.system("pip install --quiet -U duckduckgo_search==5.3.1b1")
-                        
                         time.sleep(30)
+                        
+                        self.ddg = DDGS()
                     else:
                         self.logger.error("Max retries reached. Aborting.")
                         raise e
@@ -236,5 +233,3 @@ class Scraper:
         self.logger.info("Filtered websites: %s sites", len(filtered_sites))
 
         return filtered_sites
-
-    

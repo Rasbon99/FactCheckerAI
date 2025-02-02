@@ -136,9 +136,16 @@ class RAG_Pipeline:
             self.generate_and_save_graphs()
             
             # Fixed query for the pipeline
-            query = """Do the articles confirm, deny, or are they neutral towards this claim? Cite the titles. 
-                       Use only the information provided in the news and do not add any information you already know.
-                       Note: the articles may cover multiple topics, so focus specifically on those related to the claim."""
+            query = """Based on the information provided in the articles, determine if the claim is confirmed or refuted. 
+                        - If the articles confirm the claim, validate it.
+                        - If the articles completely contradict the claim or present completely different information, consider it false.
+                        - If there is confusion because some articles confirm the claim while others deny it, refrain from giving an answer.
+                        
+                        Keep in mind that some information may not be available in all articles, and some articles may cover only part of the claim. In such cases, evaluate the available information in each article to decide whether the claim should be accepted or not.
+
+                        Make sure to cite the titles of the articles that support your conclusions. 
+                        Only use the information available in the articles, and do not include any external knowledge.
+                    """
             question = "Claim: \"" + claim + "\" " + query
             
             # Step 3: Execute the similarity query

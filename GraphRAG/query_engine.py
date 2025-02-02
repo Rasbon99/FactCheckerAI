@@ -142,7 +142,7 @@ class QueryEngine:
             llm=self.llm_model, chain_type="stuff", retriever=retriever
         )
         
-        self.logger.info(f"Executing similarity query: {query}")
+        self.logger.info(f"Executing similarity query...")
         try:
             start_time_similarity = time.time()
             result = vector_qa.invoke({"query": query})
