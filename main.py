@@ -40,7 +40,7 @@ def main():
     
     print(query_result)
 
-    classification_result = validator.predict([item["body"] for item in filtered_sources], claim_summary)
+    classification_result = validator.predict([item["body"] for item in filtered_sources], claim_summary, [item["score"] for item in filtered_sources])
     
     print(classification_result)
     

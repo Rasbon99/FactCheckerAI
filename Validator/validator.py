@@ -36,31 +36,36 @@ class Validator:
 
         self.logger.info(f"Validator initialized with model: {self.model_name}")
 
-    def predict(self, texts, claim):
+    def predict(self, texts, claim, scores):
         """
         Makes predictions on the provided texts using zero-shot classification.
 
         Args:
             texts (list): A list of texts to evaluate against the claim.
             claim (str): The claim to validate through classification.
+            scores (list): A list of weights for each text (e.g., based on reliability or NewsGuard ratings).
 
         Returns:
-            dict: A dictionary containing the average scores for each label:
-                - "confirm" (float): Average score for the "confirmed" label.
-                - "neutral" (float): Average score for the "neutral" label.
-                - "deny" (float): Average score for the "denied" label.
+            dict: A dictionary containing the weighted average scores for each label:
+                - "confirm" (float): Weighted average score for the "confirmed" label.
+                - "neutral" (float): Weighted average score for the "neutral" label.
+                - "deny" (float): Weighted average score for the "denied" label.
 
         Raises:
-            ValueError: If the input texts are not a list.
+            ValueError: If the input texts or scores are not lists.
             Exception: For any error encountered during prediction.
         """
-        # TODO: Add weighting factors based on NewsGuard ratings
         try:
-            if not isinstance(texts, list):
-                raise ValueError("The 'texts' parameter must be a list of strings.")
+            if not isinstance(texts, list) or not isinstance(scores, list):
+                raise ValueError("Both 'texts' and 'scores' parameters must be lists.")
+            
+            if len(texts) != len(scores):
+                raise ValueError("The number of texts and scores must be the same.")
             
             self.logger.info(f"Starting prediction for {len(texts)} texts.")
+            
             question = f"The claim: '{claim}' is {{}} by the information provided in the article"
+            
             # Perform zero-shot classification with custom labels
             all_results = self.zero_shot_classifier(
                 texts,
@@ -68,30 +73,42 @@ class Validator:
                 hypothesis_template=question
             )
 
-            # Initialize counters to accumulate scores for each label
-            confirm_score = 0
-            neutral_score = 0
-            deny_score = 0
+            # Initialize counters to accumulate weighted scores for each label
+            weighted_confirm_score = 0
+            weighted_neutral_score = 0
+            weighted_deny_score = 0
+            total_weight = 0
 
-            # Loop through results and accumulate scores
-            for result in all_results:
-                confirm_score += result['scores'][0]  # Assuming 'confirmed' is the first label
-                neutral_score += result['scores'][1]  # Assuming 'neutral' is the second label
-                deny_score += result['scores'][2]    # Assuming 'denied' is the third label
+            # Loop through results and accumulate weighted scores
+            for result, weight in zip(all_results, scores):
+                # Ensure the result contains valid scores
+                if 'scores' not in result:
+                    self.logger.warning(f"Missing scores in result: {result}")
+                    continue
 
-            # Calculate the average score for each label
-            num_texts = len(texts)
-            avg_confirm_score = (confirm_score / num_texts) * 100
-            avg_neutral_score = (neutral_score / num_texts) * 100
-            avg_deny_score = (deny_score / num_texts) * 100
+                # Multiply each score by its corresponding weight and accumulate
+                weighted_confirm_score += result['scores'][0] * weight
+                weighted_neutral_score += result['scores'][1] * weight
+                weighted_deny_score += result['scores'][2] * weight
+                total_weight += weight
 
-            self.logger.info(f"Average scores - Confirm: {avg_confirm_score:.2f}%, Neutral: {avg_neutral_score:.2f}%, Deny: {avg_deny_score:.2f}%")
+            # Ensure total weight is not zero to avoid division by zero
+            if total_weight == 0:
+                self.logger.warning("Total weight is zero, cannot compute weighted average.")
+                return None
 
-            # Return the average results
+            # Calculate the weighted average score for each label
+            weighted_avg_confirm_score = (weighted_confirm_score / total_weight) * 100
+            weighted_avg_neutral_score = (weighted_neutral_score / total_weight) * 100
+            weighted_avg_deny_score = (weighted_deny_score / total_weight) * 100
+
+            self.logger.info(f"Weighted average scores - Confirm: {weighted_avg_confirm_score:.2f}%, Neutral: {weighted_avg_neutral_score:.2f}%, Deny: {weighted_avg_deny_score:.2f}%")
+
+            # Return the weighted average results
             return {
-                "confirm": avg_confirm_score,
-                "neutral": avg_neutral_score,
-                "deny": avg_deny_score
+                "confirm": weighted_avg_confirm_score,
+                "neutral": weighted_avg_neutral_score,
+                "deny": weighted_avg_deny_score
             }
 
         except Exception as e:
