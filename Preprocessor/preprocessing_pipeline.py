@@ -59,7 +59,8 @@ class Preprocessing_Pipeline():
 
         try:
             # Clean the text before detecting language
-            cleaned_text = re.sub(r"[^a-zA-Z0-9\s.,:!?\“\”\'\"àèéìòùÀÈÉÌÒÙ]", "", text)
+            cleaned_text = re.sub(r"[^\x00-\x7F]+", "", text)  # Rimuove caratteri non ASCII
+            cleaned_text = re.sub(r"[^\w\s.,:!?\"\'()\-]", "", cleaned_text)  # Rimuove simboli e caratteri speciali
             if not cleaned_text.strip():
                 self.logger.warning("Cleaned text is empty, cannot detect language.")
                 return None
@@ -92,8 +93,8 @@ class Preprocessing_Pipeline():
             return result
 
         except Exception as e:
-            self.logger.error(f"Translation failed for text: {cleaned_text[:200]}... Error: {e}")
-            return text  # If translation fails, return the original text
+            self.logger.error(f"Translation failed for text. Error: {e}")
+            return text  
 
     def run_claim_pipe(self, claim, max_lenght=150):
         """
@@ -111,12 +112,10 @@ class Preprocessing_Pipeline():
         """
         self.logger.info("Starting claim preprocessing...")
 
-        if self.config.get("translation", True):
-            claim = self.translate_to_english(claim)
-
         if self.config.get("summarize", True):
             claim_title = self.summarizer.claim_title_summarize(claim, max_lenght)
             claim_summary = self.summarizer.generate_summary(claim, max_lenght)
+            claim_summary = self.translate_to_english(claim_summary)
             
             self.logger.info("Claim preprocessing completed.")
             
@@ -143,6 +142,11 @@ class Preprocessing_Pipeline():
 
         if self.config.get("summarize", True):
             new_bodies = self.summarizer.summarize_texts([d['body'] for d in sources], max_lenght)
+            for d, new_body in zip(sources, new_bodies):
+                d['body'] = new_body
+        
+        if self.config.get("translation", True):
+            new_bodies = self.translate_to_english([d['body'] for d in sources])
             for d, new_body in zip(sources, new_bodies):
                 d['body'] = new_body
         

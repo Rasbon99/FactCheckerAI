@@ -60,8 +60,7 @@ class Validator:
                 raise ValueError("The 'texts' parameter must be a list of strings.")
             
             self.logger.info(f"Starting prediction for {len(texts)} texts.")
-            question = f"The News: '{claim}' is {{}}"
-
+            question = f"The claim: '{claim}' is {{}} by the information provided in the article"
             # Perform zero-shot classification with custom labels
             all_results = self.zero_shot_classifier(
                 texts,
@@ -98,3 +97,61 @@ class Validator:
         except Exception as e:
             self.logger.error(f"Prediction failed. Error: {e}")
             return None
+        
+    def filter_sources(self, claim, sources, score_threshold=0.7):
+        """
+        Filters the sources by evaluating whether they are correlated to the given claim using a zero-shot classifier.
+        Returns a list of dictionaries with correlated source information.
+        """
+        self.logger.info(f"Evaluating {len(sources)} sources compared to the claim: '{claim}'.")
+        
+        correlated_sources = []  
+        excluded_sources = 0  
+        
+        for source in sources:
+            # Template for the hypothesis to check if the source is correlated to the claim
+            question = f"The claim: '{claim}' is {{}} with the information provided in the article"
+            
+            # Run zero-shot classification to check if the source is correlated to the claim
+            all_results = self.zero_shot_classifier(
+                source['body'],  
+                candidate_labels=["correlated", "not correlated"],  
+                hypothesis_template=question
+            )
+
+            # Get the scores for "Correlated" and "Not Correlated"
+            correlated_score = all_results["scores"][0]  
+            not_correlated_score = all_results["scores"][1]  
+
+            # Convert scores to percentage
+            correlated_score_percent = correlated_score * 100
+            not_correlated_score_percent = not_correlated_score * 100
+
+            # Limit the title to the first few words 
+            title_words = source['title'].split()
+            truncated_title = ' '.join(title_words[:5])  
+
+            # Log the result of the classification with percentage scores and truncated title
+            self.logger.info(f"Source: {truncated_title} - Correlated score: {correlated_score_percent:.2f}%, Not Correlated score: {not_correlated_score_percent:.2f}%")
+
+            # If the "Correlated" score is above the threshold, we consider it correlated
+            if correlated_score >= score_threshold:
+                correlated_sources.append({
+                    'title': source['title'],
+                    'site': source['site'],
+                    'url': source['url'],
+                    'body': source['body'],
+                    'score': source['score'],  
+                    'topic': source.get('topic', 'N/A'),  
+                    'entities': source.get('entities', [])  
+                })
+                self.logger.info(f"Source '{source['title']}' is correlated to the claim.")
+            else:
+                excluded_sources += 1  # Increment counter for excluded sources
+                self.logger.info(f"Source '{source['title']}' is not correlated to the claim.")
+
+        # Log the number of correlated and excluded sources
+        self.logger.info(f"Number of correlated sources: {len(correlated_sources)}")
+        self.logger.info(f"Number of excluded sources: {excluded_sources}")
+
+        return correlated_sources

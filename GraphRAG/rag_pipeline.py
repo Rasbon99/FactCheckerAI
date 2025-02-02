@@ -140,9 +140,10 @@ class RAG_Pipeline:
                         - If the articles confirm the claim, validate it.
                         - If the articles completely contradict the claim or present completely different information, consider it false.
                         - If there is confusion because some articles confirm the claim while others deny it, refrain from giving an answer.
+                        Additional guidelines:
+                        - Keep in mind that some information may not be available in all articles, and some articles may cover only part of the claim. In such cases, evaluate the available information in each article to decide whether the claim should be accepted or not.
+                        - Do not provide a "partially confirmed" or "partially refuted" response. The decision must be either to confirm or refute the claim, or to refrain from answering if the evidence is conflicting.
                         
-                        Keep in mind that some information may not be available in all articles, and some articles may cover only part of the claim. In such cases, evaluate the available information in each article to decide whether the claim should be accepted or not.
-
                         Make sure to cite the titles of the articles that support your conclusions. 
                         Only use the information available in the articles, and do not include any external knowledge.
                     """
