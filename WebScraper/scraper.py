@@ -12,7 +12,6 @@ from WebScraper.ng_client import NewsGuardClient
 
 from log import Logger
 
-
 class Scraper:
     def __init__(self):
         """

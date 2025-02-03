@@ -43,12 +43,6 @@ def main():
     
     print(query_result)
 
-    classification_result = validator.predict([item["body"] for item in filtered_sources], claim_summary, [item["score"] for item in filtered_sources])
-    
-    print(classification_result)
-    
-    # TODO: Bisogna validare o meno la generazione della LLM e nel caso fargli rifare l'esecuzione di tutto il codice finchè non si trovano
-    
     return
 
 if __name__ == "__main__":
