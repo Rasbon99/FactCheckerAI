@@ -15,10 +15,10 @@ def main():
     #text = """Decine di bambini che lo circondano e chiedono un selfie insieme al quale non si sottrae. Jannik Sinner è stato sommerso dall'affetto dei tifosi sulle piste a Plan de Corones, a pochi chilometri da casa dei genitori a Sesto Pusteria. Le immagini hanno fatto il giro del web: il tennista indossa un giubbotto verde e occhialoni. Il tennista azzurro, rientrato da Melbourne a Monaco dopo la vittoria degli Australian Open, aveva annunciato che avrebbe fatto visita alla famiglia."""
     
     # TEST 4: FAKE NEWS FACILE DA RICONOSCERE
-    #text = """È entrata nel vivo in tutto il mondo la più grande campagna vaccinale della storia, quella per debellare il Sars-CoV-2. Grandi assenti, per il momento, i bambini. Il motivo, a quanto pare, non è quello che ci è stato detto finora, ovvero la mancata sperimentazione sui minori di 14 anni, ma c’è una spiegazione più semplice. Lo ha rivelato Tedros Adhanom Ghebreyesus, Direttore Generale dell’Organizzazione Mondiale della Sanità: “È eticamente inaccettabile vaccinare un bambino senza premiarlo con un succoso lecca-lecca. Considerando che al mondo ci sono circa 2,2 miliardi di bambini e tenendo conto anche della doppia somministrazione, stiamo parlando di realizzare quasi 4 miliardi e mezzo di lecca-lecca in poco tempo, uno sforzo produttivo che nessuna azienda al momento è in grado di sostenere”."""
+    text = """È entrata nel vivo in tutto il mondo la più grande campagna vaccinale della storia, quella per debellare il Sars-CoV-2. Grandi assenti, per il momento, i bambini. Il motivo, a quanto pare, non è quello che ci è stato detto finora, ovvero la mancata sperimentazione sui minori di 14 anni, ma c’è una spiegazione più semplice. Lo ha rivelato Tedros Adhanom Ghebreyesus, Direttore Generale dell’Organizzazione Mondiale della Sanità: “È eticamente inaccettabile vaccinare un bambino senza premiarlo con un succoso lecca-lecca. Considerando che al mondo ci sono circa 2,2 miliardi di bambini e tenendo conto anche della doppia somministrazione, stiamo parlando di realizzare quasi 4 miliardi e mezzo di lecca-lecca in poco tempo, uno sforzo produttivo che nessuna azienda al momento è in grado di sostenere”."""
     
     # TEST 5: FAKE NEWS DIFFICILE DA RICONOSCERE
-    text = """President Trump announces he will not impose 25% tariffs on Canada and Mexico, nor 10% tariffs on China."""
+    #text = """President Trump announces he will not impose 25% tariffs on Canada and Mexico, nor 10% tariffs on China."""
     
     claim = Claim(text)
 
