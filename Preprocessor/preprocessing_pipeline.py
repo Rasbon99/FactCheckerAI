@@ -33,7 +33,6 @@ class Preprocessing_Pipeline():
         self.summarizer = Summarizer()
 
         self.config = {
-            "translation": True,
             "summarize": True,
             "NER": True
         }
