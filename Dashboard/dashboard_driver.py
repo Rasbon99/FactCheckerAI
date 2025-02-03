@@ -14,6 +14,27 @@ load_dotenv(dotenv_path='key.env')
 
 claim = Claim("The earth is flat")
 answer = Answer(claim_id=claim.id, answer="The earth is not flat", image=Image.open(os.getenv('AI_IMAGE_UI')))
+# example of sources str(uuid.uuid4()), self.id, data['title'], data['url'], data['site'],
+#                  data['body'], data['score'], data['topic'], str(data['entities']
+data = [{
+    'title': "Mi piace la zucchina",
+    'url': "url",
+    'site': "site",
+    'body': "body",
+    'score': 100,
+    'topic': "topic",
+    'entities': ["entity1", "entity2"]
+},
+    {'title': "Mi piace la zucchina",
+    'url': "url",
+    'site': "site",
+    'body': "body",
+    'score': 100,
+    'topic': "topic",
+    'entities': ["entity1", "entity2"]
+}]
+claim.add_sources(data)
+
 
 if __name__=="__main__":
     

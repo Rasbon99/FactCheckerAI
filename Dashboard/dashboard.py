@@ -171,13 +171,12 @@ class DashboardPipeline:
                 # Recupera la conversazione corrispondente
                 conversation = df_weekly[df_weekly['id'] == selected_id].iloc[0]
 
-                st.write(f"**🆔 ID**: {conversation['id']}")
                 st.write(f"**❓ CLAIM**: {conversation['claim']}")
 
                 # Mostra tutte le sources disponibili in una text_area
                 if conversation['sources']:
                     sources_text = "\n\n".join(
-                        [f"🔹 **Title:** {src['title']}\n🔗 **URL:** {src['url']}\n📄 **Body:** {src['body']}" for src in conversation['sources']]
+                        [f"🔹 Title: {src['title']}\n🔗 URL: {src['url']}\n📄 Body: {src['body']}" for src in conversation['sources']]
                     )
                 else:
                     sources_text = "No sources available for this claim."
