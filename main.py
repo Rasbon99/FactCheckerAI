@@ -18,15 +18,15 @@ def main():
     
     # TEST 5: FAKE NEWS DIFFICILE DA RICONOSCERE
     #text = """President Trump announces he will not impose 25% tariffs on Canada and Mexico, nor 10% tariffs on China."""
+    
+    claim = Claim(text)
 
     preprocessor = Preprocessing_Pipeline()
 
-    claim_title, claim_summary = preprocessor.run_claim_pipe(text)
-
-    claim = Claim(text, claim_title, claim_summary)
+    claim_title, claim_summary = preprocessor.run_claim_pipe(claim.text)
 
     scraper = Scraper()
-    sources = scraper.search_and_extract(claim.title, num_results=10)
+    sources = scraper.search_and_extract(claim_title, num_results=20)
 
     preprocessed_sources = preprocessor.run_sources_pipe(sources)
 
@@ -34,7 +34,7 @@ def main():
 
     rag = RAG_Pipeline()
     
-    query_result = rag.run_pipeline(preprocessed_sources, claim.summary)
+    query_result = rag.run_pipeline(preprocessed_sources, claim_summary)
     
     print(query_result)
 
