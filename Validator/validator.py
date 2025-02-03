@@ -55,6 +55,8 @@ class Validator:
             ValueError: If the input texts or scores are not lists.
             Exception: For any error encountered during prediction.
         """
+        
+        # TODO: Non funziona molto bene sulle fake news
         try:
             if not isinstance(texts, list) or not isinstance(scores, list):
                 raise ValueError("Both 'texts' and 'scores' parameters must be lists.")
@@ -64,13 +66,14 @@ class Validator:
             
             self.logger.info(f"Starting prediction for {len(texts)} texts.")
             
-            question = f"The claim: '{claim}' is {{}} by the information provided in the article"
-            
+            # Modifica il template dell'ipotesi
+            hypothesis_template = f"The article provides evidence to determine that the claim: '{claim}' is {{}}."
+
             # Perform zero-shot classification with custom labels
             all_results = self.zero_shot_classifier(
                 texts,
-                candidate_labels=["confirmed", "neutral", "denied"],
-                hypothesis_template=question
+                candidate_labels=["entailment", "neutral", "contradiction"],
+                hypothesis_template=hypothesis_template
             )
 
             # Initialize counters to accumulate weighted scores for each label
@@ -106,15 +109,15 @@ class Validator:
 
             # Return the weighted average results
             return {
-                "confirm": weighted_avg_confirm_score,
-                "neutral": weighted_avg_neutral_score,
-                "deny": weighted_avg_deny_score
+                "confirmed": weighted_avg_confirm_score,
+                "uncertain": weighted_avg_neutral_score,
+                "denied": weighted_avg_deny_score
             }
 
         except Exception as e:
             self.logger.error(f"Prediction failed. Error: {e}")
             return None
-        
+
     def filter_sources(self, claim, sources, score_threshold=0.7):
         """
         Filters the sources by evaluating whether they are correlated to the given claim using a zero-shot classifier.
