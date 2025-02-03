@@ -26,9 +26,9 @@ def main():
     claim = Claim(text, claim_title, claim_summary)
 
     scraper = Scraper()
-    sources = scraper.search_and_extract(claim.title, num_results=20)
+    sources = scraper.search_and_extract(claim_title, num_results=5)
 
-    preprocessed_sources = preprocessor.run_sources_pipe(sources)
+    preprocessed_sources, entities = preprocessor.run_sources_pipe(sources)
 
     claim.add_sources(preprocessed_sources)
 
