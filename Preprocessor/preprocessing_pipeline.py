@@ -1,7 +1,3 @@
-import os
-import re
-from langdetect import detect
-
 import dotenv
 from groq import Groq
 
