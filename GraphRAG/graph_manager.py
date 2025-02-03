@@ -139,7 +139,6 @@ class GraphManager:
             
             # Execute each query
             for query in delete_queries:
-                self.logger.info(f"Executing query: {query}")
                 self.graph.query(query)
 
             elapsed_time = time.time() - start_time
@@ -187,7 +186,6 @@ class GraphManager:
         MERGE (a)-[:HAS_TOPIC]->(t)
         """
         
-        self.logger.info(f"Starting data load from {data}...")
         try:
             start_time = time.time()
             self.graph.query(q_load_articles, params={"data": data})

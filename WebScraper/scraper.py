@@ -176,8 +176,7 @@ class Scraper:
                         # Append score to extracted data
                         extracted_data['score'] = result['score']
 
-                        self.logger.info(f"{extracted_data['title']} - {extracted_data['url']} - {extracted_data['site']}")
-                        self.logger.info(f"{extracted_data['body'][:200]}...")  
+                        self.logger.info(f"{extracted_data['title'][:20]} - {extracted_data['url'][:20]}") 
                         search_results.append(extracted_data)
 
                 # Phase 3: Apply correlation filter
@@ -247,7 +246,7 @@ class Scraper:
                 source_body = source.get("body", "")[:2000]
 
                 # Log the start of processing for the source
-                self.logger.info(f"Processing source: {source.get('title', 'No title')} - URL: {source.get('url', 'No URL')}")
+                self.logger.info(f"Processing source: {source.get('title', 'No title')}")
 
                 # Create the prompt for the model
                 prompt = [
