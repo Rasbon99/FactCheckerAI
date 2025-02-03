@@ -21,7 +21,7 @@ cycler==0.12.1
 dataclasses-json==0.6.7
 decorator==5.1.1
 distro==1.9.0
-duckduckgo_search==5.3.1b1
+duckduckgo_search==7.3.0
 EasyNMT==2.0.2
 exceptiongroup==1.2.2
 executing==2.2.0
