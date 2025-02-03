@@ -1,8 +1,10 @@
 from WebScraper.scraper import Scraper
 from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from Database.data_entities import Claim
+from Database.data_entities import Answer
 from GraphRAG.rag_pipeline import RAG_Pipeline
 from Validator.validator import Validator
+from Dashboard.dashboard import DashboardPipeline
 
 def main():
 
@@ -34,6 +36,9 @@ def main():
     print(classification_result)
     
     # TODO: Bisogna validare o meno la generazione della LLM e nel caso fargli rifare l'esecuzione di tutto il codice finchè non si trovano
+    
+    
+    # TODO: Generare oggetto Aswer con la seguente struttura Answer(claim_id, answer, image) dove claim_id è l'id del claim, answer è la risposta generata dalla LLM e image è il grafo generato dalla RAG e gestito come Image (PIL) object
     
     return
 

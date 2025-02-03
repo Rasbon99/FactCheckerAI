@@ -5,21 +5,28 @@ import sys
 from log import Logger
 from datetime import datetime, timedelta
 from PIL import Image
+from dotenv import load_dotenv
+import time
+import io
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from Database.data_entities import Claim
+from Database.data_entities import Answer
+from Database.data_entities import Source
+from Database.sqldb import Database
 
-
-# CONSTANTS
-AI_IMAGE_UI=r"./Dashboard/AI_image.png"
+load_dotenv(dotenv_path='key.env')
 
 class DashboardPipeline:
-    def __init__(self):
+    def __init__(self, db_path=os.getenv('SQLITE_DB_PATH')):
+        # Inizializzazione del database
+        self.db = Database(db_path)
+        
         # Inizializzazione del logger
-        self.logger = Logger("DashboardLogger", log_file="logger.log").get_logger()
+        self.logger = Logger("DashboardLogger", log_file=os.getenv('LOG_FILE')).get_logger()
         
         # Carica immagine nella sidebar
-        self.image_sidebar = Image.open(AI_IMAGE_UI).resize((300, 300))
+        self.image_sidebar = Image.open(os.getenv('AI_IMAGE_UI')).resize((300, 300))
 
         # Inizializza lo stato della sessione per i messaggi
         if "messages" not in st.session_state:
@@ -32,52 +39,106 @@ class DashboardPipeline:
         if not st.session_state["log_initialized"]:
             self.logger.info("Dashboard initialized.")
             st.session_state["log_initialized"] = True
-    
-    def get_claim(self,claim):
-        claim_obj=Claim(claim)
-
-    def generate_response(self, claim):
-        image_graph = AI_IMAGE_UI  # Percorso dell'immagine generata
-        self.logger.info(f"Generated response for claim: {claim}")
-        return "HELLOHELLO", image_graph
-
-    def save_chat_history(self, claim, answer, image_path):
-        current_datetime = datetime.now()
-        date = current_datetime.strftime('%Y-%m-%d')
-        time = current_datetime.strftime('%H:%M:%S')
-
-        if os.path.exists('chat_history.csv'):
-            df = pd.read_csv('chat_history.csv')
-            new_id = df['id'].max() + 1 if not df.empty else 1
-        else:
-            new_id = 1
-            df = pd.DataFrame(columns=['id', 'date', 'time', 'claim', 'answer', 'image_path'])
-
-        new_data = pd.DataFrame([[new_id, date, time, claim, answer, image_path]],
-                                columns=['id', 'date', 'time', 'claim', 'answer', 'image_path'])
-        df = pd.concat([df, new_data], ignore_index=True)
-        df.to_csv('chat_history.csv', index=False)
-
-        self.logger.info(f"Saved chat history for claim: {claim}")
-
-    def get_weekly_conversations(self):
-        if os.path.exists('chat_history.csv'):
-            df = pd.read_csv('chat_history.csv')
-            df['date'] = pd.to_datetime(df['date'], format='%Y-%m-%d')
-            one_week_ago = datetime.now() - timedelta(weeks=1)
-            self.logger.info("Retrieved weekly conversations.")
-            return df[df['date'] >= one_week_ago]
-        return pd.DataFrame()
-
+            
     def delete_chat_history(self):
-        if os.path.exists('chat_history.csv'):
-            os.remove('chat_history.csv')
-            self.logger.info("Chat history deleted.")
-            st.sidebar.success("Chat history successfully deleted!")
-
+        """
+        Clears all tables from the database.
+        """
+        self.db.delete_all_conversations()
+        st.sidebar.success("Chat history deleted successfully.")
+        
+    def create_claim(self, claim_text):
+        """
+        Creates a Claim object from the given claim text.
+        
+        Args:
+            claim_text (str): The claim text.
+        
+        Returns:
+            Claim: The Claim object.
+        """
+        claim = Claim(claim_text)
+        return claim
+    
     def is_numeric_claim(self, claim):
+        """
+        Checks if the claim consists only of numbers.
+        """
         return claim.isdigit()
 
+    def get_response(self, claim):
+        """
+        Retrieves the text and Image from the answer associated with the given claim.
+        
+        Args:
+            claim (Claim): The claim object.
+            
+        Returns:
+            answer_text (str): The text of the answer.
+            image (Image): The image associated with the answer.
+        """
+        chat_message_shown = False
+        
+        while claim.has_answer() is False:
+            if not chat_message_shown:
+                st.chat_message("assistant").write("I am still processing your claim. Please wait a moment...")
+                
+                self.logger.info("Processing claim...")
+                chat_message_shown = True
+            with st.spinner("Processing claim..."):
+                time.sleep(int(os.getenv('CLAIM_PROCESSING_TIME')))    
+        answer, image = claim.get_answer()
+        
+        return answer, image
+    
+    def get_conversations(self):
+        """
+        Retrieves the conversations from the database, including associated sources.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing the conversations and their sources.
+        """
+        
+        # Query per ottenere le conversazioni con risposta e immagine
+        query = """
+        SELECT c.id, c.text, a.answer, a.image 
+        FROM claims c
+        INNER JOIN answers a ON c.id = a.claim_id
+        """
+        
+        rows = self.db.fetch_all(query)
+
+        if not rows:
+            return pd.DataFrame(columns=["id", "claim", "answer", "image", "sources"])
+
+        conversations = []
+        
+        for row in rows:
+            claim_id = row[0]
+            
+            # Query per ottenere le sources associate al claim
+            sources_query = """
+            SELECT title, url, body 
+            FROM sources 
+            WHERE claim_id = ?
+            """
+            sources_rows = self.db.fetch_all(sources_query, (claim_id,))
+
+            # Formattare le sources come una lista di dizionari
+            sources = [{"title": s[0], "url": s[1], "body": s[2]} for s in sources_rows]
+
+            conversations.append({
+                "id": claim_id,
+                "claim": row[1],
+                "answer": row[2],
+                "image": Image.open(io.BytesIO(row[3])) if row[3] else None,
+                "sources": sources  # Aggiunta delle sources
+            })
+
+        return pd.DataFrame(conversations)
+
+        
+            
     def run(self):
         with st.sidebar:
             st.title("Menu")
@@ -85,29 +146,56 @@ class DashboardPipeline:
             st.image(self.image_sidebar)
             if st.button("Delete chat history"):
                 self.delete_chat_history()
+            
+            if st.button("Exit Dashboard"):
+                self.logger.info("Dashboard exited by user.")
+                st.sidebar.warning("Exiting application...")
+                os._exit(0)  # Termina il processo immediatamente
+                
 
         if option == "View conversations":
-            df_weekly = self.get_weekly_conversations()
+            df_weekly = self.get_conversations()  # Recupera le conversazioni dal database
+            
             if not df_weekly.empty:
                 st.sidebar.subheader("Past conversations:")
-                conversation_list = df_weekly[['date', 'claim']].sort_values(by='date', ascending=False)
-                conversation_list = conversation_list.apply(
-                    lambda row: f"{row['date'].strftime('%Y-%m-%d')} - {row['claim']}", axis=1)
-                selected_conversation = st.sidebar.selectbox("Select a conversation", conversation_list)
-                selected_date, selected_claim = selected_conversation.split(" - ", 1)
-                conversation = df_weekly[
-                    (df_weekly['date'] == selected_date) & (df_weekly['claim'] == selected_claim)].iloc[0]
+                
+                # Crea una lista di opzioni per il selectbox: solo i claim
+                conversation_list = df_weekly[['id', 'claim']].sort_values(by='id', ascending=False)
+                conversation_options = list(conversation_list['claim'])
+                
+                selected_conversation = st.sidebar.selectbox("Select a conversation", conversation_options)
+                
+                # Estrai l'ID selezionato
+                selected_id = conversation_list[conversation_list['claim'] == selected_conversation]['id'].values[0]
+                
+                # Recupera la conversazione corrispondente
+                conversation = df_weekly[df_weekly['id'] == selected_id].iloc[0]
 
-                st.write(f"**📅 DATE**: {conversation['date']}")
-                st.write(f"**⏰ TIME**: {conversation['time']}")
+                st.write(f"**🆔 ID**: {conversation['id']}")
                 st.write(f"**❓ CLAIM**: {conversation['claim']}")
+
+                # Mostra tutte le sources disponibili in una text_area
+                if conversation['sources']:
+                    sources_text = "\n\n".join(
+                        [f"🔹 **Title:** {src['title']}\n🔗 **URL:** {src['url']}\n📄 **Body:** {src['body']}" for src in conversation['sources']]
+                    )
+                else:
+                    sources_text = "No sources available for this claim."
+
+                st.write("**📚 SOURCES:**")
+                
+                st.text_area(label="none", label_visibility="collapsed", value=sources_text, height=200, disabled=True)
+
                 st.write("**🤖 RESPONSE**:")
                 st.text_area(value=conversation['answer'], label="none", label_visibility="collapsed", disabled=True)
 
-                if os.path.exists(conversation['image_path']):
-                    st.image(conversation['image_path'], caption="GraphRAG generated by LLM")
+                if conversation['image'] is not None:
+                    st.image(conversation['image'], caption="GraphRAG generated by LLM")
+            
             else:
-                st.write("No conversations recorded in the last week.")
+                st.sidebar.info("⚠️ No conversations found.")
+                st.info("⚠️ No conversations found. Start a new conversation to view it here.")
+
 
         else:
             st.title("💬 Fact-checking AI")
@@ -126,12 +214,11 @@ class DashboardPipeline:
                     if len(st.session_state.messages) > 1:
                         claim = st.session_state.messages[-1]['content']
                         # Save claim to db
-                        self.get_claim(claim)
-                        assistant_response, image_path = self.generate_response(claim)
+                        claim = self.create_claim(claim)
+                        assistant_response, image = self.get_response(claim)
                         st.session_state.messages.append({"role": "assistant", "content": assistant_response})
                         st.chat_message("assistant").write(assistant_response)
-                        st.chat_message("assistant").image(image_path)
-                        self.save_chat_history(prompt, assistant_response, image_path)
+                        st.chat_message("assistant").image(image)
                     else:
                         st.chat_message("assistant").write("Waiting for your claim...")
 

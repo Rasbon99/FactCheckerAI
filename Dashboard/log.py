@@ -1,11 +1,15 @@
 import logging
 import sys
+import os
+from dotenv import load_dotenv
 from logging.handlers import RotatingFileHandler
 
 class Logger:
     _instances = {}
+    load_dotenv(dotenv_path='key.env')
+    log_file=str(os.getenv('LOG_FILE'))
 
-    def __new__(cls, name, log_file="app.log", max_bytes=5 * 1024 * 1024, backup_count=1):
+    def __new__(cls, name, log_file=log_file, max_bytes=5 * 1024 * 1024, backup_count=1):
         """
         Implementing singleton pattern per logger name to ensure no duplicate loggers.
         """

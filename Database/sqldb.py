@@ -102,7 +102,8 @@ class Database:
         Raises:
             sqlite3.DatabaseError: If there is an error during query execution.
         """
-        self.logger.info("Executing query: %s with params: %s", query, params)
+        masked_params = [param if not isinstance(param, (bytes, bytearray)) else "BLOB" for param in params]
+        self.logger.info("Executing query: %s with params: %s", query, masked_params)
         try:
             with self as conn:
                 cursor = conn.cursor()
@@ -137,4 +138,50 @@ class Database:
             return result
         except sqlite3.DatabaseError as e:
             self.logger.error("Error fetching records.")
+            raise e
+    
+    def fetch_one(self, query, params=()):
+        """
+        Fetches the first record that matches the provided SQL query.
+
+        Args:
+            query (str): The SQL query to fetch records.
+            params (tuple): The parameters to pass with the query. Default is an empty tuple.
+
+        Returns:
+            sqlite3.Row: The first row returned by the query.
+        
+        Raises:
+            sqlite3.DatabaseError: If there is an error during the fetch operation.
+        """
+        self.logger.info("Fetching one record for query: %s with params: %s", query, params)
+        try:
+            with self as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                result = cursor.fetchone()
+            self.logger.info("Fetched one record.")
+            return result
+        except sqlite3.DatabaseError as e:
+            self.logger.error("Error fetching record.")
+            raise e
+        
+    def delete_all_conversations(self):
+        """
+        Deletes data from tables "claims", "answers", and "sources".
+        
+        Raises:
+            sqlite3.DatabaseError: If there is an error during the deletion process.
+        """
+        self.logger.info("Deleting all conversations.")
+        try:
+            with self as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM claims;")
+                cursor.execute("DELETE FROM answers;")
+                cursor.execute("DELETE FROM sources;")
+                conn.commit()
+            self.logger.info("All conversations deleted successfully.")
+        except sqlite3.DatabaseError as e:
+            self.logger.error("Error deleting conversations.")
             raise e
