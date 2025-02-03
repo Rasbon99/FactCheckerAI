@@ -4,9 +4,10 @@ import urllib.robotparser
 import urllib.parse
 from urllib.parse import urlparse
 
-import requests
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
+from groq import Groq
+import requests
 
 from WebScraper.ng_client import NewsGuardClient
 
@@ -26,6 +27,9 @@ class Scraper:
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.ddg = DDGS()
         self.ng_client = NewsGuardClient()
+        
+        self.model = os.getenv("GROQ_MODEL_NAME")
+        self.client = Groq(api_key=os.getenv("GROQ_API_KEY_FILTER"))
 
     def extract_context(self, url):
         """
@@ -141,10 +145,12 @@ class Scraper:
 
         while retries < max_retries:
             try:
+                # Fase 1: Esegui la ricerca
                 results = self.ddg.text(query, max_results=num_results)
 
                 self.logger.info("Scraped websites: %i sites", len(results))
 
+                # Fase 2: Filtra i siti tramite NewsGuard Rating Database
                 results = self.filter_sites(results)
 
                 for result in results:
@@ -153,7 +159,6 @@ class Scraper:
                     extracted_data = self.extract_context(url)
 
                     if extracted_data['title'] and extracted_data['body']:
-                        
                         # Append score to extracted data
                         extracted_data['score'] = result['score']
 
@@ -161,8 +166,13 @@ class Scraper:
                         self.logger.info(f"{extracted_data['body'][:200]}...")  
                         search_results.append(extracted_data)
 
-                # If successful, break out of the retry loop
-                return search_results
+                # Fase 3: Applica il filtro di correlazione
+                self.logger.info("Applying correlation filter...")
+                filtered_results = self.correlation_filter(query, search_results)
+                
+                # Fase 4: Restituisci solo i risultati filtrati
+                self.logger.info("Filtered results: %i sources correlated to the claim.", len(filtered_results))
+                return filtered_results
 
             except Exception as e:
                 self.logger.error(f"Error during search and extract for query '{query}': {e}")
@@ -181,6 +191,47 @@ class Scraper:
                         raise e
                 else:
                     raise e
+    
+    def correlation_filter(self, claim, sources):
+        correlated_sources = []
+        
+        for source in sources:
+            try:
+                # Estrarre il contenuto del campo "body"
+                source_body = source.get("body", "")[:2000]
+                
+                # Creazione del prompt per il modello
+                prompt = [
+                    {"role": "system", "content": f"""
+                    You are an expert validator tasked with determining whether a source found online is directly related to the provided claim ('{claim}'). 
+                    Your goal is to check if the source discusses the same topic or provides relevant information about the claim. 
+                    Focus on the core subject of the claim and the source. Ignore unrelated or vaguely related content.
+
+                    Respond with one of the following:
+                    - 'Correlated' if the source is about the same topic as the claim.
+                    - 'Not Correlated' if the source is unrelated or only tangentially related.
+                    Be concise and accurate in your evaluation.
+                    Use only 'Correlated' or 'Not Correlated' in your response."""},
+                    {"role": "user", "content": source_body}
+                ]
+                
+                # Chiamata al modello
+                response = self.client.chat.completions.create(
+                    messages=prompt,
+                    model=self.model,
+                )
+                
+                # Estrazione del risultato
+                result = response.choices[0].message.content.strip()
+
+                # Aggiungi la fonte completa solo se correlata
+                if result == "Correlated":
+                    correlated_sources.append(source)
+            except Exception as e:
+                # Log degli errori per debugging
+                print(f"Error processing source: {source}\n{e}")
+        
+        return correlated_sources
     
     def filter_sites(self, sites_list, score_threshold=70):
         """

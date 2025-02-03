@@ -42,60 +42,6 @@ class Preprocessing_Pipeline():
 
         self.client = Groq()
 
-    def translate_to_english(self, text):
-        """
-        Translates a text to English using langdetect first, then falls back to Groq if the text is not in English.
-
-        Args:
-            text (str): The text to translate.
-
-        Returns:
-            str: The text translated into English (or unchanged if it is already in English).
-        
-        Raises:
-            Exception: If there is an error during the translation process.
-        """
-        self.logger.info("Starting translation process.")
-
-        try:
-            # Clean the text before detecting language
-            cleaned_text = re.sub(r"[^\x00-\x7F]+", "", text)  # Rimuove caratteri non ASCII
-            cleaned_text = re.sub(r"[^\w\s.,:!?\"\'()\-]", "", cleaned_text)  # Rimuove simboli e caratteri speciali
-            if not cleaned_text.strip():
-                self.logger.warning("Cleaned text is empty, cannot detect language.")
-                return None
-            
-            # Detect language using langdetect
-            detected_language = detect(cleaned_text)
-            self.logger.info(f"Detected language: {detected_language}")
-
-            # If the detected language is English, return the text as is
-            if detected_language == 'en':
-                self.logger.info("Text is already in English, no translation needed.")
-                return cleaned_text
-
-            # If it's not in English, fall back to Groq for translation
-            self.logger.info("Text is not in English, using Groq model for translation.")
-            response = self.client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": "You are a translation model."},
-                    {"role": "user", "content": f"Translate the following text to English and return only the translated text: {cleaned_text}."}
-                ],
-                model=os.getenv("GROQ_MODEL_NAME"),  # The Groq model to use for translation
-                temperature=0.5,
-                max_completion_tokens=500
-            )
-
-            result = response.choices[0].message.content.strip()
-
-            # Assuming Groq's response is just the translated text
-            self.logger.info(f"Text translated to English: {result[:200]}...")
-            return result
-
-        except Exception as e:
-            self.logger.error(f"Translation failed for text. Error: {e}")
-            return text  
-
     def run_claim_pipe(self, claim, max_lenght=150):
         """
         Processes a claim by translating it to English and summarizing it.
@@ -115,7 +61,6 @@ class Preprocessing_Pipeline():
         if self.config.get("summarize", True):
             claim_title = self.summarizer.claim_title_summarize(claim, max_lenght)
             claim_summary = self.summarizer.generate_summary(claim, max_lenght)
-            claim_summary = self.translate_to_english(claim_summary)
             
             self.logger.info("Claim preprocessing completed.")
             
@@ -142,11 +87,6 @@ class Preprocessing_Pipeline():
 
         if self.config.get("summarize", True):
             new_bodies = self.summarizer.summarize_texts([d['body'] for d in sources], max_lenght)
-            for d, new_body in zip(sources, new_bodies):
-                d['body'] = new_body
-        
-        if self.config.get("translation", True):
-            new_bodies = self.translate_to_english([d['body'] for d in sources])
             for d, new_body in zip(sources, new_bodies):
                 d['body'] = new_body
         

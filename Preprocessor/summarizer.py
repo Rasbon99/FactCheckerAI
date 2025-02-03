@@ -90,7 +90,8 @@ class Summarizer:
         response = self.client.chat.completions.create(
             messages=[
                 {"role": "system", "content": """You are a summarizer, be specific. Don't use lists or bullet points. 
-                                                Provide only the string without specifying that it is a summary"""},
+                                                Provide only the string without specifying that it is a summary.
+                                                Translate in English."""},
                 {"role": "user", "content": text}
             ],
             model=self.low_model,
