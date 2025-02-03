@@ -6,7 +6,6 @@ import psutil
 import socket
 import subprocess
 
-
 import numpy as np
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -87,7 +86,6 @@ class GraphManager:
                     self.logger.error(f"An unexpected error occurred while starting Neo4j console: {e}")
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while starting Neo4j console with your platform, make sure you are on Windows or macOS: {e}")
-
 
     def _stop_console(self):
         """

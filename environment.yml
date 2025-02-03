@@ -114,9 +114,7 @@ dependencies:
       - sympy==1.13.1
       - tenacity==9.0.0
       - tokenizers==0.21.0
-      - torch==2.6.0+cu126
-      - torchaudio==2.6.0+cu126
-      - torchvision==0.21.0+cu126
+      - torch==2.6.0
       - tqdm==4.67.1
       - transformers==4.48.2
       - typing-extensions==4.12.2
