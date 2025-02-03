@@ -173,8 +173,6 @@ class Scraper:
                     extracted_data = self.extract_context(url)
 
                     if extracted_data['title'] and extracted_data['body']:
-                        # Append score to extracted data
-                        extracted_data['score'] = result['score']
 
                         self.logger.info(f"{extracted_data['title']} - {extracted_data['url']} - {extracted_data['site']}")
                         self.logger.info(f"{extracted_data['body'][:200]}...")  
@@ -330,7 +328,6 @@ class Scraper:
                 
                 # If the site has rank 'T' and score >= score_threshold, include it
                 if rank == 'T' and score >= score_threshold:
-                    site['score'] = score
                     filtered_sites.append(site)
                 else:
                     # Log for sites that are excluded

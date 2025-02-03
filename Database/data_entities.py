@@ -5,7 +5,7 @@ from Database.sqldb import Database
 from log import Logger
 
 class Claim:
-    def __init__(self, text, claim_id=None, db=None):
+    def __init__(self, text, title, summary, claim_id=None, db=None):
         """
         Initializes a Claim object with text and optionally a provided claim ID. 
         It will also save the claim to the database.
@@ -22,6 +22,8 @@ class Claim:
         self.db = db if db else Database()  
         self.id = claim_id if claim_id else str(uuid.uuid4())  
         self.text = text
+        self.title = title[2:]
+        self.summary = summary
         self.logger.info("Creating claim with ID: %s", self.id)
         self.save_to_db()
 
@@ -37,38 +39,15 @@ class Claim:
         create_table_sql = """
             CREATE TABLE IF NOT EXISTS claims (
                 id TEXT PRIMARY KEY,
-                text TEXT
+                text TEXT,
+                title TEXT,
+                summary TEXT
             )
         """
         self.db.create_table(create_table_sql)
-        self.db.execute_query("INSERT INTO claims (id, text) VALUES (?, ?)", (self.id, self.text))
+        self.db.execute_query("INSERT INTO claims (id, text, title, summary) VALUES (?, ?, ?, ?)", 
+                              (self.id, self.text, self.title, self.summary))
         self.logger.info("Claim with ID %s saved to the database.", self.id)
-
-    def get_sources(self):
-        """
-        Retrieves all sources associated with the claim from the database.
-
-        Returns:
-            list: A list of Source objects associated with this claim.
-        
-        Raises:
-            Exception: If there is an error during fetching sources from the database.
-        """
-        self.logger.info("Fetching sources for claim ID %s.", self.id)
-        rows = self.db.fetch_all("SELECT * FROM sources WHERE claim_id = ?", (self.id,))
-        sources = [Source(
-            claim_id=row['claim_id'],
-            title=row['title'],
-            url=row['url'],
-            site=row['site'],
-            body=row['body'],
-            score=row['score'],
-            topic=row['topic'],
-            entities=row['entities'],
-            source_id=row['id']
-        ) for row in rows]
-        self.logger.info("Found %d sources for claim ID %s.", len(sources), self.id)
-        return sources
     
     def get_dict_sources(self):
         """
@@ -90,7 +69,6 @@ class Claim:
                 "url": row['url'],
                 "site": row['site'],
                 "body": row['body'],
-                "score": row['score'],
                 "topic": row['topic'],
                 "entities": row['entities']
                 
@@ -119,7 +97,6 @@ class Claim:
                 url TEXT,
                 site TEXT,
                 body TEXT,
-                score FLOAT,
                 topic TEXT,
                 entities TEXT,
                 FOREIGN KEY (claim_id) REFERENCES claims(id)
@@ -130,66 +107,7 @@ class Claim:
         # Insert each source into the database
         for data in sources_data:
             self.db.execute_query("""
-                INSERT INTO sources (id, claim_id, title, url, site, body, score, topic, entities)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO sources (id, claim_id, title, url, site, body, topic, entities)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (str(uuid.uuid4()), self.id, data['title'], data['url'], data['site'],
-                  data['body'], data['score'], data['topic'], str(data['entities'])))
-
-class Source:
-    def __init__(self, claim_id, title, url, site, body, score, topic, entities, source_id=None, db=None):
-        """
-        Initializes a Source object with details about a specific source.
-
-        Args:
-            claim_id (str): The ID of the associated claim.
-            title (str): The title of the source.
-            url (str): The URL of the source.
-            site (str): The site of the source.
-            body (str): The body/content of the source.
-            entities (str): The entities mentioned in the source.
-            topic (str): The topic of the source.
-            source_id (str, optional): The ID of the source. If not provided, a new UUID is generated.
-            db (Database, optional): The database object to use. Defaults to a new Database instance.
-        
-        Raises:
-            Exception: If there is an error during source object initialization.
-        """
-        self.db = db if db else Database()
-        self.id = source_id if source_id else str(uuid.uuid4())
-        self.claim_id = claim_id
-        self.title = title
-        self.url = url
-        self.site = site
-        self.body = body
-        self.score = score
-        self.topic = topic
-        self.entities = entities
-
-    @staticmethod
-    def load_all(db=None):
-        """
-        Loads all source records from the database.
-
-        Args:
-            db (Database, optional): The database object to use. Defaults to a new Database instance.
-
-        Returns:
-            list: A list of Source objects loaded from the database.
-        
-        Raises:
-            Exception: If there is an error while fetching all sources from the database.
-        """
-        db = db if db else Database()
-        rows = db.fetch_all("SELECT * FROM sources")
-        return [Source(
-            claim_id=row['claim_id'],
-            title=row['title'],
-            url=row['url'],
-            site=row['site'],
-            body=row['body'],
-            score=row['score'],
-            topic=row['topic'],
-            entities=row['entities'],
-            source_id=row['id'],
-            db=db
-        ) for row in rows]
+                  data['body'], data['topic'], str(data['entities'])))
