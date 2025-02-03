@@ -52,34 +52,18 @@ class QueryEngine:
         """
         self.logger.info("Starting Ollama server...")
         try:
-            if self.platform == "Darwin":
-                try:
-                    # Start the Ollama server in a separate process
-                    self.process = subprocess.Popen(
-                        ["ollama", "serve"],
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        text=True
-                    )
-                    self.logger.info("Ollama server started successfully as a background process.")
-                except FileNotFoundError:
-                    self.logger.error("Error: 'ollama' command not found. Ensure Ollama is installed and in PATH.")
-                except Exception as e:
-                    self.logger.error(f"An unexpected error occurred while starting the server: {e}")
-            elif self.platform == "Windows":
-                try:
-                    # Start the Ollama server in a separate process
-                    powershell_command = ('Start-Process "cmd" -ArgumentList "/c ollama serve" -Verb runAs')
-
-                    self.process = subprocess.Popen(["powershell", "-Command", powershell_command])
-
-                    self.logger.info("Ollama server started successfully as a background process.")
-                except FileNotFoundError:
-                    self.logger.error("Error: 'ollama' command not found. Ensure Ollama is installed and in PATH.")
-                except Exception as e:
-                    self.logger.error(f"An unexpected error occurred while starting the server: {e}")
+            # Start the Ollama server in a separate process
+            self.process = subprocess.Popen(
+                ["ollama", "serve"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            self.logger.info("Ollama server started successfully as a background process.")
+        except FileNotFoundError:
+            self.logger.error("Error: 'ollama' command not found. Ensure Ollama is installed and in PATH.")
         except Exception as e:
-            self.logger.error(f"An unexpected error occurred while starting Neo4j console with your platform, make sure you are on Windows or macOS: {e}")
+            self.logger.error(f"An unexpected error occurred while starting the server: {e}")
 
 
     def _stop_server(self):
