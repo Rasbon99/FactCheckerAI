@@ -34,11 +34,14 @@ def main():
     claim.add_sources(preprocessed_sources)
     
     #validator = Validator()
+    print(preprocessed_sources)
+    print("SPAZIO")
+    print(claim_summary)
     #filtered_sources = validator.filter_sources(claim_summary, preprocessed_sources)
 
     rag = RAG_Pipeline()
     
-    query_result = rag.run_pipeline(filtered_sources, claim_summary)
+    query_result = rag.run_pipeline(preprocessed_sources, claim_summary)
     
     print(query_result)
 
