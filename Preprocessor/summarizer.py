@@ -66,7 +66,7 @@ class Summarizer:
 
             summary = response.choices[0].message.content.strip()
             self.logger.info("Summarization completed successfully.")
-            self.logger.info("Generated summary: %s...", summary[:1000])
+            self.logger.info("Generated scraping summary: %s...", summary[:1000])
             return summary
 
         except Exception as e:
