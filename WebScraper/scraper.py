@@ -120,7 +120,7 @@ class Scraper:
             # You could also choose to log this error if necessary.
             return True
 
-    def search_and_extract(self, query, num_results=10, max_retries=3):
+    def search_and_extract(self, query, num_results=10, max_retries=3, min_valid_sources=3, search_results=None, retries=0, attempts=0):
         """
         Performs a search using the provided query, and extracts the title, body, and site of the resulting pages.
         
@@ -128,6 +128,10 @@ class Scraper:
             query (str): The search query to send to DuckDuckGo.
             num_results (int): The number of search results to retrieve. Default is 10.
             max_retries (int): The maximum number of retries in case of a rate limit or other errors. Default is 3.
+            min_valid_sources (int): The minimum number of sources that must be valid after filtering. Default is 3.
+            search_results (list): The accumulated list of search results.
+            retries (int): The current number of retries.
+            attempts (int): The current number of full search attempts.
         
         Returns:
             list: A list of dictionaries, each containing:
@@ -139,19 +143,29 @@ class Scraper:
         Raises:
             Exception: If there is an error during the search and extract process after all retries.
         """
-        self.logger.info("Start searching and extracting query...")
-        search_results = []
-        retries = 0
+        # Initialize search_results on the first call
+        if search_results is None:
+            search_results = []
 
-        while retries < max_retries:
+        self.logger.info("Start searching and extracting query...")
+        
+        while retries < max_retries and attempts < 3:
             try:
-                # Fase 1: Esegui la ricerca
+                # Phase 1: Perform the search
                 results = self.ddg.text(query, max_results=num_results)
+
+                if not results:  # If there are no results, log and return empty list
+                    self.logger.warning(f"No results found for query '{query}'.")
+                    return []
 
                 self.logger.info("Scraped websites: %i sites", len(results))
 
-                # Fase 2: Filtra i siti tramite NewsGuard Rating Database
+                # Phase 2: Filter sites using NewsGuard Rating Database
                 results = self.filter_sites(results)
+
+                if not results:  # If no results remain after filtering, log and return empty list
+                    self.logger.warning(f"No valid results after filtering for query '{query}'.")
+                    return []
 
                 for result in results:
                     url = result['href']
@@ -166,12 +180,33 @@ class Scraper:
                         self.logger.info(f"{extracted_data['body'][:200]}...")  
                         search_results.append(extracted_data)
 
-                # Fase 3: Applica il filtro di correlazione
+                # Phase 3: Apply correlation filter
                 self.logger.info("Applying correlation filter...")
                 filtered_results = self.correlation_filter(query, search_results)
-                
-                # Fase 4: Restituisci solo i risultati filtrati
-                self.logger.info("Filtered results: %i sources correlated to the claim.", len(filtered_results))
+
+                # Check if there are fewer than the required number of valid sources
+                if len(filtered_results) < min_valid_sources:
+                    self.logger.warning(f"Only {len(filtered_results)} correlated sources found. Initiating new search for more sources.")
+                    remaining_sources_needed = min_valid_sources - len(filtered_results)
+                    
+                    attempts += 1
+                                        
+                    # Perform another search to get more results
+                    more_sources = self.search_and_extract(query, num_results=remaining_sources_needed, max_retries=max_retries, 
+                                                            min_valid_sources=min_valid_sources, search_results=search_results, retries=retries, attempts=attempts)
+                    # Ensure more_sources is not None before extending
+                    if more_sources:
+                        search_results.extend(more_sources)
+
+                # Phase 4: Return only the filtered results
+                if len(filtered_results) < min_valid_sources:
+                    self.logger.error(f"Attempt {attempts} failed to return enough valid sources.")
+                    if attempts >= 3:
+                        self.logger.error("Max attempts reached. Aborting.")
+                        raise Exception("Unable to retrieve at least 3 valid sources after 3 attempts.")
+                    continue
+
+                self.logger.info(f"Filtered results: {len(filtered_results)} sources correlated to the claim.")
                 return filtered_results
 
             except Exception as e:
@@ -182,10 +217,7 @@ class Scraper:
                     retries += 1
                     if retries < max_retries:
                         self.logger.warning(f"Rate limit encountered. Retrying in 30 seconds... (Retry {retries}/{max_retries})")
-                        
                         time.sleep(30)
-                        
-                        self.ddg = DDGS()
                     else:
                         self.logger.error("Max retries reached. Aborting.")
                         raise e
