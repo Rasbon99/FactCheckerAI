@@ -14,14 +14,15 @@ class NER:
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
         dotenv.load_dotenv(env_file, override=True)
-        self.model = os.getenv("GROQ_LOW_MODEL_NAME")
+        self.model = os.getenv("GROQ_MODEL_NAME")
         self.client = Groq()
         
         self.ollama_client = OllamaClient()
         if not self.ollama_client.is_running():
             self.ollama_client.start_server()
         
-        self.ollama = Client(host='http://localhost:11434')
+        self.ollama = Client()
+        self.model_ollama = "MODEL_LLM_NER"
 
     def extract_entities_and_topic(self, text, max_tokens=1024, temperature=0.5, stop=None):
         """
@@ -57,7 +58,7 @@ class NER:
         self.logger.debug(f"Normalizing entity: {entity}")
         try:
             response = self.ollama.chat(
-                model="phi3.5:latest",
+                model=self.model_ollama,
                 messages=[{"role": "system", "content": f"Normalize this entity: '{entity}'. Return only strictly the entity without comments"}],
                 options={"temperature":0.5}
             )

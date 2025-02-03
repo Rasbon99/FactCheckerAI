@@ -91,10 +91,8 @@ class Preprocessing_Pipeline():
                 source['topic'] = topic_and_entities['topic']
                 source['entities'] = topic_and_entities['entities']
             
-            merged_entitities = self.ner.merge_entities(sources)
-
-            return sources, merged_entitities
+            sources = self.ner.merge_entities(sources)
 
         self.logger.info("Sources preprocessing completed.")
         
-        return sources, sources
+        return sources
