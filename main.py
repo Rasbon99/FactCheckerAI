@@ -2,7 +2,6 @@ from WebScraper.scraper import Scraper
 from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from Database.data_entities import Claim
 from GraphRAG.rag_pipeline import RAG_Pipeline
-from Validator.validator import Validator
 
 def main():
     #TEST 1: NEWS VERA IN INGLESE MA MOLTO GENERICA (TROPPO)
@@ -32,12 +31,6 @@ def main():
     preprocessed_sources = preprocessor.run_sources_pipe(sources)
 
     claim.add_sources(preprocessed_sources)
-    
-    #validator = Validator()
-    print(preprocessed_sources)
-    print("SPAZIO")
-    print(claim_summary)
-    #filtered_sources = validator.filter_sources(claim_summary, preprocessed_sources)
 
     rag = RAG_Pipeline()
     

@@ -225,14 +225,31 @@ class Scraper:
                     raise e
     
     def correlation_filter(self, claim, sources):
+        """
+        Filters a list of sources based on their correlation to a given claim using a language model.
+
+        Args:
+            claim (str): The claim that needs to be validated.
+            sources (list): A list of dictionaries, where each dictionary represents a source with keys like 'title', 'body', and 'url'.
+            
+        Returns:
+            list: A list of sources that are correlated to the provided claim, based on the model's response.
+
+        Raises:
+            None: The function doesn't raise any custom exceptions, but logs errors if there are issues processing the sources.
+        """
+
         correlated_sources = []
         
         for source in sources:
             try:
-                # Estrarre il contenuto del campo "body"
+                # Extract the content from the "body" field
                 source_body = source.get("body", "")[:2000]
-                
-                # Creazione del prompt per il modello
+
+                # Log the start of processing for the source
+                self.logger.info(f"Processing source: {source.get('title', 'No title')} - URL: {source.get('url', 'No URL')}")
+
+                # Create the prompt for the model
                 prompt = [
                     {"role": "system", "content": f"""
                     You are an expert validator tasked with determining whether a source found online is directly related to the provided claim ('{claim}'). 
@@ -246,22 +263,29 @@ class Scraper:
                     Use only 'Correlated' or 'Not Correlated' in your response."""},
                     {"role": "user", "content": source_body}
                 ]
-                
-                # Chiamata al modello
+
+                # Call the model
                 response = self.client.chat.completions.create(
                     messages=prompt,
                     model=self.model,
                 )
-                
-                # Estrazione del risultato
-                result = response.choices[0].message.content.strip()
 
-                # Aggiungi la fonte completa solo se correlata
+                # Extract the result
+                result = response.choices[0].message.content.strip()
+                
+                # Add the source to the list of correlated sources if it is related
                 if result == "Correlated":
                     correlated_sources.append(source)
+                    self.logger.info(f"Source '{source.get('title', 'No title')}' is correlated with the claim.")
+                else:
+                    self.logger.info(f"Source '{source.get('title', 'No title')}' is not correlated with the claim.")
+            
             except Exception as e:
-                # Log degli errori per debugging
-                print(f"Error processing source: {source}\n{e}")
+                # Log errors for debugging purposes
+                self.logger.error(f"Error processing source: {source}. Error: {e}")
+        
+        # Log the number of correlated sources found
+        self.logger.info(f"Number of correlated sources: {len(correlated_sources)}")
         
         return correlated_sources
     
