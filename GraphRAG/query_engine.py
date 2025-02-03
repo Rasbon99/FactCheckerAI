@@ -69,7 +69,7 @@ class QueryEngine:
             elif self.platform == "Windows":
                 try:
                     # Start the Ollama server in a separate process
-                    powershell_command = ('Start-Process "cmd" -ArgumentList "/c ollama serve" -Verb runAs -WindowStyle Hidden')
+                    powershell_command = ('Start-Process "cmd" -ArgumentList "/c ollama serve" -Verb runAs')
 
                     self.process = subprocess.Popen(["powershell", "-Command", powershell_command])
 

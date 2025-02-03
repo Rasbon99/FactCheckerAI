@@ -76,7 +76,7 @@ class GraphManager:
                     self.logger.error(f"An unexpected error occurred while starting Neo4j console: {e}")
             elif self.platform == "Windows":
                 try:
-                    powershell_command = ('Start-Process "cmd" -ArgumentList "/c neo4j console" -Verb runAs -WindowStyle Hidden')
+                    powershell_command = ('Start-Process "cmd" -ArgumentList "/c neo4j console" -Verb runAs')
 
                     self.process = subprocess.Popen(["powershell", "-Command", powershell_command])
 
