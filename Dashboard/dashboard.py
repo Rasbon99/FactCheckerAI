@@ -39,6 +39,11 @@ class DashboardPipeline:
         if not st.session_state["log_initialized"]:
             self.logger.info("Dashboard initialized.")
             st.session_state["log_initialized"] = True
+        
+        
+    
+          
+          
             
     def delete_chat_history(self):
         """
@@ -60,11 +65,11 @@ class DashboardPipeline:
         claim = Claim(claim_text)
         return claim
     
-    def is_numeric_claim(self, claim):
+    def is_numeric_claim(self, claim_text):
         """
         Checks if the claim consists only of numbers.
         """
-        return claim.isdigit()
+        return claim_text.isdigit()
 
     def get_response(self, claim):
         """
