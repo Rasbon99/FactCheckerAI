@@ -6,7 +6,6 @@ import psutil
 import socket
 import subprocess
 
-
 import numpy as np
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -76,7 +75,7 @@ class GraphManager:
                     self.logger.error(f"An unexpected error occurred while starting Neo4j console: {e}")
             elif self.platform == "Windows":
                 try:
-                    powershell_command = ('Start-Process "cmd" -ArgumentList "/c neo4j console" -Verb runAs -WindowStyle Hidden')
+                    powershell_command = ('Start-Process "cmd" -ArgumentList "/c neo4j console" -Verb runAs')
 
                     self.process = subprocess.Popen(["powershell", "-Command", powershell_command])
 
@@ -87,7 +86,6 @@ class GraphManager:
                     self.logger.error(f"An unexpected error occurred while starting Neo4j console: {e}")
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while starting Neo4j console with your platform, make sure you are on Windows or macOS: {e}")
-
 
     def _stop_console(self):
         """
@@ -141,7 +139,6 @@ class GraphManager:
             
             # Execute each query
             for query in delete_queries:
-                self.logger.info(f"Executing query: {query}")
                 self.graph.query(query)
 
             elapsed_time = time.time() - start_time
@@ -189,7 +186,6 @@ class GraphManager:
         MERGE (a)-[:HAS_TOPIC]->(t)
         """
         
-        self.logger.info(f"Starting data load from {data}...")
         try:
             start_time = time.time()
             self.graph.query(q_load_articles, params={"data": data})

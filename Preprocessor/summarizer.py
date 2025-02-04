@@ -31,9 +31,9 @@ class Summarizer:
         self.low_model = os.getenv("GROQ_LOW_MODEL_NAME")
         self.client = Groq()
 
-    def keywords_summarize(self, text, max_tokens=1024, temperature=0.5, stop=None):
+    def claim_title_summarize(self, text, max_tokens=1024, temperature=0.5, stop=None):
         """
-        Generates a summary in keywords for the given claim using the Groq API.
+        Generates a summary for the given claim using the Groq API.
 
         Args:
             text (str): The text to summarize.
@@ -53,8 +53,9 @@ class Summarizer:
         try:
             response = self.client.chat.completions.create(
                 messages=[
-                    {"role": "system", "content": """You are a summarizer of news, exctract only the news' title with the . 
-                                                     Provide only the string"""},
+                    {"role": "system", "content": """You are an AI designed to rephrase a claim into a concise, specific, and highly searchable query. 
+                                                    Focus on preserving all critical details such as names, dates, locations, or key terms, but avoid unnecessary words. 
+                                                    Provide only the text without any additional formatting only add at the beginning !g"""},
                     {"role": "user", "content": text}
                 ],
                 model=self.model,
@@ -65,12 +66,40 @@ class Summarizer:
 
             summary = response.choices[0].message.content.strip()
             self.logger.info("Summarization completed successfully.")
-            self.logger.info("Generated summary: %s...", summary[:200])
+            self.logger.info("Generated scraping summary: %s...", summary[:1000])
             return summary
 
         except Exception as e:
             self.logger.error("Error generating summary: %s", e)
             return None
+        
+    def generate_summary(self, text, max_tokens=1024, temperature=0.5, stop=None):
+        """
+        Generates a summary for the given text using the specified model.
+
+        Args:
+            text (str): The text to be summarized.
+            model (str): The model to be used for generating the summary.
+            temperature (float): Sampling temperature (default: 0.7).
+            max_tokens (int): Maximum number of tokens for the summary (default: 100).
+            stop (str or list): Stop sequence(s) for the model (default: None).
+
+        Returns:
+            str: The generated summary.
+        """
+        response = self.client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": """You are a summarizer, be specific. Don't use lists or bullet points. 
+                                                Provide only the string without specifying that it is a summary.
+                                                Translate in English."""},
+                {"role": "user", "content": text}
+            ],
+            model=self.low_model,
+            temperature=temperature,
+            max_completion_tokens=max_tokens,
+            stop=stop
+        )
+        return response.choices[0].message.content.strip()
 
     def summarize_texts(self, texts, max_tokens=1024, temperature=0.5, stop=None, token_cut = 20000, sleep_temperature=0.0003):
         """
@@ -98,18 +127,12 @@ class Summarizer:
             cutted_text = text[:token_cut]
 
             try:
-                response = self.client.chat.completions.create(
-                    messages=[
-                        {"role": "system", "content": """You are a summarizer, be specific. Don't use lists or bullet points. 
-                                                        Provide only the string without specifying that it is a summary"""},
-                        {"role": "user", "content": cutted_text}
-                    ],
-                    model=self.low_model,
-                    temperature=temperature,
-                    max_completion_tokens=max_tokens,
-                    stop=stop
-                )
-                summary = response.choices[0].message.content.strip()
+                summary = self.generate_summary(
+                                text=cutted_text,
+                                max_tokens=max_tokens,
+                                temperature=temperature,
+                                stop=stop
+                            )
                 if summary:
                     summaries.append(summary)
                     self.logger.info("Text %d summarized successfully.", index + 1)
