@@ -1,7 +1,11 @@
 from WebScraper.scraper import Scraper
 from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from Database.data_entities import Claim
+from Database.data_entities import Answer
 from GraphRAG.rag_pipeline import RAG_Pipeline
+
+from Dashboard.dashboard import DashboardPipeline
+
 
 def main():
     #TEST 1: NEWS VERA IN INGLESE MA MOLTO GENERICA (TROPPO)

@@ -14,3 +14,4 @@ transformers==4.48.2
 bs4==0.0.2
 duckduckgo_search==7.3.0
 torch==2.2.2
+luigi==3.6.0
