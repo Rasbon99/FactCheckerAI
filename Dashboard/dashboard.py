@@ -202,8 +202,10 @@ class DashboardPipeline:
 
 
         else:
-            st.title("💬 Fact-checking AI")
-            st.caption("🚀 Your personal assistant on fact-checking")
+            # title "FOX AI" with fox emoji
+            st.title("🦊 FOX AI")
+            st.caption("🔍 Your personal assistant on fact-checking")
+            
 
             if prompt := st.chat_input():
                 if self.is_numeric_claim(prompt):
