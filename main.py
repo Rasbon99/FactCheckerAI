@@ -3,7 +3,6 @@ from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from Database.data_entities import Claim
 from Database.data_entities import Answer
 from GraphRAG.rag_pipeline import RAG_Pipeline
-from Validator.validator import Validator
 from Dashboard.dashboard import DashboardPipeline
 
 def main():
