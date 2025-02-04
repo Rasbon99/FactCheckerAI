@@ -80,7 +80,7 @@ class Database:
         Raises:
             sqlite3.DatabaseError: If there is an error while creating the table.
         """
-        self.logger.info("Creating table with SQL: %s", create_table_sql)
+        self.logger.info("Creating table with SQL...")
         try:
             with self as conn:
                 cursor = conn.cursor()
@@ -102,8 +102,10 @@ class Database:
         Raises:
             sqlite3.DatabaseError: If there is an error during query execution.
         """
+
         masked_params = [param if not isinstance(param, (bytes, bytearray)) else "BLOB" for param in params]
         self.logger.info("Executing query: %s with params: %s", query, masked_params)
+
         try:
             with self as conn:
                 cursor = conn.cursor()
