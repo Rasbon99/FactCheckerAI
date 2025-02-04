@@ -1,6 +1,7 @@
 import subprocess
 import psutil
 import socket
+import platform
 
 from log import Logger
 
@@ -8,28 +9,44 @@ class OllamaClient:
     def __init__(self):
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.process = None
+        self.platform = platform.system()
     
     def __del__(self):
         self._stop_server()
-
+    
     def start_server(self):
         """
         Starts the Ollama server as a separate background process.
         """
         self.logger.info("Starting Ollama server...")
         try:
-            # Start the Ollama server in a separate process
-            self.process = subprocess.Popen(
-                ["ollama", "serve"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            self.logger.info("Ollama server started successfully as a background process.")
-        except FileNotFoundError:
-            self.logger.error("Error: 'ollama' command not found. Ensure Ollama is installed and in PATH.")
+            if self.platform == "Darwin":
+                try:
+                    # Avvia il comando "neo4j console" in un processo separato
+                    self.process = subprocess.Popen(
+                        ["ollama", "serve"],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True
+                    )
+                    self.logger.info("Ollama server started successfully as a background process.")
+                except FileNotFoundError:
+                    self.logger.error("Error: 'ollama' command not found. Ensure Ollama is installed and in PATH.")
+                except Exception as e:
+                    self.logger.error(f"An unexpected error occurred while starting ollama server: {e}")
+            elif self.platform == "Windows":
+                try:
+                    powershell_command = ('Start-Process "cmd" -ArgumentList "/c ollama serve" -Verb runAs')
+
+                    self.process = subprocess.Popen(["powershell", "-Command", powershell_command])
+
+                    self.logger.info("Ollama server started successfully as a background process.")
+                except FileNotFoundError:
+                    self.logger.error("Error: 'ollama' command not found. Ensure Ollama is installed and in PATH.")
+                except Exception as e:
+                    self.logger.error(f"An unexpected error occurred while starting Ollama console: {e}")
         except Exception as e:
-            self.logger.error(f"An unexpected error occurred while starting the server: {e}")
+            self.logger.error(f"An unexpected error occurred while starting Ollama server with your platform, make sure you are on Windows or macOS: {e}")
 
     def _stop_server(self):
         """
@@ -55,7 +72,7 @@ class OllamaClient:
                 self.process.kill()  # Force kill the process
             else:
                 self.logger.info("Ollama server stopped successfully.")
-        else:
+        elif self.platform != "Windows":
             self.logger.warning("Ollama server is not running.")
     
     def is_running(self):

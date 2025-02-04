@@ -111,7 +111,7 @@ class GraphManager:
                 self.process.kill()  # Force kill the process
             else:
                 self.logger.info("Neo4j console stopped successfully.")
-        else:
+        elif self.platform != "Windows":
             self.logger.warning("Neo4j console is not running.")
 
     def __del__(self):

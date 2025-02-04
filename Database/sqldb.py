@@ -104,7 +104,7 @@ class Database:
         """
 
         masked_params = [param if not isinstance(param, (bytes, bytearray)) else "BLOB" for param in params]
-        self.logger.info("Executing query: %s with params: %s", query, masked_params)
+        self.logger.info("Executing query: %s", query)
 
         try:
             with self as conn:

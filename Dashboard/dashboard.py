@@ -12,7 +12,6 @@ import io
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from Database.data_entities import Claim
 from Database.data_entities import Answer
-from Database.data_entities import Source
 from Database.sqldb import Database
 
 load_dotenv(dotenv_path='key.env')
