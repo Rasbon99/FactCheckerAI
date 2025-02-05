@@ -1,0 +1,17 @@
+python-dotenv==1.0.1
+streamlit==1.41.1
+psutil==6.1.1
+matplotlib==3.10.0
+networkx==3.4.2
+py2neo==2021.2.4
+langchain_neo4j==0.3.0
+langchain==0.3.17
+groq==0.16.0
+langchain_community==0.3.16
+langchain_ollama==0.2.3
+langchain_groq==0.2.4
+transformers==4.48.2
+bs4==0.0.2
+duckduckgo_search==7.3.0
+torch==2.2.2
+luigi==3.6.0

@@ -1,4 +1,4 @@
-# FactCheckAgent-AI
+# AI-Powered Fact-Checking
 
 ### Credits
 We would like to express our sincere gratitude to the NewsGuard team for granting access to the NewsGuard News Reliability Rating Database. This database has been a crucial resource in enhancing the quality and reliability of the data in our Fact-Checking project. 
