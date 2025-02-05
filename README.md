@@ -1,4 +1,30 @@
-# Fact Online eXamination AI
+# Fact Online eXamination AI (FOX AI)
+
+**Fact Online eXamination AI** (FOX AI) is an advanced application designed to evaluate the reliability of a news item through state-of-the-art deep fact-checking techniques, leveraging highly credible sources.
+
+Beginning with a claim provided by the user, related news articles are retrieved and assessed based on the reliability of their sources. 
+
+To ensure high accuracy in source selection, the system performs a dual filtering process:
+
+1. **NewsGuard Ranking Database**: Sources are initially filtered using the NewsGuard Ranking Database to prioritize reliability.
+2. **Correlation Testing**: An additional correlation test is conducted using an LLM to verify the relevance and alignment between the source and the claim to be validated. This step minimizes the risk of selecting irrelevant or misleading articles.
+
+These articles are then processed and linked within a GraphRAG framework. The Large Language Model (LLM) generates a contextual response to the claim.
+
+**Objectives**:
+
+- **Truthfulness Assessment**: Determine the truthfulness of the analyzed news item based on the identified sources.
+- **Transparent Explanations**: Provide clear and detailed explanations of the classification process, explicitly citing the sources used in the evaluation.
+- **Knowledge Graphs**: Generate knowledge graphs from the identified sources to enhance interpretability.
+- **Comprehensive Reporting**: Deliver a user-friendly, interactive report accessible via a dashboard.
+
+### Tools and Technologies
+
+- **Dashboard**: Built using **Streamlit** to provide an interactive and intuitive user interface.
+- **Large Language Models (LLMs)**: Hosted on **Groq Cloud** and **Ollama** for advanced reasoning and validation tasks.
+- **GraphRAG Framework**: Utilizes **Neo4j** for constructing and analyzing relational knowledge graphs.
+
+---
 
 ## Prerequisites
 To use this project, you need to configure the following tools:
@@ -115,7 +141,25 @@ AI_IMAGE_UI=Dashboard/AI_IMAGE.png
 CLAIM_PROCESSING_TIME=5
 ```
 
+---
+
+## Authors
+
+- [Leonardo Catello](https://github.com/Leonard2310)
+- [Lorenzo Manco](https://github.com/Rasbon99)
+- [Carmine Grosso](https://github.com/httpix3l)
+- [Aurora D'Ambrosio](https://github.com/AuroraD-99)
+- [Gennaro Iannicelli](https://github.com/Gennaro2806)
+
+---
+
 ## Credits
 We would like to express our sincere gratitude to the NewsGuard team for granting access to the NewsGuard News Reliability Rating Database. This database has been a crucial resource in enhancing the quality and reliability of the data in our Fact-Checking project. 
 
 For more information about NewsGuard and their work, visit their official website: https://www.newsguardtech.com.
+
+---
+
+## License
+
+This project is licensed under the [GNU General Public License v3.0](LICENSE). Refer to the LICENSE file for more information.
