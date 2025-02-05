@@ -85,16 +85,15 @@ class RAG_Pipeline:
             self.logger.info("Graph generation disabled by configuration.")
             return
         
-        output_file_topic=f"{output_folder}/graph_topic.jpg"
-        output_file_entity=f"{output_folder}/graph_entity.jpg"
-        output_file_site=f"{output_folder}/graph_site.jpg"
+        path_graph_topics=f"{output_folder}/graph_topics.jpg"
+        path_graph_entities=f"{output_folder}/graph_entities.jpg"
+        path_graph_sites=f"{output_folder}/graph_sites.jpg"
 
         self.logger.info("Starting graph generation...")
         try:
-            self.graph_manager.extract_and_save_graph(output_file_topic, output_file_entity, output_file_site)
+            self.graph_manager.extract_and_save_graph(path_graph_topics, path_graph_entities, path_graph_sites)
         except Exception as e:
             self.logger.error(f"Error during graph generation: {e}")
-            raise
 
     def query_similarity(self, query):
         """
@@ -142,14 +141,14 @@ class RAG_Pipeline:
             # Step 1: Load the data
             self.load_data(data)
 
-            claim_graph_folder = f"{self.graph_folder}/{claim_id}"
+            claim_graphs_folder = f"{self.graph_folder}/{claim_id}"
 
-            if not os.path.exists(claim_graph_folder):
-                os.makedirs(claim_graph_folder)
-                self.logger.info(f"Create '{claim_graph_folder}' folder.")
+            if not os.path.exists(claim_graphs_folder):
+                os.makedirs(claim_graphs_folder)
+                self.logger.info(f"Create '{claim_graphs_folder}' folder.")
 
             # Step 2: Generate and save graphs
-            self.generate_and_save_graphs(claim_graph_folder)
+            self.generate_and_save_graphs(claim_graphs_folder)
             
             # Fixed query for the pipeline
             query = """Based on the information provided in the articles, determine if the claim is confirmed or refuted. 
@@ -172,8 +171,8 @@ class RAG_Pipeline:
             total_time = time.time() - start_time
             self.logger.info(f"Pipeline completed successfully in {total_time:.2f} seconds.")
 
-            return result
+            return result, claim_graphs_folder
         except Exception as e:
             total_time = time.time() - start_time
             self.logger.error(f"Error during pipeline execution (total time: {total_time:.2f} seconds): {e}")
-            return None
+            return None, None

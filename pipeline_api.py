@@ -25,6 +25,6 @@ def process_text(input_text: InputText):
     claim.add_sources(preprocessed_sources)
     
     rag = RAG_Pipeline()
-    query_result = rag.run_pipeline(preprocessed_sources, claim.summary, claim.id)
+    query_result, graphs_folder = rag.run_pipeline(preprocessed_sources, claim.summary, claim.id)
     
-    return {"claim_title": claim_title, "claim_summary": claim_summary, "sources": preprocessed_sources, "query_result": query_result}
+    return {"claim_title": claim_title, "claim_summary": claim_summary, "sources": preprocessed_sources, "query_result": query_result, "graphs_folder": graphs_folder}
