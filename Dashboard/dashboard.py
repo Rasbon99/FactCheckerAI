@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import io
+import requests
 
 from PIL import Image
 import dotenv
@@ -20,8 +21,13 @@ class DashboardPipeline:
         
         dotenv.load_dotenv(env_file, override=True)
         
+        self.db_path = os.getenv('SQLITE_DB_PATH')
         self.logo = os.getenv('AI_IMAGE_UI')
-
+        self.controller_url = os.getenv('CONTROLLER_SERVER_URL')
+        
+        # Inizializzazione del database
+        self.db = Database(self.db_path)
+        
         # Inizializzazione del logger
         self.logger = Logger("DashboardLogger").get_logger()
         
@@ -44,8 +50,12 @@ class DashboardPipeline:
         """
         Clears all tables from the database.
         """
+        response = requests.post(f"{self.controller_url}/clean_conversations")
+        if response.status_code == 200:
+            st.sidebar.success("Chat history deleted successfully.")
+        else:
+            st.sidebar.success(f"Chat history elimination failed with status code {response.status_code}: {response.text}")
         
-        st.sidebar.success("Chat history deleted successfully.")
         
     def create_claim(self, claim_text):
         """

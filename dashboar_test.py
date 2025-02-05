@@ -22,3 +22,4 @@ def test_clean_conversations():
 
 if __name__ == "__main__":
     test_get_results()
+    test_clean_conversations()
