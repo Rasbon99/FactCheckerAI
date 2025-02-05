@@ -1,31 +1,36 @@
-import streamlit as st
-import pandas as pd
 import os
 import sys
-from log import Logger
-from datetime import datetime, timedelta
-from PIL import Image
-from dotenv import load_dotenv
 import time
 import io
 
+from PIL import Image
+import dotenv
+import pandas as pd
+import streamlit as st
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from Database.data_entities import Claim
-from Database.data_entities import Answer
 from Database.sqldb import Database
+from log import Logger
 
-load_dotenv(dotenv_path='key.env')
+dotenv.load_dotenv(dotenv_path='key.env')
 
 class DashboardPipeline:
-    def __init__(self, db_path=os.getenv('SQLITE_DB_PATH')):
+    def __init__(self, env_file="key.env"):
+        
+        dotenv.load_dotenv(env_file, override=True)
+        
+        self.db_path = os.getenv('SQLITE_DB_PATH')
+        self.logo = os.getenv('AI_IMAGE_UI')
+        
         # Inizializzazione del database
-        self.db = Database(db_path)
+        self.db = Database(self.db_path)
         
         # Inizializzazione del logger
-        self.logger = Logger("DashboardLogger", log_file=os.getenv('LOG_FILE')).get_logger()
+        self.logger = Logger("DashboardLogger").get_logger()
         
         # Carica immagine nella sidebar
-        self.image_sidebar = Image.open(os.getenv('AI_IMAGE_UI')).resize((300, 300))
+        self.image_sidebar = Image.open(self.logo).resize((300, 300))
 
         # Inizializza lo stato della sessione per i messaggi
         if "messages" not in st.session_state:
@@ -38,11 +43,6 @@ class DashboardPipeline:
         if not st.session_state["log_initialized"]:
             self.logger.info("Dashboard initialized.")
             st.session_state["log_initialized"] = True
-        
-        
-    
-          
-          
             
     def delete_chat_history(self):
         """
@@ -140,8 +140,6 @@ class DashboardPipeline:
             })
 
         return pd.DataFrame(conversations)
-
-        
             
     def run(self):
         with st.sidebar:
@@ -205,7 +203,6 @@ class DashboardPipeline:
             st.title("🦊 FOX AI")
             st.caption("🔍 Your personal assistant on fact-checking")
             
-
             if prompt := st.chat_input():
                 if self.is_numeric_claim(prompt):
                     st.chat_message("assistant").write(
@@ -226,7 +223,6 @@ class DashboardPipeline:
                         st.chat_message("assistant").image(image)
                     else:
                         st.chat_message("assistant").write("Waiting for your claim...")
-
 
 if __name__ == "__main__":
     dashboard = DashboardPipeline()

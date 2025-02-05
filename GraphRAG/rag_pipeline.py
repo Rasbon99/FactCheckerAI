@@ -1,6 +1,5 @@
-import time
-
 import dotenv
+import time
 
 from GraphRAG.graph_manager import GraphManager
 from GraphRAG.query_engine import QueryEngine

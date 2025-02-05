@@ -4,12 +4,10 @@ import dotenv
 from groq import Groq
 from ollama import Client
 from collections import defaultdict
-import numpy as np
 
 from Preprocessor.ollama_client import OllamaClient
 
 from log import Logger
-
 
 class NER:
     def __init__(self, env_file="key.env"):

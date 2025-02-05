@@ -1,11 +1,9 @@
+import io
 import uuid
+from PIL import Image
 
 from Database.sqldb import Database
-
 from log import Logger
-
-from PIL import Image
-import io
 
 class Claim:
     def __init__(self, text, title, summary, claim_id=None, db=None):
