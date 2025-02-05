@@ -3,10 +3,11 @@
 ## Prerequisites
 To use this project, you need to configure the following tools:
 
-1. **Neo4j**
-2. **Ollama**
-3. **NewsGuard Ranking Database**
-4. **Groq Cloud**
+1. **Python Libraries** 
+2. **Neo4j**
+3. **Ollama**
+4. **NewsGuard Ranking Database**
+5. **Groq Cloud**
 
 ### Step 1: Set Up the Environment
 1. Create a new Python virtual environment:
