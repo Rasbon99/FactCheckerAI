@@ -4,14 +4,15 @@ from pydantic import BaseModel
 from WebScraper.scraper import Scraper
 from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from Database.data_entities import Claim, Answer
+from Database.sqldb import Database
 from GraphRAG.rag_pipeline import RAG_Pipeline
 
-pipeline_app = FastAPI()
+backend_app = FastAPI()
 
 class InputText(BaseModel):
     text: str
 
-@pipeline_app.post("/process")
+@backend_app.post("/run_pipeline")
 def process_text(input_text: InputText):
     text = input_text.text
     
@@ -30,3 +31,9 @@ def process_text(input_text: InputText):
     answer = Answer(claim.id, query_result, graphs_folder)
     
     return {"claim_title": claim_title, "claim_summary": claim_summary, "sources": preprocessed_sources, "query_result": query_result, "graphs_folder": graphs_folder}
+
+@backend_app.post("/delete_db")
+def delete_database():
+    db = Database()
+    db.delete_all_conversations()
+    

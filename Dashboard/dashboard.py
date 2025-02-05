@@ -20,12 +20,8 @@ class DashboardPipeline:
         
         dotenv.load_dotenv(env_file, override=True)
         
-        self.db_path = os.getenv('SQLITE_DB_PATH')
         self.logo = os.getenv('AI_IMAGE_UI')
-        
-        # Inizializzazione del database
-        self.db = Database(self.db_path)
-        
+
         # Inizializzazione del logger
         self.logger = Logger("DashboardLogger").get_logger()
         
@@ -48,7 +44,7 @@ class DashboardPipeline:
         """
         Clears all tables from the database.
         """
-        self.db.delete_all_conversations()
+        
         st.sidebar.success("Chat history deleted successfully.")
         
     def create_claim(self, claim_text):
