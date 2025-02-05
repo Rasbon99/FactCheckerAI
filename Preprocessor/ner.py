@@ -81,12 +81,14 @@ class NER:
                 messages=[
                     {
                         "role": "system",
-                        "content": f"""Please normalize or unify the following entities: {input_entities}. For each entity, provide a single unified version. 
-                                    If an entity has multiple valid representations, variations, synonyms or acronyms, choose the most common or widely recognized one. 
-                                    Please return the unified version for each entity in the same order, separated by commas. 
-                                    If any of the entities are already unified or do not require normalization, simply return them as they are.
-                                    Do not include any additional information, note or context in the response.
-                                    Example: input: ['United States', 'USA', 'US', 'U.S.'] output: ['United States', 'United States', 'United States', 'United States']"""
+                        "content": f"""Please normalize or unify the following entities: {input_entities}. 
+                                        For each entity, return a single unified version. 
+                                        If an entity has multiple valid representations, variations, synonyms, or acronyms, select the most common or widely recognized form. 
+                                        Ensure the unified versions are returned in the same order as the input, separated by commas, and the total number of unified entities matches the number of input entities. 
+                                        If any entity is already unified or does not require normalization, return it as is. 
+                                        Do not include any extra information, notes, or context.
+                                        Example: 
+                                            Input: ['United States', 'USA', 'US', 'U.S.'] Output: ['United States', 'United States', 'United States', 'United States']"""
                     }
                 ],
                 model=self.model,
