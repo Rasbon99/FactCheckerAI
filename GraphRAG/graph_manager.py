@@ -7,6 +7,7 @@ import socket
 import subprocess
 
 import numpy as np
+import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -353,6 +354,8 @@ class GraphManager:
                 # Apply the overlap avoidance function
                 pos = avoid_overlap(pos, G)
 
+                matplotlib.use('Agg')
+                 
                 # Draw the graph
                 plt.figure(figsize=(12, 9))
                 nx.draw(
@@ -377,6 +380,7 @@ class GraphManager:
                 )
 
                 plt.savefig(output_file, dpi=500)
+                plt.close()
 
             # First graph: (Article)-[:HAS_TOPIC]->(Topic)
             query_topic = """
