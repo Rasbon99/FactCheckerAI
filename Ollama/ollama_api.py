@@ -12,7 +12,7 @@ def start():
 
 @ollama_app.post("/stop")
 def stop():
-    return ollama_server.stop_server()
+    return ollama_server._stop_server()
 
 @ollama_app.get("/status")
 def status():

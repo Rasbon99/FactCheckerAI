@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 from WebScraper.scraper import Scraper
 from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
-from Database.data_entities import Claim
+from Database.data_entities import Claim, Answer
 from GraphRAG.rag_pipeline import RAG_Pipeline
 
 pipeline_app = FastAPI()
@@ -26,5 +26,7 @@ def process_text(input_text: InputText):
     
     rag = RAG_Pipeline()
     query_result, graphs_folder = rag.run_pipeline(preprocessed_sources, claim.summary, claim.id)
+
+    answer = Answer(claim.id, query_result, graphs_folder)
     
     return {"claim_title": claim_title, "claim_summary": claim_summary, "sources": preprocessed_sources, "query_result": query_result, "graphs_folder": graphs_folder}
