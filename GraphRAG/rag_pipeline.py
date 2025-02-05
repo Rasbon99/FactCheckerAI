@@ -1,5 +1,6 @@
 import dotenv
 import time
+import os
 
 from GraphRAG.graph_manager import GraphManager
 from GraphRAG.query_engine import QueryEngine
@@ -40,6 +41,12 @@ class RAG_Pipeline:
         
         self.graph_manager.reset_data()
 
+        self.graph_folder = os.getenv("ASSET_PATH")
+
+        if not os.path.exists(self.graph_folder):
+            os.makedirs(self.graph_folder)
+            self.logger.info(f"Create '{self.graph_folder}' folder.")
+
     def load_data(self, data):
         """
         Loads the provided data into the graph via the GraphManager.
@@ -62,7 +69,7 @@ class RAG_Pipeline:
             self.logger.error(f"Error during data loading: {e}")
             raise
 
-    def generate_and_save_graphs(self, output_file_topic="graph_topic.jpg", output_file_entity="graph_entity.jpg", output_file_site="graph_site.jpg"):
+    def generate_and_save_graphs(self, output_folder):
         """
         Generates and saves graphs using the GraphManager.
 
@@ -77,6 +84,10 @@ class RAG_Pipeline:
         if not self.config.get("generate_graphs", True):
             self.logger.info("Graph generation disabled by configuration.")
             return
+        
+        output_file_topic=f"{output_folder}/graph_topic.jpg"
+        output_file_entity=f"{output_folder}/graph_entity.jpg"
+        output_file_site=f"{output_folder}/graph_site.jpg"
 
         self.logger.info("Starting graph generation...")
         try:
@@ -111,7 +122,7 @@ class RAG_Pipeline:
             self.logger.error(f"Error during similarity query execution: {e}")
             return None
 
-    def run_pipeline(self, data, claim):
+    def run_pipeline(self, data, claim, claim_id):
         """
         Executes the entire pipeline: load data, generate graphs, and respond to the query.
 
@@ -131,8 +142,14 @@ class RAG_Pipeline:
             # Step 1: Load the data
             self.load_data(data)
 
+            claim_graph_folder = f"{self.graph_folder}/{claim_id}"
+
+            if not os.path.exists(claim_graph_folder):
+                os.makedirs(claim_graph_folder)
+                self.logger.info(f"Create '{claim_graph_folder}' folder.")
+
             # Step 2: Generate and save graphs
-            self.generate_and_save_graphs()
+            self.generate_and_save_graphs(claim_graph_folder)
             
             # Fixed query for the pipeline
             query = """Based on the information provided in the articles, determine if the claim is confirmed or refuted. 
