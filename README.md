@@ -10,20 +10,12 @@ To use this project, you need to configure the following tools:
 5. **Groq Cloud**
 
 ### Step 1: Set Up the Environment
-1. Create a new Python virtual environment:
-   ```bash
-   python -m venv env
-   ```
-2. Activate the virtual environment:
-   - **Windows:**
+1. Create and activate a new virtual environment:
      ```bash
-     .\env\Scripts\activate
+     conda create --name myenv python=3.13.1
+     conda activate myenv
      ```
-   - **Mac/Linux:**
-     ```bash
-     source env/bin/activate
-     ```
-3. Install the required Python libraries:
+2. Install the required Python libraries:
    ```bash
    pip install -r requirements.txt
    ```
@@ -31,7 +23,7 @@ To use this project, you need to configure the following tools:
 ### Step 2: Neo4j Setup
 
 #### Download Neo4j
-Download Neo4j from the following link: [Neo4j Deployment Center](https://neo4j.com/deployment-center/).
+Download the Community Edition of Neo4j Graph Database Self-Managed from the following link: [Neo4j Deployment Center](https://neo4j.com/deployment-center/).
 
 #### Configure APOC
 1. Copy the `apoc-5.26.1-core.jar` file from the `labs` folder and paste it into the `plugins` folder. Rename the copied file to `apoc.jar`.
@@ -88,10 +80,10 @@ ollama pull gemma2-9b-it
   1. Follow the instructions in the "Add Environment Variables" section and the installation path of Ollama.
 
 ### Step 4: NewsGuard Ranking Database
-If available, request access to the NewsGuard Ranking Database by contacting their team. Once you receive the credentials, add the `CLIENT_API_ID` and `NG_API_KEY` variables to your environment configuration.
+If available, request access to the NewsGuard Ranking Database API by contacting their team. Once you receive the credentials.
 
-### Step 5: Register on GROQ Cloud
-1. Register on [GROQ Cloud](https://www.groq.com/).
+### Step 5: Register on Groq Cloud
+1. Register on [Groq Cloud](https://console.groq.com/).
 2. After registration, generate an API key and store it securely.
 
 ### Step 6: Create the `key.env` File
