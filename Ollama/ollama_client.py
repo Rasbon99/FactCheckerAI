@@ -75,16 +75,13 @@ class OllamaClient:
         elif self.platform != "Windows":
             self.logger.warning("Ollama server is not running.")
     
+    def _is_port_in_use(self, port):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex(("127.0.0.1", port)) == 0
+    
     def is_running(self):
         """
         Checks if the Ollama server is currently running.
         """
-        def is_port_in_use(port):
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                return s.connect_ex(("localhost", port)) == 0
-        
-        if self.process and psutil.pid_exists(self.process.pid):
-            return True
-        elif is_port_in_use(11434):  # Assuming Ollama runs on port 11434
-            return True
-        return False
+        return self._is_port_in_use(11434)
+    

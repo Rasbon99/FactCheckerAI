@@ -5,8 +5,7 @@ from groq import Groq
 from ollama import Client
 from collections import defaultdict
 import numpy as np
-
-from Preprocessor.ollama_client import OllamaClient
+import requests
 
 from log import Logger
 
@@ -21,9 +20,8 @@ class NER:
         self.model = os.getenv("GROQ_MODEL_NAME")
         self.client = Groq()
         
-        self.ollama_client = OllamaClient()
-        if not self.ollama_client.is_running():
-            self.ollama_client.start_server()
+        if not self._is_ollama_running():
+            raise ConnectionError("Ollama server is not running on localhost:11434. Please start it.")
         
         self.ollama = Client()
         self.model_ollama = os.getenv("MODEL_LLM_NER")
@@ -134,3 +132,15 @@ class NER:
 
         self.logger.info("Entities merged and sources updated successfully.")
         return sources
+    
+    #TODO Aggiungere al key.env l'IP
+    
+    def _is_ollama_running(self):
+        """Check if the Ollama server is active by querying the FastAPI API."""
+        try:
+            response = requests.get("http://localhost:8000/status", timeout=2)
+            if response.status_code == 200:
+                return response.json().get("running", False)
+            return False
+        except requests.exceptions.RequestException:
+            return False

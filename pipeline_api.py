@@ -5,12 +5,12 @@ from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from Database.data_entities import Claim
 from GraphRAG.rag_pipeline import RAG_Pipeline
 
-app = FastAPI()
+pipeline_app = FastAPI()
 
 class InputText(BaseModel):
     text: str
 
-@app.post("/process")
+@pipeline_app.post("/process")
 def process_text(input_text: InputText):
     text = input_text.text
     
