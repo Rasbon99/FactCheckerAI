@@ -125,7 +125,6 @@ SQLDB_PATH=Database/data/fact_checker.db
 
 # GRAPHRAG VARIABLES
 MODEL_LLM_NEO4J=phi3.5:latest
-MODEL_LLM_NER=gemma:latest
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USERNAME=
 NEO4J_PASSWORD=
