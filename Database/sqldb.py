@@ -1,8 +1,9 @@
 import os
 import sqlite3
-
+import glob
 import dotenv
 
+from PIL import Image
 from log import Logger
 
 class Database:
@@ -187,3 +188,57 @@ class Database:
         except sqlite3.DatabaseError as e:
             self.logger.error("Error deleting conversations.")
             raise e
+        
+    def get_history(self):
+        """
+        Retrieves the conversations from the database, including associated sources.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing the conversations and their sources.
+        """
+
+        # Query per ottenere le conversazioni con risposta e immagine
+        query = """
+        SELECT c.id, c.text, c.title, a.answer, a.graphs_folder 
+        FROM claims c
+        INNER JOIN answers a ON c.id = a.claim_id
+        """
+
+        rows = self.fetch_all(query)
+
+        if not rows:
+            return {}
+
+        conversations = []
+
+        for row in rows:
+            claim_id = row[0]
+            
+            # Query per ottenere le sources associate al claim
+            sources_query = """
+            SELECT title, url, body 
+            FROM sources 
+            WHERE claim_id = ?
+            """
+            sources_rows = self.fetch_all(sources_query, (claim_id,))
+
+            # Formattare le sources come una lista di dizionari
+            sources = [{"title": s[0], "url": s[1], "body": s[2]} for s in sources_rows]
+
+            images = []
+            graphs_folder = row[4]
+            if graphs_folder and os.path.isdir(graphs_folder):
+                jpg_files = glob.glob(os.path.join(graphs_folder, "*.jpg"))
+            else:
+                self.logger.warning("La cartella dei grafici non esiste o non è stata specificata.")
+
+            conversations.append({
+                "id": claim_id,
+                "claim": row[1],
+                "title": row[2],
+                "answer": row[3],
+                "images": jpg_files,
+                "sources": sources 
+            })
+
+        return conversations

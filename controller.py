@@ -3,6 +3,10 @@ import requests
 from fastapi import FastAPI, HTTPException
 from dotenv import load_dotenv
 from log import Logger 
+from pydantic import BaseModel
+
+class InputText(BaseModel):
+    text: str
 
 # Load environment variables from the key.env file
 load_dotenv("key.env")
@@ -22,12 +26,12 @@ class Controller:
 
         # Register endpoints using add_api_route
         self.app.add_api_route(
-            path="/results", 
-            endpoint=self.get_results, 
-            methods=["GET"],
-            response_model=dict, 
-            summary="Call backend run_pipeline API",
-            description="Endpoint that accepts a 'text' parameter and passes it to the backend via the /run_pipeline API."
+        path="/results", 
+        endpoint=self.post_results, 
+        methods=["POST"],
+        response_model=dict, 
+        summary="Call backend run_pipeline API",
+        description="Endpoint that accepts a 'text' parameter in the request body and passes it to the backend via the /run_pipeline API."
         )
         self.app.add_api_route(
             path="/clean_conversations", 
@@ -37,16 +41,31 @@ class Controller:
             summary="Clean conversations",
             description="Endpoint that triggers a cleanup of conversations by calling the backend's /delete_db endpoint."
         )
+        self.app.add_api_route(
+            path="/conversations", 
+            endpoint=self.get_conversation, 
+            methods=["GET"],
+            response_model=dict, 
+            summary="Get history of conversations",
+            description="Endpoint that returns conversations by calling the backend's /get_history endpoint."
+        )
+
 
         # Start the Ollama and Neo4j servers on controller startup
         self._start_servers()
 
-    def get_results(self, text: str):
+    def post_results(self, input_text: InputText):
         """
-        Endpoint that accepts a 'text' parameter and passes it to the backend via the /run_pipeline API.
-        Example call: GET /results?text=This+is+the+text+to+process
+        Endpoint POST che accetta un parametro 'text' nel body della richiesta e lo passa al backend tramite l'API /run_pipeline.
+        Esempio di chiamata: POST /results con body JSON: {"text": "This is the text to process"}
+        
+        Args:
+            text (str): Il testo da processare.
+            
+        Returns:
+            dict: Un dizionario contenente lo status_code e la risposta JSON del backend.
         """
-        data = {"text": text}
+        data = {"text": input_text.text}
         try:
             response = requests.post(f"{self.backend_server_url}/run_pipeline", json=data)
             if response.status_code != 200:
@@ -74,6 +93,25 @@ class Controller:
             return {}
         except Exception as e:
             self.logger.error(f"Error calling delete_db: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+        
+    def get_conversation(self):
+        """
+        Endpoint that returns conversations by calling the backend's /get_history endpoint.
+        """
+        try:
+            response = requests.get(f"{self.backend_server_url}/get_history")
+            if response.status_code != 200:
+                self.logger.error(f"Error from backend on get_history: {response.text}")
+                raise HTTPException(status_code=response.status_code, detail=response.text)
+            # Return an empty response
+            response = {
+                "status_code": response.status_code,
+                "response": response.json()
+            }
+            return response
+        except Exception as e:
+            self.logger.error(f"Error calling get_history: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
     def _start_servers(self):

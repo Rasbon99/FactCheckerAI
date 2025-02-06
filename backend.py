@@ -9,6 +9,9 @@ from GraphRAG.rag_pipeline import RAG_Pipeline
 
 backend_app = FastAPI()
 
+db = Database()
+
+
 class InputText(BaseModel):
     text: str
 
@@ -34,6 +37,9 @@ def process_text(input_text: InputText):
 
 @backend_app.post("/delete_db")
 def delete_database():
-    db = Database()
     db.delete_all_conversations()
-    
+
+@backend_app.get("/get_history")
+def delete_database():
+    history = db.get_history()
+    return history
