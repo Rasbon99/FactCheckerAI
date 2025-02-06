@@ -1,7 +1,5 @@
 import os
 import sys
-import time
-import io
 import requests
 
 from PIL import Image
@@ -11,26 +9,19 @@ import glob
 import streamlit as st
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from Database.data_entities import Claim
-from Database.sqldb import Database
 from log import Logger
-
-dotenv.load_dotenv(dotenv_path='key.env')
 
 class DashboardPipeline:
     def __init__(self, env_file="key.env"):
         
         dotenv.load_dotenv(env_file, override=True)
+        self.logger = Logger(self.__class__.__name__).get_logger()
         
-        self.db_path = os.getenv('SQLITE_DB_PATH')
         self.logo = os.getenv('AI_IMAGE_UI')
-        self.controller_url = os.getenv('CONTROLLER_SERVER_URL', 'http://127.0.0.1:8003')
-        
-        # Inizializzazione del database
-        self.db = Database(self.db_path)
+        self.controller_url = os.getenv('CONTROLLER_SERVER_URL', 'http://127.0.0.1:8003')       
         
         # Inizializzazione del logger
-        self.logger = Logger("DashboardLogger").get_logger()
+        self.logger = Logger(self.__class__.__name__).get_logger()
         
         # Carica immagine nella sidebar
         self.image_sidebar = Image.open(self.logo).resize((300, 300))
@@ -39,13 +30,6 @@ class DashboardPipeline:
         if "messages" not in st.session_state:
             st.session_state["messages"] = [{"role": "assistant", "content": "To begin, state your claim..."}]
 
-        # Inizializza il logger solo una volta
-        if "log_initialized" not in st.session_state:
-            st.session_state["log_initialized"] = False
-
-        if not st.session_state["log_initialized"]:
-            self.logger.info("Dashboard initialized.")
-            st.session_state["log_initialized"] = True
             
     def delete_chat_history(self):
         """
