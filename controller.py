@@ -17,9 +17,9 @@ class Controller:
         self.logger = Logger(self.__class__.__name__).get_logger()
 
         # Read the server URLs from environment variables
-        self.ollama_server_url = os.getenv("OLLAMA_SERVER_URL", "http://127.0.0.1:8000")
-        self.neo4j_server_url = os.getenv("NEO4J_SERVER_URL", "http://127.0.0.1:8002")
-        self.backend_server_url = os.getenv("BACKEND_SERVER_URL", "http://127.0.0.1:8001")
+        self.ollama_server_url = os.getenv("OLLAMA_API_URL", "http://127.0.0.1:8000")
+        self.neo4j_server_url = os.getenv("NEO4J_API_URL", "http://127.0.0.1:8002")
+        self.backend_server_url = os.getenv("BACKEND_API_URL", "http://127.0.0.1:8001")
 
         # Create FastAPI instance to expose endpoints
         self.app = FastAPI()

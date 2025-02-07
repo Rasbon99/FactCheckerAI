@@ -16,5 +16,5 @@ def stop():
 
 @ollama_app.get("/status")
 def status():
-    return {"running": ollama_server.is_running()}
+    return ollama_server.is_running()
     

@@ -16,4 +16,4 @@ def stop():
 
 @neo4j_app.get("/status")
 def status():
-    return {"running": neo4j_server.is_running()}
+    return neo4j_server.is_running()

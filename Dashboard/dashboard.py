@@ -25,7 +25,7 @@ class DashboardPipeline:
         dotenv.load_dotenv(env_file, override=True)
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.logo = os.getenv('AI_IMAGE_UI')
-        self.controller_url = os.getenv('CONTROLLER_SERVER_URL', 'http://127.0.0.1:8003')
+        self.controller_url = os.getenv('CONTROLLER_API_URL', 'http://127.0.0.1:8003')
 
         # Load image into the sidebar
         self.image_sidebar = Image.open(self.logo).resize((100, 100))
