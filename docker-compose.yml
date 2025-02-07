@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   neo4j:
-    image: neo4j:5.11.0-community
+    image: neo4j:5.26.2-community-ubi9
     ports:
       - "7474:7474"  # Porta per il browser di Neo4j
       - "7687:7687"  # Porta per il protocollo Bolt
@@ -20,6 +20,10 @@ services:
       - "11434:11434"  # Mappa la porta esposta da Ollama
     env_file:
       - key.env
+    volumes:
+      - ./ollama_data:/root/.ollama
+      - ./ollama_entrypoint.sh:/ollama_entrypoint.sh
+    entrypoint: ["/bin/bash", "/ollama_entrypoint.sh"]
 
   backend:
     build: .
