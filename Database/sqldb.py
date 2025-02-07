@@ -2,8 +2,9 @@ import os
 import sqlite3
 import glob
 import dotenv
+import os
+import shutil
 
-from PIL import Image
 from log import Logger
 
 class Database:
@@ -22,6 +23,7 @@ class Database:
         try:
             dotenv.load_dotenv(env_file, override=True)
             self.db_file = os.environ["SQLDB_PATH"]
+            self.assets_dir = os.environ["ASSET_PATH"]
         except KeyError as e:
             self.logger.error("Environment variable SQLDB_PATH not found.")
             raise e
@@ -168,16 +170,24 @@ class Database:
         except sqlite3.DatabaseError as e:
             self.logger.error("Error fetching record.")
             raise e
-        
+
     def delete_all_conversations(self):
         """
-        Deletes data from tables "claims", "answers", and "sources".
-        
+        Deletes data from tables "claims", "answers", and "sources", and cleans up all images in subdirectories of the assets folder.
+
+        Args:
+            None
+
         Raises:
             sqlite3.DatabaseError: If there is an error during the deletion process.
+            OSError: If there is an error during the image deletion process.
+
+        Returns:
+            None
         """
-        self.logger.info("Deleting all conversations.")
+        self.logger.info("Deleting all conversations and cleaning up subdirectories in assets.")
         try:
+            # Deleting conversations from the database
             with self as conn:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM claims;")
@@ -185,8 +195,26 @@ class Database:
                 cursor.execute("DELETE FROM sources;")
                 conn.commit()
             self.logger.info("All conversations deleted successfully.")
+
+            # Clean up subdirectories in the assets folder
+            if os.path.isdir(self.assets_dir):
+                for root, dirs, _ in os.walk(self.assets_dir, topdown=False):
+                    # Remove all subdirectories
+                    for name in dirs:
+                        dir_path = os.path.join(root, name)
+                        try:
+                            shutil.rmtree(dir_path)  # Recursively delete the directory and its contents
+                            self.logger.info(f"Deleted directory and its contents: {dir_path}")
+                        except OSError as e:
+                            self.logger.error(f"Error deleting directory {dir_path}: {e}")
+            else:
+                self.logger.warning(f"Assets folder does not exist: {self.assets_dir}")
+                
         except sqlite3.DatabaseError as e:
             self.logger.error("Error deleting conversations.")
+            raise e
+        except OSError as e:
+            self.logger.error("Error cleaning up assets.")
             raise e
         
     def get_history(self):

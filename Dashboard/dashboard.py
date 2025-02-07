@@ -1,10 +1,13 @@
 import os
 import sys
 import requests
+
 from PIL import Image
 import dotenv
 import glob
 import streamlit as st
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from log import Logger
 
 class DashboardPipeline:
