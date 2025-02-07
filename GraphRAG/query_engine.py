@@ -85,8 +85,6 @@ class QueryEngine:
         except Exception as e:
             self.logger.error(f"Error during similarity query: {e}")
             return None
-        
-    #TODO Aggiungere al key.env l'IP
     
     def _is_ollama_running(self):
         """Check if the Ollama server is active by querying the FastAPI API."""

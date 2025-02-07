@@ -319,14 +319,31 @@ class DashboardPipeline:
             st.sidebar.title("Chat History")
             st.sidebar.text_input("Search claims...", key="search_query", placeholder="Type to search")
 
+            # Get conversations and filter them
             conversations = self.get_conversations()
-            filtered_conversations = [convo for convo in conversations if st.session_state.search_query.lower() in convo.get("title", "").lower()]
+            filtered_conversations = [
+                convo for convo in conversations if st.session_state.search_query.lower() in convo.get("title", "").lower()
+            ]
             filtered_conversations = filtered_conversations[::-1]  # Reverse order to show the latest first
+
+            # Show limited or full conversation list
+            if 'show_all_conversations' not in st.session_state:
+                st.session_state.show_all_conversations = False
+
+            max_display = 5
+            if not st.session_state.show_all_conversations:
+                filtered_conversations = filtered_conversations[:max_display]
 
             for i, convo in enumerate(filtered_conversations):
                 if st.sidebar.button(convo['title'][:50] + ("..." if len(convo['title']) > 50 else ""), key=f"convo_{i}"):
                     st.session_state.view_mode = "history"
                     st.session_state.selected_conversation = convo
+                    st.rerun()
+
+            # Show toggle button for conversations
+            if len(filtered_conversations) > max_display or st.session_state.show_all_conversations:
+                if st.sidebar.button("Show Less Conversations" if st.session_state.show_all_conversations else "Show More Conversations"):
+                    st.session_state.show_all_conversations = not st.session_state.show_all_conversations
                     st.rerun()
 
 if __name__ == "__main__":

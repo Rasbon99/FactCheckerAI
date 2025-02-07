@@ -343,8 +343,6 @@ class GraphManager:
         except Exception as e:
             self.logger.error(f"Error during graph extraction and saving: {e}")
 
-    #TODO Aggiungere al key.env l'IP
-
     def _is_neo4j_running(self):
         """Check if the Neo4j server is active by querying its status endpoint."""
         try:
