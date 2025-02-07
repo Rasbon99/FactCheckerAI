@@ -348,7 +348,7 @@ class GraphManager:
     def _is_neo4j_running(self):
         """Check if the Neo4j server is active by querying its status endpoint."""
         try:
-            response = requests.get("http://localhost:7474", timeout=2)  # Default Neo4j HTTP port
+            response = requests.get(os.getenv("NEO4J_SERVER_URL"), timeout=2)  # Default Neo4j HTTP port
             return response.status_code == 200
         except requests.exceptions.RequestException:
             return False

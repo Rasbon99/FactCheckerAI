@@ -214,7 +214,7 @@ class DashboardPipeline:
                 # Mostra tutte le sources disponibili in una text_area
                 if conversation['sources']:
                     sources_text = "\n\n".join(
-                        [f"🔹 Title: {f"[{src['title']}]({src['url']})"}" for src in conversation['sources']]
+                        [f"🔹 Title: [{src['title']}]({src['url']})" for src in conversation['sources']]
                     )
                 else:
                     sources_text = "No sources available for this claim."
@@ -239,7 +239,7 @@ class DashboardPipeline:
             st.title("🦊 FOX AI")
             st.caption("🔍 Your personal assistant on fact-checking")
             
-            if prompt := st.chat_input():
+            if prompt := st.chat_input(max_chars=800):
                 if self.is_numeric_claim(prompt):
                     st.chat_message("assistant").write(
                         "This claim is invalid because it consists only of numbers. The conversation will be deleted.")

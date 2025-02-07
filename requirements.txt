@@ -10,9 +10,8 @@ groq==0.16.0
 langchain_community==0.3.16
 langchain_ollama==0.2.3
 langchain_groq==0.2.4
-transformers==4.48.2
 bs4==0.0.2
 duckduckgo_search==7.3.0
-torch==2.2.2
 uvicorn==0.34.0
 fastapi==0.115.8
+scipy==1.15.1

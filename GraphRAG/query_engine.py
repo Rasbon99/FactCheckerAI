@@ -38,7 +38,7 @@ class QueryEngine:
         # Model configuration
         self.model_name = os.environ["MODEL_LLM_NEO4J"]
         self.modelGroq_name = os.environ["GROQ_MODEL_NAME"]
-        self.embedding_model = OllamaEmbeddings(model=self.model_name)
+        self.embedding_model = OllamaEmbeddings(model=self.model_name, base_url=os.getenv("OLLAMA_SERVER_URL"))
         self.llm_model = ChatGroq(model=self.modelGroq_name)
         self.index_name = index_name
 
@@ -91,10 +91,8 @@ class QueryEngine:
     def _is_ollama_running(self):
         """Check if the Ollama server is active by querying the FastAPI API."""
         try:
-            response = requests.get("http://localhost:8000/status", timeout=2)
-            if response.status_code == 200:
-                return response.json().get("running", False)
-            return False
+            response = requests.get(os.getenv("OLLAMA_SERVER_URL"), timeout=2)
+            return response.status_code == 200
         except requests.exceptions.RequestException:
             return False
         
