@@ -30,7 +30,7 @@ class GraphManager:
         self.platform = platform.system()
 
         if not self._is_neo4j_running():
-            raise ConnectionError("Neo4j server is not running on localhost:7474. Please start it.")
+            raise ConnectionError("Neo4j server is not running. Please start it.")
         
         # Neo4j connection parameters
         self.neo4j_url = os.environ["NEO4J_URI"].replace("http", "bolt")

@@ -1,150 +1,115 @@
 import os
 import sys
 import requests
-
 from PIL import Image
 import dotenv
-import pandas as pd
 import glob
 import streamlit as st
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from log import Logger
 
 class DashboardPipeline:
     def __init__(self, env_file="key.env"):
-        
         dotenv.load_dotenv(env_file, override=True)
         self.logger = Logger(self.__class__.__name__).get_logger()
-        
         self.logo = os.getenv('AI_IMAGE_UI')
-        self.controller_url = os.getenv('CONTROLLER_SERVER_URL', 'http://127.0.0.1:8003')       
-        
-        # Inizializzazione del logger
-        self.logger = Logger(self.__class__.__name__).get_logger()
-        
-        # Carica immagine nella sidebar
-        self.image_sidebar = Image.open(self.logo).resize((300, 300))
+        self.controller_url = os.getenv('CONTROLLER_SERVER_URL', 'http://127.0.0.1:8003')
 
-        # Inizializza lo stato della sessione per i messaggi
+        # Carica immagine nella sidebar
+        self.image_sidebar = Image.open(self.logo).resize((100, 100))
+
+        # Inizializzazione stato sessione
+        self._initialize_session_state()
+
+    def _initialize_session_state(self):
+        """Inizializza le variabili dello stato della sessione."""
         if "messages" not in st.session_state:
             st.session_state["messages"] = [{"role": "assistant", "content": "To begin, state your claim..."}]
+        if "view_mode" not in st.session_state:
+            st.session_state.view_mode = "chat"  # Modalità di visualizzazione di default
 
-            
+    def _log_error(self, msg):
+        """Gestione centralizzata degli errori."""
+        self.logger.error(msg)
+        st.error(msg)
+
     def delete_chat_history(self):
-        """
-        Clears all tables from the database.
-        """
-        response = requests.post(f"{self.controller_url}/clean_conversations")
-        if response.status_code == 200:
+        """Clear chat history."""
+        try:
+            response = requests.post(f"{self.controller_url}/clean_conversations")
+            response.raise_for_status()
             st.sidebar.success("Chat history deleted successfully.")
-        else:
-            st.sidebar.success(f"Chat history elimination failed with status code {response.status_code}: {response.text}")
-        
-    
+        except requests.exceptions.RequestException as e:
+            self._log_error(f"Error deleting chat history: {e}")
+
     def is_numeric_claim(self, claim_text):
-        """
-        Checks if the claim consists only of numbers.
-        """
+        """Checks if the claim consists only of numbers."""
         return claim_text.isdigit()
 
     def get_response(self, claim):
-        """
-        Esegue una richiesta POST all'API /results, inviando il claim nel corpo della richiesta. 
-        L'API ritorna un JSON contenente "status" e "response". Dal dizionario response vengono 
-        estratti:
-            - claim_title
-            - claim_summary
-            - query_result
-            - sources: da ogni elemento della lista vengono presi solo "title" e "url"
-            - graphs_folder: viene letta la cartella e vengono caricati tutti i file .jpg al suo interno,
-                            convertendoli in immagini (PIL.Image)
-                            
-        Durante l'esecuzione viene mostrato uno spinner con Streamlit.
-        
-        Args:
-            claim (Claim): L'oggetto claim da inviare all'API.
-            
-        Returns:
-            tuple: (claim_title, claim_summary, query_result, sources, images)
-        """
+        """Request response from controller."""
         with st.spinner("Processing claim..."):
             try:
-                # Effettua la richiesta POST all'endpoint /results, inviando il claim nel body della richiesta
                 response = requests.post(
                     f"{self.controller_url}/results",
-                    json={"text": claim}  # Assicurati che il claim sia serializzabile in JSON
+                    json={"text": claim}
                 )
                 response.raise_for_status()
-            except Exception as e:
-                self.logger.error(f"Errore nella richiesta POST: {e}")
-                st.error("Si è verificato un errore nell'elaborazione del claim.")
-                return None
-            
-            data = response.json()
-            
-            result = data.get("response", {})
+                data = response.json()
+                result = data.get("response", {})
 
-        # Estrazione dei dati dalla risposta
-        claim_title   = result.get("claim_title", "")
-        claim_summary = result.get("claim_summary", "")
-        query_result  = result.get("query_result", "")
-        
-        # Per i sources, estrae solo "title" e "url" da ogni dizionario della lista
-        sources = [
-            {"title": src.get("title", ""), "url": src.get("url", "")}
-            for src in result.get("sources", [])
-        ]
-        
-        # Per graphs_folder: accede alla cartella e raccoglie tutte le immagini .jpg
+                claim_title = result.get("claim_title", "")
+                claim_summary = result.get("claim_summary", "")
+                query_result = result.get("query_result", "")
+                sources = [{"title": src.get("title", ""), "url": src.get("url", "")} for src in result.get("sources", [])]
+
+                images = self._load_images_from_folder(result.get("graphs_folder", ""))
+                return {'title': claim_title, 'summary': claim_summary, 'response': query_result, 'sources': sources, 'images': images}
+            except requests.exceptions.RequestException as e:
+                self._log_error(f"Error in POST request: {e}")
+                return None
+
+    def _load_images_from_folder(self, folder):
+        """Carica immagini dalla cartella specificata."""
         images = []
-        graphs_folder = result.get("graphs_folder", "")
-        if graphs_folder and os.path.isdir(graphs_folder):
-            jpg_files = glob.glob(os.path.join(graphs_folder, "*.jpg"))
-            for file in jpg_files:
+        if folder and os.path.isdir(folder):
+            for file in glob.glob(os.path.join(folder, "*.jpg")):
                 try:
                     img = Image.open(file)
                     images.append(img)
                 except Exception as e:
-                    self.logger.error(f"Errore nell'aprire l'immagine {file}: {e}")
+                    self.logger.error(f"Error opening image {file}: {e}")
         else:
-            self.logger.warning("La cartella dei grafici non esiste o non è stata specificata.")
-        
-        return {'title': claim_title, 'summary' : claim_summary, 'response' : query_result, 'sources' : sources, 'images' : images}
-    
+            self.logger.warning(f"Graphs folder does not exist or was not specified: {folder}")
+        return images
+
+    def display_message(self, role, message, avatar="🦊"):
+        """Gestisce la visualizzazione dei messaggi di chat."""
+        chat_msg = st.chat_message(role, avatar=avatar)
+        chat_msg.write(message)
+
     def display_claim_response(self, response):
         """
-        Visualizza la risposta del sistema nella chat dell'assistente in Streamlit.
-
-        Args:
-            response (dict): Dizionario contenente i seguenti campi:
-                - title (str): Il titolo del claim.
-                - summary (str): Il riassunto del claim.
-                - response (str): Il risultato della query.
-                - sources (list): Lista di dizionari con chiavi "title" e "url".
-                - images (list): Lista di immagini PIL da visualizzare.
+        Displays the system's response in the chat interface in Streamlit.
         """
-        # Creiamo il messaggio dell'assistente nella chat
-        assistant_message = st.chat_message("assistant")
+        assistant_message = st.chat_message("assistant", avatar="🦊")
 
-        # Stampiamo il titolo in grande
-        assistant_message.markdown(f"<h2>{response['title'][2:]}</h2>", unsafe_allow_html=True)
+        # Styling per il titolo
+        title_html = f"<h2 style='color: rgba(0, 0, 0, 0.9); font-size: 1.5em; line-height: 1.4;'>{response['title'][2:]}</h2>"
+        assistant_message.markdown(title_html, unsafe_allow_html=True)
 
-        # Stampiamo il summary in trasparenza
-        assistant_message.markdown(
-            f"<p style='color: rgba(0, 0, 0, 0.6); font-size: 1.1em;'>{response['summary']}</p>", 
-            unsafe_allow_html=True
-        )
+        # Styling per il sommario
+        summary_html = f"<p style='color: rgba(0, 0, 0, 0.6); font-size: 1.1em; line-height: 1.6;'>{response['summary']}</p>"
+        assistant_message.markdown(summary_html, unsafe_allow_html=True)
 
-        # Stampiamo la query result in evidenza
-        assistant_message.write(f"**{response['response']}**")
+        # Risposta principale
+        assistant_message.write(f"{response['response']}")
 
-         # Area a tendina per visualizzare le fonti nella chat dell'assistente
-        with assistant_message.expander("📌 Fonti"):
+        # Se ci sono fonti, mostra nell'expander
+        with assistant_message.expander("📌 Sources"):
             for src in response.get('sources', []):
                 st.markdown(f"- [{src['title']}]({src['url']})")
 
-        # Visualizzazione delle immagini affiancate nella chat dell'assistente
+        # Gestione delle immagini
         images = response.get('images', [])
         if images:
             with assistant_message.container():
@@ -153,109 +118,114 @@ class DashboardPipeline:
                     col.image(img)
 
     def get_conversations(self):
+        """Recupera le conversazioni."""
         with st.spinner("Processing conversations..."):
             try:
-                # Effettua la richiesta GET all'endpoint /conversations
-                response = requests.get(
-                    f"{self.controller_url}/conversations")
+                response = requests.get(f"{self.controller_url}/conversations")
                 response.raise_for_status()
-            except Exception as e:
-                self.logger.error(f"Errore nella richiesta GET: {e}")
-                st.error("Si è verificato un errore nell'elaborazione delle conversazioni.")
-                return None
-        
-        data = response.json()
+                data = response.json()
+                return data.get("response", [])
+            except requests.exceptions.RequestException as e:
+                self._log_error(f"Error in GET request: {e}")
+                return []
 
-        return data.get("response", {})
-    
-    def display_images(self, images):
-        # Visualizzazione delle immagini affiancate nella chat dell'assistente
-        if images:
-            cols = st.columns(len(images))
-            for col, img in zip(cols, images):
-                col.image(img)
-       
-    def run(self):
-        with st.sidebar:
-            st.title("Menu")
-            option = st.radio("Choose an action:", ["New conversation", "View conversations"])
-            st.image(self.image_sidebar)
-            if st.button("Delete chat history"):
-                self.delete_chat_history()
-            
-            if st.button("Exit Dashboard"):
-                self.logger.info("Dashboard exited by user.")
-                st.sidebar.warning("Exiting application...")
-                os._exit(0)  # Termina il processo immediatamente
-                
-
-        if option == "View conversations":
-            df_weekly = self.get_conversations()  # Recupera le conversazioni dal database
-            
-            df_weekly = pd.DataFrame(df_weekly)
-            
-            if not df_weekly.empty:
-                st.sidebar.subheader("Past conversations:")
-                
-                # Crea una lista di opzioni per il selectbox: solo i claim
-                conversation_list = df_weekly[['id', 'title']].sort_values(by='id', ascending=False)
-                conversation_options = list(conversation_list['title'])
-                
-                selected_conversation = st.sidebar.selectbox("Select a conversation", conversation_options)
-                
-                # Estrai l'ID selezionato
-                selected_id = conversation_list[conversation_list['title'] == selected_conversation]['id'].values[0]
-                
-                # Recupera la conversazione corrispondente
-                conversation = df_weekly[df_weekly['id'] == selected_id].iloc[0]
-
-                st.write(f"**❓ CLAIM**: {conversation['claim']}")
-
-                # Mostra tutte le sources disponibili in una text_area
-                if conversation['sources']:
-                    sources_text = "\n\n".join(
-                        [f"🔹 Title: [{src['title']}]({src['url']})" for src in conversation['sources']]
-                    )
-                else:
-                    sources_text = "No sources available for this claim."
-
-                st.write("**📚 SOURCES:**")
-                
-                st.markdown(sources_text)
-
-                st.write("**🤖 RESPONSE**:")
-                st.write(conversation['answer'])
-
-                if conversation['images'] is not None:
-                    self.display_images(conversation['images'])
-            
+    def display_conversation(self, conversation):
+        """Visualizza una conversazione storica in un'unica risposta."""
+        # Funzione centralizzata per visualizzare i messaggi
+        def display_message(role, content, avatar=None):
+            if role == "assistant":
+                message = st.chat_message("assistant", avatar=avatar)
             else:
-                st.sidebar.info("⚠️ No conversations found.")
-                st.info("⚠️ No conversations found. Start a new conversation to view it here.")
+                message = st.chat_message("user")
+            message.markdown(content, unsafe_allow_html=True)
+
+        # Concatenazione di titolo, claim e risposta in un'unica stringa
+        content = f"""
+        <h2 style='color: rgba(0, 0, 0, 0.9); font-size: 1.5em; line-height: 1.4;'>{conversation['title']}</h2>
+        """
+        
+        if conversation['claim']:
+            content += f"<p style='color: rgba(0, 0, 0, 0.6); font-size: 1.1em; line-height: 1.6;'>{conversation['claim']}</p>"
+
+        content += f"<p style='font-size: 1.1em; line-height: 1.6;'>{conversation['answer']}</p>"
+
+        # Visualizzazione unica della conversazione
+        display_message("assistant", content, avatar="🦊")
+
+        # Visualizzazione delle fonti
+        with st.expander("📌 Sources"):
+            if conversation['sources']:
+                sources_text = "\n\n".join([f"- [{src['title']}]({src['url']})" for src in conversation['sources']])
+                st.markdown(sources_text)
+            else:
+                st.markdown("No sources available for this claim.")
+
+        # Visualizzazione delle immagini
+        if conversation.get('images'):
+            cols = st.columns(len(conversation['images']))
+            for col, img in zip(cols, conversation['images']):
+                col.image(img)
 
 
-        else:
-            # title "FOX AI" with fox emoji
-            st.title("🦊 FOX AI")
-            st.caption("🔍 Your personal assistant on fact-checking")
-            
-            if prompt := st.chat_input(max_chars=800):
+    def get_conversation_by_id(self, convo_id):
+        """Recupera una conversazione tramite ID."""
+        conversations = self.get_conversations()
+        return next((convo for convo in conversations if convo['id'] == convo_id), None)
+
+    def run(self):
+        """Funzione principale per avviare il dashboard."""
+        st.title("🦊 FOX AI")
+        st.caption("🔍 Your personal assistant on fact-checking")
+
+        if st.session_state.view_mode == "chat":
+            prompt = st.chat_input()
+            if prompt:
                 if self.is_numeric_claim(prompt):
-                    st.chat_message("assistant").write(
-                        "This claim is invalid because it consists only of numbers. The conversation will be deleted.")
+                    self.display_message("assistant", "This claim is invalid because it consists only of numbers.")
                     st.session_state.messages = []
-                    self.logger.warning("User entered an invalid numeric claim.")
                 else:
                     st.session_state.messages.append({"role": "user", "content": prompt})
-                    st.chat_message("user").write(prompt)
+                    self.display_message("user", prompt)
 
                     if len(st.session_state.messages) > 1:
                         claim = st.session_state.messages[-1]['content']
                         response = self.get_response(claim)
-                        self.logger.debug(response)
                         self.display_claim_response(response)
-                    else:
-                        st.chat_message("assistant").write("Waiting for your claim...")
+
+        else:
+            if 'selected_conversation' in st.session_state:
+                selected_conversation = st.session_state.selected_conversation
+                self.display_conversation(selected_conversation)
+            else:
+                self.display_message("assistant", "Waiting for your claim...")
+
+        with st.sidebar:
+            if st.sidebar.button("➕ New Conversation"):
+                st.session_state.view_mode = "chat"
+                st.session_state.messages = []
+                st.session_state.selected_conversation = None
+                st.rerun()
+
+            if st.sidebar.button("🗑️ Delete Chat History"):
+                self.delete_chat_history()
+
+            if st.button("Exit Dashboard"):
+                st.stop()
+
+            st.image(self.image_sidebar)
+
+            st.sidebar.title("Chat History")
+            st.sidebar.text_input("Search claims...", key="search_query", placeholder="Type to search")
+
+            conversations = self.get_conversations()
+            filtered_conversations = [convo for convo in conversations if st.session_state.search_query.lower() in convo.get("title", "").lower()]
+            filtered_conversations = filtered_conversations[::-1]  # Ordina le conversazioni per data
+
+            for i, convo in enumerate(filtered_conversations):
+                if st.sidebar.button(convo['title'][:50] + ("..." if len(convo['title']) > 50 else ""), key=f"convo_{i}"):
+                    st.session_state.view_mode = "history"
+                    st.session_state.selected_conversation = convo
+                    st.rerun()
 
 if __name__ == "__main__":
     dashboard = DashboardPipeline()

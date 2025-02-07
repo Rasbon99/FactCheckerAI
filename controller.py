@@ -50,10 +50,6 @@ class Controller:
             description="Endpoint that returns conversations by calling the backend's /get_history endpoint."
         )
 
-
-        # Start the Ollama and Neo4j servers on controller startup
-        # self._start_servers()
-
     def post_results(self, input_text: InputText):
         """
         Endpoint POST che accetta un parametro 'text' nel body della richiesta e lo passa al backend tramite l'API /run_pipeline.
