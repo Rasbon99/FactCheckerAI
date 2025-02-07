@@ -9,31 +9,60 @@ from log import Logger
 
 class DashboardPipeline:
     def __init__(self, env_file="key.env"):
+        """
+        Initializes the dashboard pipeline by loading environment variables 
+        and setting up the logger and session state.
+        
+        Args:
+            env_file (str): The path to the environment file containing necessary credentials and configurations.
+        
+        Raises:
+            Exception: If environment variables cannot be loaded or other initialization errors occur.
+        """
         dotenv.load_dotenv(env_file, override=True)
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.logo = os.getenv('AI_IMAGE_UI')
         self.controller_url = os.getenv('CONTROLLER_SERVER_URL', 'http://127.0.0.1:8003')
 
-        # Carica immagine nella sidebar
+        # Load image into the sidebar
         self.image_sidebar = Image.open(self.logo).resize((100, 100))
 
-        # Inizializzazione stato sessione
+        # Initialize session state
         self._initialize_session_state()
 
     def _initialize_session_state(self):
-        """Inizializza le variabili dello stato della sessione."""
+        """
+        Initializes session state variables for managing the chat messages 
+        and view mode (chat or history) in the Streamlit app.
+        
+        Raises:
+            Exception: If there is an error during session state initialization.
+        """
         if "messages" not in st.session_state:
             st.session_state["messages"] = [{"role": "assistant", "content": "To begin, state your claim..."}]
         if "view_mode" not in st.session_state:
-            st.session_state.view_mode = "chat"  # Modalità di visualizzazione di default
+            st.session_state.view_mode = "chat"  # Default view mode
 
     def _log_error(self, msg):
-        """Gestione centralizzata degli errori."""
+        """
+        Centralized error logging function to log errors and display them in Streamlit.
+        
+        Args:
+            msg (str): The error message to be logged and shown in the Streamlit app.
+        
+        Raises:
+            Exception: If there is an error during the logging process.
+        """
         self.logger.error(msg)
         st.error(msg)
 
     def delete_chat_history(self):
-        """Clear chat history."""
+        """
+        Deletes the chat history by making a request to the controller server's endpoint.
+        
+        Raises:
+            requests.exceptions.RequestException: If there is an error in the POST request.
+        """
         try:
             response = requests.post(f"{self.controller_url}/clean_conversations")
             response.raise_for_status()
@@ -42,11 +71,30 @@ class DashboardPipeline:
             self._log_error(f"Error deleting chat history: {e}")
 
     def is_numeric_claim(self, claim_text):
-        """Checks if the claim consists only of numbers."""
+        """
+        Checks if the claim consists only of numeric characters.
+        
+        Args:
+            claim_text (str): The text of the claim to be checked.
+        
+        Returns:
+            bool: True if the claim is numeric, False otherwise.
+        """
         return claim_text.isdigit()
 
     def get_response(self, claim):
-        """Request response from controller."""
+        """
+        Requests a response from the controller server for the given claim.
+        
+        Args:
+            claim (str): The claim text to be processed by the controller.
+        
+        Raises:
+            requests.exceptions.RequestException: If there is an error in the POST request.
+        
+        Returns:
+            dict: A dictionary containing the response, including title, summary, query result, sources, and images.
+        """
         with st.spinner("Processing claim..."):
             try:
                 response = requests.post(
@@ -69,7 +117,15 @@ class DashboardPipeline:
                 return None
 
     def _load_images_from_folder(self, folder):
-        """Carica immagini dalla cartella specificata."""
+        """
+        Loads images from the specified folder and returns them as a list.
+        
+        Args:
+            folder (str): The path to the folder containing image files.
+        
+        Returns:
+            list: A list of PIL Image objects loaded from the folder.
+        """
         images = []
         if folder and os.path.isdir(folder):
             for file in glob.glob(os.path.join(folder, "*.jpg")):
@@ -83,33 +139,49 @@ class DashboardPipeline:
         return images
 
     def display_message(self, role, message, avatar="🦊"):
-        """Gestisce la visualizzazione dei messaggi di chat."""
+        """
+        Displays a chat message in the Streamlit interface.
+        
+        Args:
+            role (str): The role of the sender, e.g., 'user' or 'assistant'.
+            message (str): The content of the message to be displayed.
+            avatar (str): The avatar to be used for the sender, default is 🦊.
+        
+        Raises:
+            Exception: If there is an error in displaying the message.
+        """
         chat_msg = st.chat_message(role, avatar=avatar)
         chat_msg.write(message)
 
     def display_claim_response(self, response):
         """
-        Displays the system's response in the chat interface in Streamlit.
+        Displays the response from the system regarding the user's claim, including title, summary, sources, and images.
+        
+        Args:
+            response (dict): The response object containing claim title, summary, query result, sources, and images.
+        
+        Raises:
+            Exception: If there is an error during the display of the claim response.
         """
         assistant_message = st.chat_message("assistant", avatar="🦊")
 
-        # Styling per il titolo
+        # Styling for the title
         title_html = f"<h2 style='color: rgba(0, 0, 0, 0.9); font-size: 1.5em; line-height: 1.4;'>{response['title'][2:]}</h2>"
         assistant_message.markdown(title_html, unsafe_allow_html=True)
 
-        # Styling per il sommario
+        # Styling for the summary
         summary_html = f"<p style='color: rgba(0, 0, 0, 0.6); font-size: 1.1em; line-height: 1.6;'>{response['summary']}</p>"
         assistant_message.markdown(summary_html, unsafe_allow_html=True)
 
-        # Risposta principale
+        # Main response
         assistant_message.write(f"{response['response']}")
 
-        # Se ci sono fonti, mostra nell'expander
+        # Display sources if available
         with assistant_message.expander("📌 Sources"):
             for src in response.get('sources', []):
                 st.markdown(f"- [{src['title']}]({src['url']})")
 
-        # Gestione delle immagini
+        # Display images if available
         images = response.get('images', [])
         if images:
             with assistant_message.container():
@@ -118,7 +190,15 @@ class DashboardPipeline:
                     col.image(img)
 
     def get_conversations(self):
-        """Recupera le conversazioni."""
+        """
+        Retrieves all conversations from the controller server.
+        
+        Raises:
+            requests.exceptions.RequestException: If there is an error in the GET request.
+        
+        Returns:
+            list: A list of conversations.
+        """
         with st.spinner("Processing conversations..."):
             try:
                 response = requests.get(f"{self.controller_url}/conversations")
@@ -130,8 +210,15 @@ class DashboardPipeline:
                 return []
 
     def display_conversation(self, conversation):
-        """Visualizza una conversazione storica in un'unica risposta."""
-        # Funzione centralizzata per visualizzare i messaggi
+        """
+        Displays a historical conversation in the chat interface.
+        
+        Args:
+            conversation (dict): The conversation data to be displayed, including title, claim, answer, sources, and images.
+        
+        Raises:
+            Exception: If there is an error in displaying the conversation.
+        """
         def display_message(role, content, avatar=None):
             if role == "assistant":
                 message = st.chat_message("assistant", avatar=avatar)
@@ -139,7 +226,7 @@ class DashboardPipeline:
                 message = st.chat_message("user")
             message.markdown(content, unsafe_allow_html=True)
 
-        # Concatenazione di titolo, claim e risposta in un'unica stringa
+        # Concatenate title, claim, and response
         content = f"""
         <h2 style='color: rgba(0, 0, 0, 0.9); font-size: 1.5em; line-height: 1.4;'>{conversation['title']}</h2>
         """
@@ -149,10 +236,10 @@ class DashboardPipeline:
 
         content += f"<p style='font-size: 1.1em; line-height: 1.6;'>{conversation['answer']}</p>"
 
-        # Visualizzazione unica della conversazione
+        # Display the conversation
         display_message("assistant", content, avatar="🦊")
 
-        # Visualizzazione delle fonti
+        # Display sources
         with st.expander("📌 Sources"):
             if conversation['sources']:
                 sources_text = "\n\n".join([f"- [{src['title']}]({src['url']})" for src in conversation['sources']])
@@ -160,20 +247,32 @@ class DashboardPipeline:
             else:
                 st.markdown("No sources available for this claim.")
 
-        # Visualizzazione delle immagini
+        # Display images
         if conversation.get('images'):
             cols = st.columns(len(conversation['images']))
             for col, img in zip(cols, conversation['images']):
                 col.image(img)
 
-
     def get_conversation_by_id(self, convo_id):
-        """Recupera una conversazione tramite ID."""
+        """
+        Retrieves a specific conversation by its ID.
+        
+        Args:
+            convo_id (str): The ID of the conversation to be retrieved.
+        
+        Returns:
+            dict: The conversation with the specified ID, or None if not found.
+        """
         conversations = self.get_conversations()
         return next((convo for convo in conversations if convo['id'] == convo_id), None)
 
     def run(self):
-        """Funzione principale per avviare il dashboard."""
+        """
+        Main function to run the Streamlit dashboard and manage the user interactions.
+        
+        Raises:
+            Exception: If there is an error during the execution of the dashboard.
+        """
         st.title("🦊 FOX AI")
         st.caption("🔍 Your personal assistant on fact-checking")
 
@@ -219,7 +318,7 @@ class DashboardPipeline:
 
             conversations = self.get_conversations()
             filtered_conversations = [convo for convo in conversations if st.session_state.search_query.lower() in convo.get("title", "").lower()]
-            filtered_conversations = filtered_conversations[::-1]  # Ordina le conversazioni per data
+            filtered_conversations = filtered_conversations[::-1]  # Reverse order to show the latest first
 
             for i, convo in enumerate(filtered_conversations):
                 if st.sidebar.button(convo['title'][:50] + ("..." if len(convo['title']) > 50 else ""), key=f"convo_{i}"):
