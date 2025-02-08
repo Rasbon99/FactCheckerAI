@@ -1,6 +1,6 @@
-import time
-
 import dotenv
+import time
+import os
 
 from GraphRAG.graph_manager import GraphManager
 from GraphRAG.query_engine import QueryEngine
@@ -41,6 +41,12 @@ class RAG_Pipeline:
         
         self.graph_manager.reset_data()
 
+        self.graph_folder = os.getenv("ASSET_PATH")
+
+        if not os.path.exists(self.graph_folder):
+            os.makedirs(self.graph_folder)
+            self.logger.info(f"Create '{self.graph_folder}' folder.")
+
     def load_data(self, data):
         """
         Loads the provided data into the graph via the GraphManager.
@@ -63,7 +69,7 @@ class RAG_Pipeline:
             self.logger.error(f"Error during data loading: {e}")
             raise
 
-    def generate_and_save_graphs(self, output_file_topic="graph_topic.jpg", output_file_entity="graph_entity.jpg", output_file_site="graph_site.jpg"):
+    def generate_and_save_graphs(self, output_folder):
         """
         Generates and saves graphs using the GraphManager.
 
@@ -78,13 +84,16 @@ class RAG_Pipeline:
         if not self.config.get("generate_graphs", True):
             self.logger.info("Graph generation disabled by configuration.")
             return
+        
+        path_graph_topics=f"{output_folder}/graph_topics.jpg"
+        path_graph_entities=f"{output_folder}/graph_entities.jpg"
+        path_graph_sites=f"{output_folder}/graph_sites.jpg"
 
         self.logger.info("Starting graph generation...")
         try:
-            self.graph_manager.extract_and_save_graph(output_file_topic, output_file_entity, output_file_site)
+            self.graph_manager.extract_and_save_graph(path_graph_topics, path_graph_entities, path_graph_sites)
         except Exception as e:
             self.logger.error(f"Error during graph generation: {e}")
-            raise
 
     def query_similarity(self, query):
         """
@@ -112,7 +121,7 @@ class RAG_Pipeline:
             self.logger.error(f"Error during similarity query execution: {e}")
             return None
 
-    def run_pipeline(self, data, claim):
+    def run_pipeline(self, data, claim, claim_id):
         """
         Executes the entire pipeline: load data, generate graphs, and respond to the query.
 
@@ -132,8 +141,14 @@ class RAG_Pipeline:
             # Step 1: Load the data
             self.load_data(data)
 
+            claim_graphs_folder = f"{self.graph_folder}/{claim_id}"
+
+            if not os.path.exists(claim_graphs_folder):
+                os.makedirs(claim_graphs_folder)
+                self.logger.info(f"Create '{claim_graphs_folder}' folder.")
+
             # Step 2: Generate and save graphs
-            self.generate_and_save_graphs()
+            self.generate_and_save_graphs(claim_graphs_folder)
             
             # Fixed query for the pipeline
             query = """Based on the information provided in the articles, determine if the claim is confirmed or refuted. 
@@ -156,8 +171,8 @@ class RAG_Pipeline:
             total_time = time.time() - start_time
             self.logger.info(f"Pipeline completed successfully in {total_time:.2f} seconds.")
 
-            return result
+            return result, claim_graphs_folder
         except Exception as e:
             total_time = time.time() - start_time
             self.logger.error(f"Error during pipeline execution (total time: {total_time:.2f} seconds): {e}")
-            return None
+            return None, None

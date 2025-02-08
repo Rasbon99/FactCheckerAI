@@ -1,4 +1,5 @@
 import os
+import requests
 import time
 import platform
 
@@ -7,7 +8,6 @@ from langchain.chains import RetrievalQA
 from langchain_community.vectorstores import Neo4jVector
 from langchain_ollama import OllamaEmbeddings
 from langchain_groq import ChatGroq
-from Preprocessor.ollama_client import OllamaClient
 
 from log import Logger
 
@@ -32,15 +32,13 @@ class QueryEngine:
         self.neo4j_username = os.environ["NEO4J_USERNAME"]
         self.neo4j_password = os.environ["NEO4J_PASSWORD"]
 
-        ollama_server = OllamaClient()
-
-        if not ollama_server.is_running():
-            ollama_server.start_server()
+        if not self._is_ollama_running():
+            raise ConnectionError("Ollama server is not running. Please start it.")
 
         # Model configuration
         self.model_name = os.environ["MODEL_LLM_NEO4J"]
         self.modelGroq_name = os.environ["GROQ_MODEL_NAME"]
-        self.embedding_model = OllamaEmbeddings(model=self.model_name)
+        self.embedding_model = OllamaEmbeddings(model=self.model_name, base_url=os.getenv("OLLAMA_SERVER_URL"))
         self.llm_model = ChatGroq(model=self.modelGroq_name)
         self.index_name = index_name
 
@@ -87,4 +85,12 @@ class QueryEngine:
         except Exception as e:
             self.logger.error(f"Error during similarity query: {e}")
             return None
+    
+    def _is_ollama_running(self):
+        """Check if the Ollama server is active by querying the FastAPI API."""
+        try:
+            response = requests.get(os.getenv("OLLAMA_SERVER_URL"), timeout=2)
+            return response.status_code == 200
+        except requests.exceptions.RequestException:
+            return False
         

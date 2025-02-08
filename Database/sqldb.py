@@ -1,7 +1,9 @@
 import os
 import sqlite3
-
+import glob
 import dotenv
+import os
+import shutil
 
 from log import Logger
 
@@ -21,6 +23,7 @@ class Database:
         try:
             dotenv.load_dotenv(env_file, override=True)
             self.db_file = os.environ["SQLDB_PATH"]
+            self.assets_dir = os.environ["ASSET_PATH"]
         except KeyError as e:
             self.logger.error("Environment variable SQLDB_PATH not found.")
             raise e
@@ -104,7 +107,7 @@ class Database:
         """
 
         masked_params = [param if not isinstance(param, (bytes, bytearray)) else "BLOB" for param in params]
-        self.logger.info("Executing query: %s with params: %s", query, masked_params)
+        self.logger.info("Executing query: %s", query)
 
         try:
             with self as conn:
@@ -167,16 +170,24 @@ class Database:
         except sqlite3.DatabaseError as e:
             self.logger.error("Error fetching record.")
             raise e
-        
+
     def delete_all_conversations(self):
         """
-        Deletes data from tables "claims", "answers", and "sources".
-        
+        Deletes data from tables "claims", "answers", and "sources", and cleans up all images in subdirectories of the assets folder.
+
+        Args:
+            None
+
         Raises:
             sqlite3.DatabaseError: If there is an error during the deletion process.
+            OSError: If there is an error during the image deletion process.
+
+        Returns:
+            None
         """
-        self.logger.info("Deleting all conversations.")
+        self.logger.info("Deleting all conversations and cleaning up subdirectories in assets.")
         try:
+            # Deleting conversations from the database
             with self as conn:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM claims;")
@@ -184,6 +195,78 @@ class Database:
                 cursor.execute("DELETE FROM sources;")
                 conn.commit()
             self.logger.info("All conversations deleted successfully.")
+
+            # Clean up subdirectories in the assets folder
+            if os.path.isdir(self.assets_dir):
+                for root, dirs, _ in os.walk(self.assets_dir, topdown=False):
+                    # Remove all subdirectories
+                    for name in dirs:
+                        dir_path = os.path.join(root, name)
+                        try:
+                            shutil.rmtree(dir_path)  # Recursively delete the directory and its contents
+                            self.logger.info(f"Deleted directory and its contents: {dir_path}")
+                        except OSError as e:
+                            self.logger.error(f"Error deleting directory {dir_path}: {e}")
+            else:
+                self.logger.warning(f"Assets folder does not exist: {self.assets_dir}")
+                
         except sqlite3.DatabaseError as e:
             self.logger.error("Error deleting conversations.")
             raise e
+        except OSError as e:
+            self.logger.error("Error cleaning up assets.")
+            raise e
+        
+    def get_history(self):
+        """
+        Retrieves the conversations from the database, including associated sources.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing the conversations and their sources.
+        """
+
+        # Query per ottenere le conversazioni con risposta e immagine
+        query = """
+        SELECT c.id, c.text, c.title, a.answer, a.graphs_folder 
+        FROM claims c
+        INNER JOIN answers a ON c.id = a.claim_id
+        """
+
+        rows = self.fetch_all(query)
+
+        if not rows:
+            return {}
+
+        conversations = []
+
+        for row in rows:
+            claim_id = row[0]
+            
+            # Query per ottenere le sources associate al claim
+            sources_query = """
+            SELECT title, url, body 
+            FROM sources 
+            WHERE claim_id = ?
+            """
+            sources_rows = self.fetch_all(sources_query, (claim_id,))
+
+            # Formattare le sources come una lista di dizionari
+            sources = [{"title": s[0], "url": s[1], "body": s[2]} for s in sources_rows]
+
+            images = []
+            graphs_folder = row[4]
+            if graphs_folder and os.path.isdir(graphs_folder):
+                jpg_files = glob.glob(os.path.join(graphs_folder, "*.jpg"))
+            else:
+                self.logger.warning("La cartella dei grafici non esiste o non è stata specificata.")
+
+            conversations.append({
+                "id": claim_id,
+                "claim": row[1],
+                "title": row[2],
+                "answer": row[3],
+                "images": jpg_files,
+                "sources": sources 
+            })
+
+        return conversations

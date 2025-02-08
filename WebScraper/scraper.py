@@ -29,7 +29,7 @@ class Scraper:
         self.ng_client = NewsGuardClient()
         
         self.model = os.getenv("GROQ_MODEL_NAME")
-        self.client = Groq(api_key=os.getenv("GROQ_API_KEY_FILTER"))
+        self.client = Groq()
 
     def extract_context(self, url):
         """
@@ -120,7 +120,7 @@ class Scraper:
             # You could also choose to log this error if necessary.
             return True
 
-    def search_and_extract(self, query, num_results=10, max_retries=3, min_valid_sources=3, search_results=None, retries=0, attempts=0):
+    def search_and_extract(self, query, num_results=10, max_retries=3, min_valid_sources=2, search_results=None, retries=0, attempts=0):
         """
         Performs a search using the provided query, and extracts the title, body, and site of the resulting pages.
         
@@ -128,7 +128,7 @@ class Scraper:
             query (str): The search query to send to DuckDuckGo.
             num_results (int): The number of search results to retrieve. Default is 10.
             max_retries (int): The maximum number of retries in case of a rate limit or other errors. Default is 3.
-            min_valid_sources (int): The minimum number of sources that must be valid after filtering. Default is 3.
+            min_valid_sources (int): The minimum number of sources that must be valid after filtering. Default is 2.
             search_results (list): The accumulated list of search results.
             retries (int): The current number of retries.
             attempts (int): The current number of full search attempts.
@@ -143,9 +143,10 @@ class Scraper:
         Raises:
             Exception: If there is an error during the search and extract process after all retries.
         """
-        # Initialize search_results on the first call
+        # Initialize search_results and visited_urls on the first call
         if search_results is None:
             search_results = []
+        visited_urls = set(result['url'] for result in search_results)
 
         self.logger.info("Start searching and extracting query...")
         
@@ -170,12 +171,17 @@ class Scraper:
                 for result in results:
                     url = result['href']
                     
+                    # Skip duplicate URLs
+                    if url in visited_urls:
+                        self.logger.info(f"Skipping duplicate URL: {url}")
+                        continue
+
                     extracted_data = self.extract_context(url)
 
                     if extracted_data['title'] and extracted_data['body']:
-
-                        self.logger.info(f"{extracted_data['title'][:20]} - {extracted_data['url'][:20]}") 
+                        self.logger.info(f"{extracted_data['title'][:20]} - {extracted_data['url'][:20]}")
                         search_results.append(extracted_data)
+                        visited_urls.add(url)
 
                 # Phase 3: Apply correlation filter
                 self.logger.info("Applying correlation filter...")

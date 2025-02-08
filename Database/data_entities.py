@@ -1,11 +1,8 @@
+import io
 import uuid
 
 from Database.sqldb import Database
-
 from log import Logger
-
-from PIL import Image
-import io
 
 class Claim:
     def __init__(self, text, title, summary, claim_id=None, db=None):
@@ -29,7 +26,6 @@ class Claim:
         self.summary = summary
         self.logger.info("Creating claim with ID: %s", self.id)
         self.save_to_db()
-        self.db.execute_query("CREATE TABLE IF NOT EXISTS answers (id TEXT PRIMARY KEY, claim_id TEXT, answer TEXT, image BLOB, FOREIGN KEY (claim_id) REFERENCES claims(id))")
 
     def save_to_db(self):
         """
@@ -117,23 +113,6 @@ class Claim:
 
                   data['body'], data['topic'], str(data['entities'])))
         self.logger.info("Added %d sources for claim ID %s.", len(sources_data), self.id)
-    def get_answer(self):
-        """
-        Retrieves the answer associated with the claim from the database.
-
-        Returns:
-            Answer: The answer object associated with this claim.
-        
-        Raises:
-            Exception: If there is an error during fetching the answer from the database.
-        """
-        self.logger.info("Fetching answer for claim ID %s.", self.id)
-        row = self.db.fetch_one("SELECT * FROM answers WHERE claim_id = ?", (self.id,))
-        if row:
-            self.logger.info("Found answer for claim ID %s.", self.id)
-            return row['answer'], Image.open(io.BytesIO(row['image']))
-        self.logger.info("No answer found for claim ID %s.", self.id)
-        return None
     
     def clear_database(self):
         """
@@ -160,7 +139,7 @@ class Claim:
         return row is not None
 
 class Answer():
-    def __init__(self, claim_id, answer, answer_id=None, db=None,image=None):
+    def __init__(self, claim_id, answer, graphs_folder, answer_id=None, db=None):
         """
         Initializes an Answer object with details about an answer to a specific claim.
 
@@ -177,8 +156,9 @@ class Answer():
         self.id = answer_id if answer_id else str(uuid.uuid4())
         self.claim_id = claim_id
         self.answer = answer
-        self.image = image
+        self.graphs_folder = graphs_folder
         self.save_to_db()
+        
     def set_answer(self, answer):
         """
         Sets the answer for the claim.
@@ -188,15 +168,6 @@ class Answer():
         """
         self.answer = answer
     
-    def set_image(self, image):
-        """
-        Sets the image for the answer.
-
-        Args:
-            image (Image object from PIL): The image data to set.
-        """
-        self.image = image
-
     def save_to_db(self):
         """
         Saves the answer to the database, creating the table if it doesn't exist.
@@ -210,17 +181,12 @@ class Answer():
                 id TEXT PRIMARY KEY,
                 claim_id TEXT,
                 answer TEXT,
-                image BLOB,
+                graphs_folder TEXT,
                 FOREIGN KEY (claim_id) REFERENCES claims(id)
             )
         """
         self.db.create_table(create_table_sql)
         
-        if self.image:
-            img_byte_arr = io.BytesIO()
-            self.image.save(img_byte_arr, format='PNG')
-            img_byte_arr = img_byte_arr.getvalue()
-        
-        self.db.execute_query("INSERT INTO answers (id, claim_id, answer,image) VALUES (?,?,?,?)",
-                              (self.id, self.claim_id, self.answer, img_byte_arr))
+        self.db.execute_query("INSERT INTO answers (id, claim_id, answer, graphs_folder) VALUES (?,?,?,?)",
+                              (self.id, self.claim_id, self.answer, self.graphs_folder))
 

@@ -1,0 +1,87 @@
+import subprocess
+import psutil
+import socket
+import platform
+
+from log import Logger
+
+class OllamaClient:
+    def __init__(self):
+        self.logger = Logger(self.__class__.__name__).get_logger()
+        self.process = None
+        self.platform = platform.system()
+    
+    def __del__(self):
+        self._stop_server()
+    
+    def start_server(self):
+        """
+        Starts the Ollama server as a separate background process.
+        """
+        self.logger.info("Starting Ollama server...")
+        try:
+            if self.platform == "Darwin":
+                try:
+                    # Avvia il comando "neo4j console" in un processo separato
+                    self.process = subprocess.Popen(
+                        ["ollama", "serve"],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True
+                    )
+                    self.logger.info("Ollama server started successfully as a background process.")
+                except FileNotFoundError:
+                    self.logger.error("Error: 'ollama' command not found. Ensure Ollama is installed and in PATH.")
+                except Exception as e:
+                    self.logger.error(f"An unexpected error occurred while starting ollama server: {e}")
+            elif self.platform == "Windows":
+                try:
+                    powershell_command = ('Start-Process "cmd" -ArgumentList "/c ollama serve" -Verb runAs')
+
+                    self.process = subprocess.Popen(["powershell", "-Command", powershell_command])
+
+                    self.logger.info("Ollama server started successfully as a background process.")
+                except FileNotFoundError:
+                    self.logger.error("Error: 'ollama' command not found. Ensure Ollama is installed and in PATH.")
+                except Exception as e:
+                    self.logger.error(f"An unexpected error occurred while starting Ollama console: {e}")
+        except Exception as e:
+            self.logger.error(f"An unexpected error occurred while starting Ollama server with your platform, make sure you are on Windows or macOS: {e}")
+
+    def _stop_server(self):
+        """
+        Stops the Ollama server if it is running.
+        """
+        def is_process_running(pid):
+            """Check if a process with a given PID is still running."""
+            return psutil.pid_exists(pid)
+        
+        def is_port_in_use(port):
+            """Check if a specific port is in use (useful for verifying if the server is active)."""
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                return s.connect_ex(("localhost", port)) == 0
+        
+        if self.process and is_process_running(self.process.pid):  # Check if the process is still active
+            self.logger.info("Stopping the Ollama server...")
+            self.process.terminate()  # Send a terminate signal
+            self.process.wait()  # Wait for the process to terminate
+            
+            # Double-check if the process is still running
+            if is_process_running(self.process.pid) or is_port_in_use(11434):  # Assuming Ollama runs on port 11434
+                self.logger.warning("Failed to stop the Ollama server. Forcing termination...")
+                self.process.kill()  # Force kill the process
+            else:
+                self.logger.info("Ollama server stopped successfully.")
+        elif self.platform != "Windows":
+            self.logger.warning("Ollama server is not running.")
+    
+    def _is_port_in_use(self, port):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex(("127.0.0.1", port)) == 0
+    
+    def is_running(self):
+        """
+        Checks if the Ollama server is currently running.
+        """
+        return self._is_port_in_use(11434)
+    
