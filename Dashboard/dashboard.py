@@ -309,6 +309,9 @@ class DashboardPipeline:
                 st.session_state.view_mode = "chat"
                 st.session_state.messages = []
                 st.session_state.selected_conversation = None
+                
+                # Hidden test message
+                st.session_state.messages.append({"role": "user", "content": "Test automatic message for new conversation"})
                 st.rerun()
 
             if st.sidebar.button("🗑️ Delete Chat History"):
@@ -316,6 +319,9 @@ class DashboardPipeline:
                 st.session_state.view_mode = "chat"
                 st.session_state.messages = []
                 st.session_state.selected_conversation = None
+                
+                # Hidden test message
+                st.session_state.messages.append({"role": "user", "content": "Test automatic message for new conversation"})
                 st.rerun()
 
             if st.button("Exit Dashboard"):
