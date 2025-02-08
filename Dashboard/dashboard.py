@@ -158,8 +158,6 @@ class DashboardPipeline:
         else:
             chat_msg = st.chat_message("user", avatar="👤")
         chat_msg.write(message)
-        
-        
 
     def display_claim_response(self, response):
         """
@@ -332,26 +330,32 @@ class DashboardPipeline:
             conversations = self.get_conversations()
             filtered_conversations = [
                 convo for convo in conversations if st.session_state.search_query.lower() in convo.get("title", "").lower()
-            ]
+            ] if "search_query" in st.session_state else conversations
             filtered_conversations = filtered_conversations[::-1]  # Reverse order to show the latest first
 
-            # Show limited or full conversation list
+            # Initialize state for toggling view
             if 'show_all_conversations' not in st.session_state:
                 st.session_state.show_all_conversations = False
 
+            # Limit the number of conversations to display
             max_display = 5
             if not st.session_state.show_all_conversations:
-                filtered_conversations = filtered_conversations[:max_display]
+                display_conversations = filtered_conversations[:max_display]
+            else:
+                display_conversations = filtered_conversations
 
-            for i, convo in enumerate(filtered_conversations):
+            # Display the conversations
+            for i, convo in enumerate(display_conversations):
                 if st.sidebar.button(convo['title'][:50] + ("..." if len(convo['title']) > 50 else ""), key=f"convo_{i}"):
                     st.session_state.view_mode = "history"
                     st.session_state.selected_conversation = convo
                     st.rerun()
 
             # Show toggle button for conversations
-            if len(filtered_conversations) > max_display or st.session_state.show_all_conversations:
-                if st.sidebar.button("Show Less Conversations" if st.session_state.show_all_conversations else "Show More Conversations"):
+            if len(filtered_conversations) > max_display:
+                if st.sidebar.button(
+                    "Show Less Conversations" if st.session_state.show_all_conversations else "Show More Conversations"
+                ):
                     st.session_state.show_all_conversations = not st.session_state.show_all_conversations
                     st.rerun()
 
