@@ -141,7 +141,7 @@ class DashboardPipeline:
             self.logger.warning(f"Graphs folder does not exist or was not specified: {folder}")
         return images
 
-    def display_message(self, role, message, avatar="🦊"):
+    def display_message(self, role, message, avatar=None):
         """
         Displays a chat message in the Streamlit interface.
         
@@ -153,8 +153,13 @@ class DashboardPipeline:
         Raises:
             Exception: If there is an error in displaying the message.
         """
-        chat_msg = st.chat_message(role, avatar=avatar)
+        if role == "assistant":
+            chat_msg = st.chat_message("assistant", avatar="🦊")
+        else:
+            chat_msg = st.chat_message("user", avatar="👤")
         chat_msg.write(message)
+        
+        
 
     def display_claim_response(self, response):
         """
@@ -222,11 +227,11 @@ class DashboardPipeline:
         Raises:
             Exception: If there is an error in displaying the conversation.
         """
-        def display_message(role, content, avatar=None):
+        def display_message_markdown(role, content, avatar=None):
             if role == "assistant":
-                message = st.chat_message("assistant", avatar=avatar)
+                message = st.chat_message("assistant", avatar="🦊")
             else:
-                message = st.chat_message("user")
+                message = st.chat_message("user", avatar="👤")
             message.markdown(content, unsafe_allow_html=True)
 
         # Concatenate title, claim, and response
@@ -240,7 +245,7 @@ class DashboardPipeline:
         content += f"<p style='font-size: 1.1em; line-height: 1.6;'>{conversation['answer']}</p>"
 
         # Display the conversation
-        display_message("assistant", content, avatar="🦊")
+        display_message_markdown("assistant", content)
 
         # Display sources
         with st.expander("📌 Sources"):
