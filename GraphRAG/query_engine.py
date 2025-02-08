@@ -33,7 +33,7 @@ class QueryEngine:
         self.neo4j_password = os.environ["NEO4J_PASSWORD"]
 
         if not self._is_ollama_running():
-            raise ConnectionError("Ollama server is not running on localhost:11434. Please start it.")
+            raise ConnectionError("Ollama server is not running. Please start it.")
 
         # Model configuration
         self.model_name = os.environ["MODEL_LLM_NEO4J"]

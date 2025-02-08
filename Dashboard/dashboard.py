@@ -310,6 +310,10 @@ class DashboardPipeline:
 
             if st.sidebar.button("🗑️ Delete Chat History"):
                 self.delete_chat_history()
+                st.session_state.view_mode = "chat"
+                st.session_state.messages = []
+                st.session_state.selected_conversation = None
+                st.rerun()
 
             if st.button("Exit Dashboard"):
                 st.stop()
