@@ -49,6 +49,10 @@ class Controller:
             summary="Get history of conversations",
             description="Endpoint that returns conversations by calling the backend's /get_history endpoint."
         )
+        
+        # Start the Ollama and Neo4j servers on controller startup
+        if os.getenv("DOCKER") != "true":
+            self._start_servers()
 
     def post_results(self, input_text: InputText):
         """

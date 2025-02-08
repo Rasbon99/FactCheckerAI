@@ -1,4 +1,7 @@
 #!/bin/bash
+echo starting pulling...
+
+ollama serve
 
 # Scarica il modello desiderato
 ollama pull phi3.5:latest

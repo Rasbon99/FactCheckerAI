@@ -25,6 +25,8 @@ These articles are then processed and linked within a GraphRAG framework. The La
 - **GraphRAG Framework**: Utilizes **Neo4j** for constructing and analyzing relational knowledge graphs.
 
 ---
+## AGGIUNGERE DOCKER: 
+docker compose up --build
 
 ## Prerequisites
 To use this project, you need to configure the following tools:
