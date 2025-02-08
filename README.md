@@ -100,7 +100,7 @@ After installation, download the desired models from the official registry using
 
 ```bash
 ollama pull phi3.5
-ollama pull gemma2-9b-it
+ollama pull gemma2
 ```
 
 #### Add Environment Variables for Llama
