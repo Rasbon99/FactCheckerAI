@@ -59,7 +59,7 @@ class NER:
             self.logger.error("Error extracting topic and entities: %s", e)
             return None
 
-    def find_similar_entities_globally(self, entities, max_tokens=1024, temperature=0.3, stop=None):
+    def find_similar_entities_globally(self, entities, max_tokens=1024, temperature=0.0, stop=None):
         """
         Finds unified versions of entities by analyzing them in context using GroqCloud LLM.
 
