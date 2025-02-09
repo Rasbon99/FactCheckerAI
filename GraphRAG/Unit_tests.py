@@ -1,6 +1,12 @@
 import unittest
 from unittest.mock import patch, MagicMock
 from graph_manager import GraphManager
+from query_engine import QueryEngine
+import requests
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from log import Logger
 
 class TestGraphManager(unittest.TestCase):
 
@@ -41,7 +47,51 @@ class TestGraphManager(unittest.TestCase):
         self.assertTrue(mock_run.called)
         
         
+class TestQueryEngine(unittest.TestCase):
 
+    @patch('query_engine.dotenv.load_dotenv')
+    @patch('query_engine.Logger')
+    @patch('query_engine.requests.get')
+    def setUp(self, mock_requests_get, mock_logger, mock_load_dotenv):
+        # Mock environment variables
+        patch.dict('os.environ', {
+            'NEO4J_URI': 'http://localhost:7474',
+            'NEO4J_USERNAME': 'neo4j',
+            'NEO4J_PASSWORD': 'password',
+            'MODEL_LLM_NEO4J': 'model_name',
+            'GROQ_MODEL_NAME': 'groq_model',
+            'OLLAMA_SERVER_URL': 'http://localhost:8000'
+        }).start()
+
+        # Mock the response of the Ollama server check
+        mock_requests_get.return_value.status_code = 200
+
+        self.query_engine = QueryEngine()
+
+    @patch('query_engine.Neo4jVector.from_existing_graph')
+    @patch('query_engine.RetrievalQA.from_chain_type')
+    def test_query_similarity(self, mock_from_chain_type, mock_from_existing_graph):
+        # Mock the retriever and vector_qa
+        mock_retriever = MagicMock()
+        mock_from_existing_graph.return_value.as_retriever.return_value = mock_retriever
+        mock_vector_qa = MagicMock()
+        mock_from_chain_type.return_value = mock_vector_qa
+
+        # Mock the result of the query
+        mock_vector_qa.invoke.return_value = {"result": "Mocked result"}
+
+        result = self.query_engine.query_similarity("test query")
+        self.assertEqual(result, "Mocked result")
+
+    @patch('query_engine.requests.get')
+    def test_is_ollama_running(self, mock_requests_get):
+        # Test when Ollama server is running
+        mock_requests_get.return_value.status_code = 200
+        self.assertTrue(self.query_engine._is_ollama_running())
+
+        # Test when Ollama server is not running
+        mock_requests_get.side_effect = requests.exceptions.RequestException
+        self.assertFalse(self.query_engine._is_ollama_running())
 
 if __name__ == "__main__":
     unittest.main()

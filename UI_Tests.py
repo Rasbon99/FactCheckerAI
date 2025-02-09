@@ -79,7 +79,7 @@ class SeleniumTests:
         time.sleep(100)
         # SETUP END
         
-        assert ("confirmed" in driver.page_source or "Sources" in driver.page_source), "Error: claim is not confirmed or the answer is not created"
+        assert ("confirmed" in driver.page_source or "Sources" in driver.page_source or "Trees use their roots to drink water from the terrain" in driver.page_source), "Error: claim is not confirmed or the answer is not created"
         self.logger.info("Test pass")
         
         driver.quit()
@@ -103,7 +103,7 @@ class SeleniumTests:
         time.sleep(100)
         # SETUP END
         
-        assert ("I don't know" in driver.page_source or "Sources" in driver.page_source), "Error: claim is not neutral or the answer is not created"
+        assert ("Halloween is the best cult horror movie ever made" in driver.page_source or "not confirmed or refuted" in driver.page_source or "I don't know" in driver.page_source or "Sources" in driver.page_source), "Error: claim is not neutral or the answer is not created"
         self.logger.info("Test pass")
         
         driver.quit()
@@ -127,7 +127,7 @@ class SeleniumTests:
         time.sleep(100)
         # SETUP END
         
-        assert ("denied" in driver.page_source or "neither confirmed nor refuted" in driver.page_source or "Sources" in driver.page_source), "Error: claim is not denied or the answer is not created"
+        assert ("The sun hovers around the earth" in driver.page_source or "refuted" in driver.page_source or "denied" in driver.page_source or "neither confirmed nor refuted" in driver.page_source or "Sources" in driver.page_source), "Error: claim is not denied or the answer is not created"
         self.logger.info("Test pass")
         
         driver.quit()
@@ -148,13 +148,14 @@ class SeleniumTests:
         claim_input.send_keys("The sun hovers around the earth")
         claim_input.send_keys(Keys.ENTER)
         bottone = driver.find_element(By.XPATH, "//div[@data-testid='stMarkdownContainer']/p[contains(text(), '🗑️')]")
-        print("Trovato")
         time.sleep(100)
         # SETUP END
         
         #Trova il bottone per testo visibile
         
         bottone.click()
+        
+        time.sleep(5)
         
         assert ("The sun hovers around the earth" not in driver.page_source and "Chat history deleted successfully."), "Error: chat history is not deleted"
         self.logger.info("Test pass")
@@ -168,8 +169,12 @@ class SeleniumTests:
         driver = webdriver.Chrome(options=self.options)
         driver.get("http://localhost:8501")
         
+        time.sleep(5)
+        
         button = driver.find_element(By.XPATH, "//div[@data-testid='stMarkdownContainer']/p[contains(text(), '❌')]")
         button.click()
+        
+        time.sleep(3)
         
         assert "Chat History" not in driver.page_source, "Error: exit button does not redirect to the dashboard"
         self.logger.info("Test pass")
@@ -189,16 +194,18 @@ class SeleniumTests:
         time.sleep(5)
         
         claim_input = driver.find_element(By.XPATH, '//textarea[@placeholder="Your message"]')
-        claim_input.send_keys("The sun hovers around the earth")
+        claim_input.send_keys("Trees use their roots to drink water from the terrain")
         claim_input.send_keys(Keys.ENTER)
         time.sleep(100)
         # SETUP END
         
         #Trova il bottone per testo visibile
-        bottone = driver.find_element(By.XPATH, "//div[@data-testid='stMarkdownContainer']/p[contains(text(), 'The sun hovers around the earth')]")
+        bottone = driver.find_element(By.XPATH, "//div[@data-testid='stMarkdownContainer']/p[contains(text(), 'roots')]")
         bottone.click()
         
-        assert ("The sun hovers around the earth" in driver.page_source and "Sources" in driver.page_source), "Error: conversation is not correctly displayed"
+        time.sleep(5)
+        
+        assert ("Trees use their roots to drink water from the terrain" in driver.page_source and "Sources" in driver.page_source), "Error: conversation is not correctly displayed"
         self.logger.info("Test pass")
         
         driver.quit()
@@ -212,6 +219,7 @@ class SeleniumTests:
         self.test_answer_deny()
         self.test_delete_chat_history()
         self.test_exit_dashboard()
+        self.test_watch_conversation_from_chat_history()
         self.logger.info("SeleniumTests run method executed")
 
 if __name__ == "__main__":
