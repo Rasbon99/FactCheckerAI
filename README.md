@@ -1,4 +1,4 @@
-![Logo](assets/FOX_AI.png)
+![Logo](assets/Logo.png)
 
 # Fact Online eXamination AI (FOX AI)
 
