@@ -1,3 +1,5 @@
+![Logo](assets/FOX_AI.png)
+
 # Fact Online eXamination AI (FOX AI)
 
 **Fact Online eXamination AI** (FOX AI) is an advanced application designed to evaluate the reliability of a news item through state-of-the-art deep fact-checking techniques, leveraging highly credible sources.
