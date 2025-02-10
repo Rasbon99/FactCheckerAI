@@ -347,9 +347,19 @@ class GraphManager:
             self.logger.error(f"Error during graph extraction and saving: {e}")
 
     def _is_neo4j_running(self):
-        """Check if the Neo4j server is active by querying its status endpoint."""
+        """
+        Check if the Neo4j server is active by querying its status endpoint.
+
+        Returns:
+            bool: True if the Neo4j server responds with status code 200, False otherwise.
+
+        Raises:
+            requests.exceptions.RequestException: If there is an issue with the HTTP request,
+                                                such as a timeout or a connection error.
+        """
         try:
-            response = requests.get(os.getenv("NEO4J_SERVER_URL"), timeout=2)  # Default Neo4j HTTP port
+            # Default Neo4j HTTP port
+            response = requests.get(os.getenv("NEO4J_SERVER_URL"), timeout=5)  
             return response.status_code == 200
         except requests.exceptions.RequestException:
             return False
