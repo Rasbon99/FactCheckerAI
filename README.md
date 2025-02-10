@@ -1,5 +1,3 @@
-![Logo](assets/Logo.png)
-
 # Fact Online eXamination AI (FOX AI)
 
 **Fact Online eXamination AI** (FOX AI) is an advanced application designed to evaluate the reliability of a news item through state-of-the-art deep fact-checking techniques, leveraging highly credible sources.
@@ -27,18 +25,17 @@ These articles are then processed and linked within a GraphRAG framework. The La
 - **GraphRAG Framework**: Utilizes **Neo4j** for constructing and analyzing relational knowledge graphs.
 
 ---
+## AGGIUNGERE DOCKER: 
+docker compose up --build
 
 ## Prerequisites
 To use this project, you need to configure the following tools:
-
-### Local Setup:
 
 1. **Python Libraries** 
 2. **Neo4j**
 3. **Ollama**
 4. **NewsGuard Ranking Database**
 5. **Groq Cloud**
-6. **`key.env` File**
 
 ### Step 1: Set Up the Environment
 1. Create and activate a new virtual environment:
@@ -103,7 +100,7 @@ After installation, download the desired models from the official registry using
 
 ```bash
 ollama pull phi3.5
-ollama pull gemma2
+ollama pull gemma2-9b-it
 ```
 
 #### Add Environment Variables for Llama
@@ -121,69 +118,29 @@ If available, request access to the NewsGuard Ranking Database API by contacting
 Add all the required environment variables to a file named `key.env` in the following format:
 
 ```env
-# API URL Local Version
-DOCKER = false
-OLLAMA_SERVER_URL=http://localhost:11434
-NEO4J_SERVER_URL=http://localhost:7474
-OLLAMA_API_URL=http://localhost:8000
-NEO4J_API_URL=http://localhost:8002
-BACKEND_API_URL=http://localhost:8001
-CONTROLLER_API_URL=http://localhost:8003
-NEO4J_URI = bolt://localhost:7687
+# NEWSGUARD VARIABLES
+CLIENT_API_ID=
+NG_API_KEY=
+
+# DATABASE VARIABLES
+SQLDB_PATH=Database/data/fact_checker.db
+
+# GRAPHRAG VARIABLES
+MODEL_LLM_NEO4J=phi3.5:latest
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=
+NEO4J_PASSWORD=
+
+# GROQ VARIABLES
+GROQ_MODEL_NAME=llama-3.3-70b-versatile
+GROQ_LOW_MODEL_NAME=gemma2-9b-it
+GROQ_API_KEY=
 
 # DASHBOARD CONSTANTS
 LOG_FILE=app.log
 AI_IMAGE_UI=Dashboard/FOX_AI.png
 CLAIM_PROCESSING_TIME=5
-
-# NEWSGUARD VARIABLES
-CLIENT_API_ID =
-NG_API_KEY = 
-
-# DATABASE VARIABLES
-SQLDB_PATH = data/fact_checker.db
-ASSET_PATH = assets
-
-# GRAPHRAG VARIABLES
-MODEL_LLM_NEO4J = phi3.5:latest
-NEO4J_USERNAME = ''
-NEO4J_PASSWORD = ''
-
-# GROQ VARIABLES
-GROQ_MODEL_NAME = llama-3.3-70b-versatile
-GROQ_LOW_MODEL_NAME = gemma2-9b-it
-GROQ_API_KEY = 
 ```
-
----
-
-### Docker Setup
-If you prefer to run the project using Docker, follow these steps:
-
-1. Ensure you have Docker installed and running. If not, download it from [Docker's website](https://www.docker.com/).
-2. Register on Docker Hub and log in via the terminal:
-   ```bash
-   docker login
-   ```
-3. Configure the environment variables in the `key.env` file. Use the following API URLs for the Docker setup:
-   ```env
-   # API URL Docker Version
-   DOCKER=true
-   OLLAMA_SERVER_URL=http://ollama:11434
-   NEO4J_SERVER_URL=http://neo4j:7474
-   OLLAMA_API_URL=http://ollama:11434
-   NEO4J_API_URL=http://neo4j:7474
-   BACKEND_API_URL=http://backend:8001
-   CONTROLLER_API_URL=http://controller:8003
-   NEO4J_URI=bolt://neo4j:7687
-   ```
-
-4. Run the project using Docker Compose:
-   ```bash
-   docker compose up --build
-   ```  
-
-By running the above command, all the necessary services will start automatically, including Neo4j, Ollama, and any other dependencies.
 
 ---
 
