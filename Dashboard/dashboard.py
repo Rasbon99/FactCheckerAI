@@ -282,7 +282,7 @@ class DashboardPipeline:
         st.image(self.image_sidebar)
 
         if st.session_state.view_mode == "chat":
-            prompt = st.chat_input()
+            prompt = st.chat_input(max_chars=800, placeholder="Type your claim here...")
             if prompt:
                 if self.is_numeric_claim(prompt):
                     self.display_message("assistant", "This claim is invalid because it consists only of numbers.")
