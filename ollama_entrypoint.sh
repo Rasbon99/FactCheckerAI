@@ -1,11 +1,9 @@
 #!/bin/bash
-# Avvia il servizio Ollama in background
+# Start the Ollama service in the background
 /bin/ollama serve &
 SERVE_PID=$!
-# Attendi qualche secondo per essere sicuro che il servizio sia attivo
-# (puoi eventualmente sostituire con un controllo di readiness se disponibile)
 sleep 5
-# Esegui il pull del modello desiderato
+# Pull the desired model
 ollama pull phi3.5:latest
-# Rimani in attesa del processo di ollama serve (mantiene attivo lo script)
+# Wait for the ollama serve process
 wait $SERVE_PID

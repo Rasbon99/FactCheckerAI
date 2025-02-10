@@ -1,7 +1,5 @@
 ![Logo](assets/Logo.png)
 
-# Fact Online eXamination AI (FOX AI)
-
 **Fact Online eXamination AI** (FOX AI) is an advanced application designed to evaluate the reliability of a news item through state-of-the-art deep fact-checking techniques, leveraging highly credible sources.
 
 Beginning with a claim provided by the user, related news articles are retrieved and assessed based on the reliability of their sources. 
@@ -27,6 +25,7 @@ These articles are then processed and linked within a GraphRAG framework. The La
 - **GraphRAG Framework**: Utilizes **Neo4j** for constructing and analyzing relational knowledge graphs.
 
 ---
+
 ## Prerequisites
 To use this project, you need to configure the following tools:
 
@@ -135,7 +134,6 @@ Windows users need to use the Linux version of Ollama within WSL (Windows Subsys
 After installation, download the desired models from the official registry using the following commands, we recommend:
 ```bash
 ollama pull phi3.5
-ollama pull gemma2-9b-it
 ```
 
 #### Add Environment Variables for Llama
@@ -174,31 +172,28 @@ NEO4J_URI=bolt://neo4j:7687
 # CONTROLLER_API_URL=http://localhost:8003
 # NEO4J_URI=bolt://localhost:7687
 
+# DASHBOARD CONSTANTS
+LOG_FILE=app.log
+AI_IMAGE_UI=Dashboard/FOX_AI.png
+
 # NEWSGUARD VARIABLES
-CLIENT_API_ID=
-NG_API_KEY=
+CLIENT_API_ID =
+NG_API_KEY = 
 
 # DATABASE VARIABLES
 SQLDB_PATH=data/fact_checker.db
 ASSET_PATH=assets
 
 # GRAPHRAG VARIABLES
-MODEL_LLM_NEO4J=phi3.5:latest
-NEO4J_USERNAME=
-NEO4J_PASSWORD=
+MODEL_LLM_NEO4J = phi3.5:latest
+NEO4J_USERNAME = ''
+NEO4J_PASSWORD = ''
 
 # GROQ VARIABLES
 GROQ_MODEL_NAME=llama-3.3-70b-versatile
 GROQ_LOW_MODEL_NAME=gemma2-9b-it
 GROQ_API_KEY=
-
-# DASHBOARD CONSTANTS
-LOG_FILE=app.log
-AI_IMAGE_UI=assets/FOX_AI.png
 ```
-
-
-
 
 ## Authors
 
@@ -218,5 +213,4 @@ For more information about NewsGuard and their work, visit their official websit
 ---
 
 ## License
-
 This project is licensed under the [GNU General Public License v3.0](LICENSE). Refer to the LICENSE file for more information.

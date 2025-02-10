@@ -1,30 +1,29 @@
 FROM python:3.10-slim
 
-# Evita problemi di buffering nei log
+# Avoid buffering issues in logs
 ENV PYTHONUNBUFFERED=1
 
-# Imposta la cartella di lavoro
+# Set the working directory
 WORKDIR /app
 
-# Aggiorna e installa dipendenze di sistema (se necessarie)
+# Update and install system dependencies (if needed)
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copia i file necessari
-COPY requirements.txt .  
+# Copy the required files
+COPY requirements.txt .
 
-# Installa le dipendenze Python senza cache
+# Install Python dependencies without cache
 RUN pip install --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-
-# Copia tutto il codice (dopo aver impostato .dockerignore)
+# Copy all the code (after setting up .dockerignore)
 COPY . .
 
-# Espone le porte usate dalle varie applicazioni
+# Expose the ports used by the various applications
 EXPOSE 8001 8003 8501
 
-# Comando di default (ma viene sovrascritto da docker-compose)
+# Default command (overridden by docker-compose)
 CMD ["bash"]
