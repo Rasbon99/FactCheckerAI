@@ -12,9 +12,6 @@ import networkx as nx
 from py2neo import Graph
 from langchain_neo4j import Neo4jGraph
 
-import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 from log import Logger
 
 class GraphManager:

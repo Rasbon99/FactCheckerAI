@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch, MagicMock
-from query_engine import QueryEngine
-from graph_manager import GraphManager
+from GraphRAG.query_engine import QueryEngine
+from GraphRAG.graph_manager import GraphManager
 import dotenv
 import os
 
