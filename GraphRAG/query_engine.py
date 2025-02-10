@@ -9,9 +9,6 @@ from langchain_community.vectorstores import Neo4jVector
 from langchain_ollama import OllamaEmbeddings
 from langchain_groq import ChatGroq
 
-import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 from log import Logger
 
 class QueryEngine:
