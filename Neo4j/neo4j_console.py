@@ -7,22 +7,39 @@ from log import Logger
 
 class Neo4jClient:
     def __init__(self):
+        """
+        Initializes the Neo4jClient object.
+
+        This includes setting up a logger, initializing the process attribute, and detecting the platform.
+        """
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.process = None
         self.platform = platform.system()
 
     def __del__(self):
+        """
+        Destructor for the Neo4jClient object.
+
+        Ensures the Neo4j console is stopped when the object is deleted.
+        """
         self._stop_console()
 
     def _start_console(self):
         """
         Starts the Neo4j console as a background process.
+
+        This method uses platform-specific commands to start the Neo4j console. On macOS, it uses the `neo4j console` command,
+        while on Windows, it starts a PowerShell process to run the command.
+
+        Raises:
+            FileNotFoundError: If the `neo4j` command is not found.
+            Exception: For any unexpected errors during process execution.
         """
         self.logger.info("Starting Neo4j console...")
         try:
             if self.platform == "Darwin":
                 try:
-                    # Avvia il comando "neo4j console" in un processo separato
+                    # Start the "neo4j console" command in a separate process
                     self.process = subprocess.Popen(
                         ["neo4j", "console"],
                         stdout=subprocess.PIPE,
@@ -50,23 +67,50 @@ class Neo4jClient:
 
     def is_running(self, process):
         """
-        Checks if the given process is still running.
+        Checks if the Neo4j process or port is still active.
+
+        Args:
+            process (subprocess.Popen): The process object to check.
+
+        Returns:
+            bool: True if the process is running or if the Neo4j port (default: 7687) is in use; False otherwise.
         """
         def is_process_running(pid):
-            """Check if a process with a given PID is still running."""
+            """
+            Checks if a process with the given PID is still running.
+
+            Args:
+                pid (int): The process ID.
+
+            Returns:
+                bool: True if the process exists; False otherwise.
+            """
             return psutil.pid_exists(pid)
 
         def is_port_in_use(port):
-            """Check if a specific port is in use (useful for verifying if the console is active)."""
+            """
+            Checks if a specific port is in use.
+
+            Args:
+                port (int): The port number to check.
+
+            Returns:
+                bool: True if the port is in use; False otherwise.
+            """
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 return s.connect_ex(("localhost", port)) == 0
 
         return process and is_process_running(process.pid) or is_port_in_use(7687)  # Assuming Neo4j runs on port 7687
 
-
     def _stop_console(self):
         """
-        Stops the Neo4j console if it is running.
+        Stops the Neo4j console if it is currently running.
+
+        This method sends a terminate signal to the process and ensures it is properly stopped. 
+        If the process does not terminate, it forces termination.
+
+        Raises:
+            Warning: If the Neo4j console is not running or fails to stop.
         """
         if self.is_running(self.process):  # Check if the process is still active
             self.logger.info("Stopping Neo4j console...")

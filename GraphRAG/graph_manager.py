@@ -57,6 +57,9 @@ class GraphManager:
         that are no longer connected to any articles.
 
         Logs the process and measures the execution time.
+        
+        Raises:
+            Exception: if there is an error during data reset.
         """
         self.logger.info("Starting data reset process...")
         

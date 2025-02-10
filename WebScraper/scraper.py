@@ -244,7 +244,6 @@ class Scraper:
         Raises:
             None: The function doesn't raise any custom exceptions, but logs errors if there are issues processing the sources.
         """
-
         correlated_sources = []
         
         for source in sources:

@@ -18,7 +18,6 @@ class Database:
         Raises:
             KeyError: If the environment variable for the database file path is not set.
         """
-        
         self.logger = Logger(self.__class__.__name__).get_logger()
         try:
             dotenv.load_dotenv(env_file, override=True)
@@ -105,7 +104,6 @@ class Database:
         Raises:
             sqlite3.DatabaseError: If there is an error during query execution.
         """
-
         masked_params = [param if not isinstance(param, (bytes, bytearray)) else "BLOB" for param in params]
         self.logger.info("Executing query: %s", query)
 
@@ -219,13 +217,27 @@ class Database:
         
     def get_history(self):
         """
-        Retrieves the conversations from the database, including associated sources.
+        Retrieves the conversations from the database, including their associated sources and any related images.
+
+        This method queries the database to fetch claims, their associated answers, and any related sources. 
+        If a folder containing graph images is specified for a claim, the images are included as well.
 
         Returns:
-            pd.DataFrame: A DataFrame containing the conversations and their sources.
-        """
+            list: A list of dictionaries where each dictionary represents a conversation with the following keys:
+                - id (int): The unique identifier of the claim.
+                - claim (str): The text of the claim.
+                - title (str): The title associated with the claim.
+                - answer (str): The answer text associated with the claim.
+                - images (list): A list of file paths for related graph images (if available).
+                - sources (list): A list of dictionaries representing the sources, each with the following keys:
+                    - title (str): The title of the source.
+                    - url (str): The URL of the source.
+                    - body (str): The body content of the source.
 
-        # Query per ottenere le conversazioni con risposta e immagine
+        Raises:
+            Warning: Logs a warning if the graph folder does not exist or is not specified.
+        """
+        # Query to fetch claims and their associated answers
         query = """
         SELECT c.id, c.text, c.title, a.answer, a.graphs_folder 
         FROM claims c
@@ -242,7 +254,7 @@ class Database:
         for row in rows:
             claim_id = row[0]
             
-            # Query per ottenere le sources associate al claim
+            # Query to fetch sources associated with the claim
             sources_query = """
             SELECT title, url, body 
             FROM sources 
@@ -250,7 +262,7 @@ class Database:
             """
             sources_rows = self.fetch_all(sources_query, (claim_id,))
 
-            # Formattare le sources come una lista di dizionari
+            # Format sources as a list of dictionaries
             sources = [{"title": s[0], "url": s[1], "body": s[2]} for s in sources_rows]
 
             images = []
@@ -260,6 +272,7 @@ class Database:
             else:
                 self.logger.warning("La cartella dei grafici non esiste o non è stata specificata.")
 
+            # Append the conversation data to the list
             conversations.append({
                 "id": claim_id,
                 "claim": row[1],

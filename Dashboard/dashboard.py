@@ -305,8 +305,6 @@ class DashboardPipeline:
 
         with st.sidebar:
 
-            
-
             col1, col2, col3 = st.columns([0.8, 0.25, 0.2])
             
             with col1: 
