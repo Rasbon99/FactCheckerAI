@@ -2,7 +2,7 @@ from selenium import webdriver
 from unittest import TestCase
 from selenium.webdriver.chrome.options import Options
 import time
-from log import Logger  # Assumendo che tu abbia una classe Logger
+from log import Logger  
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 

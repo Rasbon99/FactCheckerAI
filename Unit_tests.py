@@ -1,12 +1,8 @@
 import unittest
 from unittest.mock import patch, MagicMock
-from graph_manager import GraphManager
-from query_engine import QueryEngine
+from GraphRAG.graph_manager import GraphManager
+from GraphRAG.query_engine import QueryEngine
 import requests
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from log import Logger
 
 class TestGraphManager(unittest.TestCase):
 
