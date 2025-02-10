@@ -162,5 +162,4 @@ For more information about NewsGuard and their work, visit their official websit
 ---
 
 ## License
-
 This project is licensed under the [GNU General Public License v3.0](LICENSE). Refer to the LICENSE file for more information.
