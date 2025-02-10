@@ -2,8 +2,8 @@ services:
   neo4j:
     image: neo4j:5.26.2-community-ubi9
     ports:
-      - "7474:7474"  # Porta per il browser di Neo4j
-      - "7687:7687"  # Porta per il protocollo Bolt
+      - "7474:7474"  # Port for the Neo4j browser
+      - "7687:7687"  # Port for the Bolt protocol
     environment:
       - NEO4J_AUTH=none
       - NEO4JLABS_PLUGINS=["apoc"]
@@ -15,7 +15,7 @@ services:
   ollama:
     image: ollama/ollama
     ports:
-      - "11434:11434"  # Mappa la porta esposta da Ollama
+      - "11434:11434"  # Maps the port exposed by Ollama
     env_file:
       - key.env
     volumes:
@@ -34,8 +34,8 @@ services:
       - neo4j
       - ollama
     volumes:
-      - ./data:/app/data       # Volume per i dati persistenti
-      - ./assets:/app/assets   # Volume per gli assets
+      - ./data:/app/data       # Volume for persistent data
+      - ./assets:/app/assets   # Volume for assets
 
   controller:
     build: .
@@ -45,7 +45,7 @@ services:
     env_file:
       - key.env
     depends_on:
-      - backend   # Controller parte dopo il backend
+      - backend   # Controller starts after the backend
 
   dashboard:
     build: .
@@ -55,7 +55,7 @@ services:
     env_file:
       - key.env
     depends_on:
-      - controller   # Dashboard parte dopo il controller
+      - controller   # Dashboard starts after the controller
     volumes:
       - ./assets:/app/assets
 
