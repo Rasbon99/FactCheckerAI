@@ -1,0 +1,138 @@
+
+
+--- Test Execution at 2025-02-10 00:38:36 ---
+
+Output of GraphRAG/Unit_tests.py:
+2025-02-10 00:38:48,714 [GraphManager] - INFO - Successfully connected to Neo4j.
+2025-02-10 00:38:51,243 [GraphManager] - ERROR - Error during graph extraction and saving: 'list' object has no attribute 'iterrows'
+2025-02-10 00:38:51,322 [GraphManager] - INFO - Successfully connected to Neo4j.
+2025-02-10 00:38:51,323 [GraphManager] - INFO - Loading completed in 0.00 seconds.
+2025-02-10 00:38:51,333 [GraphManager] - INFO - Successfully connected to Neo4j.
+2025-02-10 00:38:51,340 [GraphManager] - INFO - Successfully connected to Neo4j.
+2025-02-10 00:38:51,341 [GraphManager] - INFO - Starting data reset process...
+2025-02-10 00:38:51,341 [GraphManager] - INFO - Data reset completed in 0.00 seconds.
+2025-02-10 00:38:51,342 [GraphManager] - INFO - Schema refreshed successfully.
+.E:\anaconda3\envs\env_di_prova\lib\unittest\mock.py:2181: ResourceWarning: unclosed <socket.socket fd=808, family=AddressFamily.AF_INET, type=SocketKind.SOCK_STREAM, proto=0, laddr=('127.0.0.1', 63928), raddr=('127.0.0.1', 7687)>
+  self.name = name
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.....
+----------------------------------------------------------------------
+Ran 6 tests in 5.552s
+
+OK
+
+Output of GraphRAG/Integration_tests.py:
+2025-02-10 00:39:06,612 [GraphManager] - INFO - Successfully connected to Neo4j.
+.
+----------------------------------------------------------------------
+Ran 1 test in 7.209s
+
+OK
+
+Output of UI_Tests.py:
+2025-02-10 00:39:08,070 [SeleniumTests] - INFO - SeleniumTests object created
+2025-02-10 00:39:08,070 [SeleniumTests] - INFO - Starting UI test: test_UI_is_working
+2025-02-10 00:39:18,333 [SeleniumTests] - INFO - Test pass
+2025-02-10 00:39:20,455 [SeleniumTests] - INFO - test_UI_is_working completed successfully
+2025-02-10 00:39:20,455 [SeleniumTests] - INFO - Starting UI test: test_insert_claim
+2025-02-10 00:39:35,166 [SeleniumTests] - INFO - Test pass
+2025-02-10 00:39:37,301 [SeleniumTests] - INFO - test_insert_claim completed successfully
+2025-02-10 00:39:37,301 [SeleniumTests] - INFO - Starting UI test: test_answer_confirm
+Traceback (most recent call last):
+  File "C:\Users\gen_i\Documents\GitHub\FactCheckerAI\UI_Tests.py", line 227, in <module>
+    Tests.run()
+  File "C:\Users\gen_i\Documents\GitHub\FactCheckerAI\UI_Tests.py", line 217, in run
+    self.test_answer_confirm()
+  File "C:\Users\gen_i\Documents\GitHub\FactCheckerAI\UI_Tests.py", line 75, in test_answer_confirm
+    claim_input = driver.find_element(By.XPATH, '//textarea[@placeholder="Your message"]')
+  File "E:\anaconda3\envs\env_di_prova\lib\site-packages\selenium\webdriver\remote\webdriver.py", line 888, in find_element
+    return self.execute(Command.FIND_ELEMENT, {"using": by, "value": value})["value"]
+  File "E:\anaconda3\envs\env_di_prova\lib\site-packages\selenium\webdriver\remote\webdriver.py", line 429, in execute
+    self.error_handler.check_response(response)
+  File "E:\anaconda3\envs\env_di_prova\lib\site-packages\selenium\webdriver\remote\errorhandler.py", line 232, in check_response
+    raise exception_class(message, screen, stacktrace)
+selenium.common.exceptions.NoSuchElementException: Message: no such element: Unable to locate element: {"method":"xpath","selector":"//textarea[@placeholder="Your message"]"}
+  (Session info: chrome=132.0.6834.160); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#no-such-element-exception
+Stacktrace:
+	GetHandleVerifier [0x00007FF6F72B02F5+28725]
+	(No symbol) [0x00007FF6F7212AE0]
+	(No symbol) [0x00007FF6F70A510A]
+	(No symbol) [0x00007FF6F70F93D2]
+	(No symbol) [0x00007FF6F70F95FC]
+	(No symbol) [0x00007FF6F7143407]
+	(No symbol) [0x00007FF6F711FFEF]
+	(No symbol) [0x00007FF6F7140181]
+	(No symbol) [0x00007FF6F711FD53]
+	(No symbol) [0x00007FF6F70EA0E3]
+	(No symbol) [0x00007FF6F70EB471]
+	GetHandleVerifier [0x00007FF6F75DF30D+3366989]
+	GetHandleVerifier [0x00007FF6F75F12F0+3440688]
+	GetHandleVerifier [0x00007FF6F75E78FD+3401277]
+	GetHandleVerifier [0x00007FF6F737AAAB+858091]
+	(No symbol) [0x00007FF6F721E74F]
+	(No symbol) [0x00007FF6F721A304]
+	(No symbol) [0x00007FF6F721A49D]
+	(No symbol) [0x00007FF6F7208B69]
+	BaseThreadInitThunk [0x00007FFCCC257374+20]
+	RtlUserThreadStart [0x00007FFCCCA7CC91+33]
+
+
+
+--- Test Execution at 2025-02-10 00:46:04 ---
+
+
+--- Test Execution at 2025-02-10 00:46:09 ---
+
+Output of GraphRAG/Unit_tests.py:
+2025-02-10 00:46:29,700 [GraphManager] - INFO - Successfully connected to Neo4j.
+2025-02-10 00:46:32,230 [GraphManager] - ERROR - Error during graph extraction and saving: 'list' object has no attribute 'iterrows'
+2025-02-10 00:46:32,297 [GraphManager] - INFO - Successfully connected to Neo4j.
+2025-02-10 00:46:32,298 [GraphManager] - INFO - Loading completed in 0.00 seconds.
+2025-02-10 00:46:32,304 [GraphManager] - INFO - Successfully connected to Neo4j.
+2025-02-10 00:46:32,311 [GraphManager] - INFO - Successfully connected to Neo4j.
+2025-02-10 00:46:32,312 [GraphManager] - INFO - Starting data reset process...
+2025-02-10 00:46:32,312 [GraphManager] - INFO - Data reset completed in 0.00 seconds.
+2025-02-10 00:46:32,313 [GraphManager] - INFO - Schema refreshed successfully.
+.E:\anaconda3\envs\env_di_prova\lib\unittest\mock.py:2181: ResourceWarning: unclosed <socket.socket fd=1340, family=AddressFamily.AF_INET, type=SocketKind.SOCK_STREAM, proto=0, laddr=('127.0.0.1', 64996), raddr=('127.0.0.1', 7687)>
+  self.name = name
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.....
+----------------------------------------------------------------------
+Ran 6 tests in 5.400s
+
+OK
+
+Output of GraphRAG/Integration_tests.py:
+2025-02-10 00:46:50,314 [GraphManager] - INFO - Successfully connected to Neo4j.
+.
+----------------------------------------------------------------------
+Ran 1 test in 8.398s
+
+OK
+
+Output of UI_Tests.py:
+2025-02-10 00:46:51,673 [SeleniumTests] - INFO - SeleniumTests object created
+2025-02-10 00:46:51,673 [SeleniumTests] - INFO - Starting UI test: test_UI_is_working
+2025-02-10 00:47:01,985 [SeleniumTests] - INFO - Test pass
+2025-02-10 00:47:04,096 [SeleniumTests] - INFO - test_UI_is_working completed successfully
+2025-02-10 00:47:04,096 [SeleniumTests] - INFO - Starting UI test: test_insert_claim
+2025-02-10 00:47:18,387 [SeleniumTests] - INFO - Test pass
+2025-02-10 00:47:20,536 [SeleniumTests] - INFO - test_insert_claim completed successfully
+2025-02-10 00:47:20,536 [SeleniumTests] - INFO - Starting UI test: test_answer_confirm
+2025-02-10 00:49:10,462 [SeleniumTests] - INFO - Test pass
+2025-02-10 00:49:12,599 [SeleniumTests] - INFO - test_answer_confirm completed successfully
+2025-02-10 00:49:12,599 [SeleniumTests] - INFO - Starting UI test: test_answer_neutral
+2025-02-10 00:51:02,729 [SeleniumTests] - INFO - Test pass
+2025-02-10 00:51:04,853 [SeleniumTests] - INFO - test_answer_neutral completed successfully
+2025-02-10 00:51:04,853 [SeleniumTests] - INFO - Starting UI test: test_answer_deny
+2025-02-10 00:52:55,116 [SeleniumTests] - INFO - Test pass
+2025-02-10 00:52:57,257 [SeleniumTests] - INFO - test_answer_deny completed successfully
+2025-02-10 00:52:57,257 [SeleniumTests] - INFO - Starting UI test: test_delete_chat_history
+2025-02-10 00:54:52,352 [SeleniumTests] - INFO - Test pass
+2025-02-10 00:54:54,496 [SeleniumTests] - INFO - test_delete_chat_history completed successfully
+2025-02-10 00:55:07,215 [SeleniumTests] - INFO - Test pass
+2025-02-10 00:55:09,330 [SeleniumTests] - INFO - test_exit_dashboard completed successfully
+2025-02-10 00:55:09,330 [SeleniumTests] - INFO - Starting UI test: test_watch_conversation_from_chat_history
+2025-02-10 00:57:03,790 [SeleniumTests] - INFO - Test pass
+2025-02-10 00:57:05,919 [SeleniumTests] - INFO - test_watch_conversation_from_chat_history completed successfully
+2025-02-10 00:57:05,919 [SeleniumTests] - INFO - SeleniumTests run method executed

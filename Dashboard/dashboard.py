@@ -28,7 +28,7 @@ class DashboardPipeline:
         self.controller_url = os.getenv('CONTROLLER_API_URL', 'http://127.0.0.1:8003')
 
         # Load image into the sidebar
-        self.image_sidebar = Image.open(self.logo).resize((100, 100))
+        self.image_sidebar = Image.open(self.logo)
 
         # Initialize session state
         self._initialize_session_state()
@@ -279,8 +279,7 @@ class DashboardPipeline:
         Raises:
             Exception: If there is an error during the execution of the dashboard.
         """
-        st.title("🦊 FOX AI")
-        st.caption("🔍 Your personal assistant on fact-checking")
+        st.image(self.image_sidebar)
 
         if st.session_state.view_mode == "chat":
             prompt = st.chat_input()
@@ -305,29 +304,34 @@ class DashboardPipeline:
                 self.display_message("assistant", "Waiting for your claim...")
 
         with st.sidebar:
-            if st.sidebar.button("➕ New Conversation"):
-                st.session_state.view_mode = "chat"
-                st.session_state.messages = []
-                st.session_state.selected_conversation = None
-                
-                # Hidden test message
-                st.session_state.messages.append({"role": "user", "content": "Test automatic message for new conversation"})
-                st.rerun()
 
-            if st.sidebar.button("🗑️ Delete Chat History"):
-                self.delete_chat_history()
-                st.session_state.view_mode = "chat"
-                st.session_state.messages = []
-                st.session_state.selected_conversation = None
-                
-                # Hidden test message
-                st.session_state.messages.append({"role": "user", "content": "Test automatic message for new conversation"})
-                st.rerun()
+            
 
-            if st.button("Exit Dashboard"):
-                st.stop()
+            col1, col2, col3 = st.columns([0.8, 0.25, 0.2])
+            
+            with col1: 
+                if st.button("➕ New Conversation", key="new_conv"):
+                    st.session_state.view_mode = "chat"
+                    st.session_state.messages = []
+                    st.session_state.selected_conversation = None
 
-            st.image(self.image_sidebar)
+                    # Hidden test message
+                    st.session_state.messages.append({"role": "user", "content": "Test automatic message for new conversation"})
+                    st.rerun()
+            
+            with col2: 
+                if st.button("🗑️", key="del_chat", help="Delete Chat History"):
+                    # Supponiamo di avere definito una funzione per eliminare la cronologia
+                    self.delete_chat_history()
+                    st.session_state.view_mode = "chat"
+                    st.session_state.messages = []
+                    st.session_state.selected_conversation = None
+                    
+                    st.rerun()
+
+            with col3:
+                if st.button("❌", key="exit_dash", help="Exit Dashboard"):
+                    st.stop()
 
             st.sidebar.title("Chat History")
             st.sidebar.text_input("Search claims...", key="search_query", placeholder="Type to search")
