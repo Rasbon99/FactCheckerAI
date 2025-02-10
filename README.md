@@ -34,7 +34,7 @@ To use this project, you need to configure the following tools:
 2. **Python Libraries** *(Manual Installation Only)*
 3. **Neo4j** *(Manual Installation Only)*
 4. **Ollama** *(Manual Installation Only)*
-5. **NewsGuard Ranking Database**
+5. **NewsGuard Ranking Database** *(Recommended)*
 6. **Groq Cloud**
 
 ---
@@ -140,7 +140,7 @@ ollama pull phi3.5
 - **Windows:**
   1. Follow the instructions in the "Add Environment Variables" section and the installation path of Ollama.
 
-### Step 4: NewsGuard Ranking Database
+### Step 4: NewsGuard Ranking Database *(Recommended)*
 If available, request access to the NewsGuard Ranking Database API by contacting their team. Once you receive the credentials.
 
 ### Step 5: Register on Groq Cloud
