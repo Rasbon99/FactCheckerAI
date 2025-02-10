@@ -20,8 +20,7 @@ services:
       - key.env
     volumes:
       - ollama_data:/root/.ollama
-      - ./ollama_entrypoint.sh:/ollama_entrypoint.sh
-    entrypoint: ["/bin/bash", "/ollama_entrypoint.sh"]
+    entrypoint: ["/bin/bash", "-c", "/bin/ollama serve & SERVE_PID=$! && sleep 5 && ollama pull phi3.5:latest && wait $SERVE_PID"]
     deploy:
       resources:
         reservations:
