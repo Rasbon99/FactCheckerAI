@@ -27,38 +27,72 @@ These articles are then processed and linked within a GraphRAG framework. The La
 - **GraphRAG Framework**: Utilizes **Neo4j** for constructing and analyzing relational knowledge graphs.
 
 ---
-## AGGIUNGERE DOCKER: 
-docker compose up --build
-
 ## Prerequisites
 To use this project, you need to configure the following tools:
 
-1. **Python Libraries** 
-2. **Neo4j**
-3. **Ollama**
-4. **NewsGuard Ranking Database**
-5. **Groq Cloud**
+1. **Docker Setup** *(Recommended)*
+   - If using Docker, you can skip the manual installation steps below.
+2. **Python Libraries** *(Manual Installation Only)*
+3. **Neo4j** *(Manual Installation Only)*
+4. **Ollama** *(Manual Installation Only)*
+5. **NewsGuard Ranking Database**
+6. **Groq Cloud**
+
+---
+
+## Option 1: Run with Docker *(Recommended)*
+
+To simplify the setup process, you can run the application using Docker. There are two options depending on your system:
+
+### Standard Docker Setup
+For systems that do not have a GPU compatible with CUDA, use the following command to start the application:
+```bash
+docker compose up --build
+```
+
+### GPU-Accelerated Setup (NVIDIA GPUs Required)
+If your system has an NVIDIA GPU and supports CUDA, you can use the GPU-accelerated version. Ensure that you have the **NVIDIA Container Toolkit** installed before running the following command:
+
+- **Installation Guide:** [NVIDIA Container Toolkit Installation](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+
+- If you are using **Docker Desktop on Windows**, the NVIDIA Container Toolkit is already included.
+
+Once the toolkit is installed, run:
+```bash
+docker-compose -f docker-compose-gpu.yml build
+docker-compose -f docker-compose-gpu.yml up
+```
+
+Note: Neo4j authentication is disabled in the Docker version, so you do not need to provide a username and password.
+
+---
+
+## Option 2: Manual Installation
+If you prefer to install and run the application locally without Docker, follow these steps:
 
 ### Step 1: Set Up the Environment
-1. Create and activate a new virtual environment:
-     ```bash
-     conda create --name myenv python=3.13.1
-     conda activate myenv
-     ```
-2. Install the required Python libraries:
-   ```bash
-   pip install -r requirements.txt
-   ```
+
+#### 1. Create and activate a new virtual environment:
+```bash
+conda create --name myenv python=3.13.1
+conda activate myenv
+```
+
+#### 2. Install the required Python libraries:
+```bash
+pip install -r requirements.txt
+```
 
 ### Step 2: Neo4j Setup
 
 #### Download Neo4j
 Download the Community Edition of Neo4j Graph Database Self-Managed from the following link: [Neo4j Deployment Center](https://neo4j.com/deployment-center/).
 
+Note: In the local version, you need to set the username and password for Neo4j. The default admin credentials are neo4j for both the username and password.
+
 #### Configure APOC
 1. Copy the `apoc-5.26.1-core.jar` file from the `labs` folder and paste it into the `plugins` folder. Rename the copied file to `apoc.jar`.
 2. Edit the `neo4j.conf` file in the `conf` folder and add the following lines at the end of the file:
-
    ```
    # Configure the plugin directory
    server.directories.plugins=plugins
@@ -99,7 +133,6 @@ Windows users need to use the Linux version of Ollama within WSL (Windows Subsys
 
 #### Download Models from Ollama
 After installation, download the desired models from the official registry using the following commands, we recommend:
-
 ```bash
 ollama pull phi3.5
 ollama pull gemma2-9b-it
@@ -117,19 +150,40 @@ If available, request access to the NewsGuard Ranking Database API by contacting
 2. After registration, generate an API key and store it securely.
 
 ### Step 6: Create the `key.env` File
-Add all the required environment variables to a file named `key.env` in the following format:
+
+In case of launching with Docker, set `DOCKER=true` and uncomment all variables under the **Docker Version** section. Otherwise, set `DOCKER=false` and uncomment the variables under the **Local Version** section.
 
 ```env
+DOCKER=true
+
+# API URL Docker Version
+OLLAMA_SERVER_URL=http://ollama:11434
+NEO4J_SERVER_URL=http://neo4j:7474
+OLLAMA_API_URL=http://ollama:11434
+NEO4J_API_URL=http://neo4j:7474
+BACKEND_API_URL=http://backend:8001
+CONTROLLER_API_URL=http://controller:8003
+NEO4J_URI=bolt://neo4j:7687
+
+# API URL Local Version
+# OLLAMA_SERVER_URL=http://localhost:11434
+# NEO4J_SERVER_URL=http://localhost:7474
+# OLLAMA_API_URL=http://localhost:8000
+# NEO4J_API_URL=http://localhost:8002
+# BACKEND_API_URL=http://localhost:8001
+# CONTROLLER_API_URL=http://localhost:8003
+# NEO4J_URI=bolt://localhost:7687
+
 # NEWSGUARD VARIABLES
 CLIENT_API_ID=
 NG_API_KEY=
 
 # DATABASE VARIABLES
-SQLDB_PATH=Database/data/fact_checker.db
+SQLDB_PATH=data/fact_checker.db
+ASSET_PATH=assets
 
 # GRAPHRAG VARIABLES
 MODEL_LLM_NEO4J=phi3.5:latest
-NEO4J_URI=bolt://localhost:7687
 NEO4J_USERNAME=
 NEO4J_PASSWORD=
 
@@ -140,11 +194,11 @@ GROQ_API_KEY=
 
 # DASHBOARD CONSTANTS
 LOG_FILE=app.log
-AI_IMAGE_UI=Dashboard/FOX_AI.png
-CLAIM_PROCESSING_TIME=5
+AI_IMAGE_UI=assets/FOX_AI.png
 ```
 
----
+
+
 
 ## Authors
 
