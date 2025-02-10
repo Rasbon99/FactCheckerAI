@@ -24,6 +24,8 @@ These articles are then processed and linked within a GraphRAG framework. The La
 - **Large Language Models (LLMs)**: Hosted on **Groq Cloud** and **Ollama** for advanced reasoning and validation tasks.
 - **GraphRAG Framework**: Utilizes **Neo4j** for constructing and analyzing relational knowledge graphs.
 
+![FOX_AI_Architecture](assets/FOX_AI_SYS.png)
+
 ---
 
 ## Prerequisites
