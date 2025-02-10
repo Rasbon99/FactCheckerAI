@@ -5,5 +5,5 @@ SERVE_PID=$!
 sleep 5
 # Pull the desired model
 ollama pull phi3.5:latest
-# Wait for the ollama serve process (keeps the script active)
+# Wait for the ollama serve process
 wait $SERVE_PID
