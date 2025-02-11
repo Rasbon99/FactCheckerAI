@@ -158,15 +158,6 @@ class Answer():
         self.answer = answer
         self.graphs_folder = graphs_folder
         self.save_to_db()
-        
-    def set_answer(self, answer):
-        """
-        Sets the answer for the claim.
-
-        Args:
-            answer (str): The answer to the claim.
-        """
-        self.answer = answer
     
     def save_to_db(self):
         """
