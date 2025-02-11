@@ -182,3 +182,7 @@ class Controller:
             self.logger.info("Neo4j server stopped.")
         except Exception as e:
             self.logger.error(f"Error stopping Neo4j server: {e}")
+            
+# Create an instance of Controller and retrieve the FastAPI app
+controller = Controller()
+app = controller.app
