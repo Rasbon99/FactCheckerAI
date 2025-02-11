@@ -394,6 +394,22 @@ The dashboard retrieves previous conversations via a GET REST API. Users can fet
 - **Logging**: Logs are used to monitor and debug the application.
 - **Input Validation**: Numeric-only claims are flagged as invalid.
 
+## Testing (branch)
+
+Testing is a critical phase in FOX AI to ensure the system's reliability, accuracy, and robustness in information verification. The system undergoes unit, integration, and system tests, simulating real user interactions, assessing performance, and handling edge cases. A methodical approach identifies potential issues, ensuring the system operates with precision and reliability.
+
+### Unit and Integration Testing
+
+- **Unit Testing** focuses on individual components:
+  - **Graph Manager**: Verifies Neo4J graph handling.
+  - **Query Engine**: Tests similarity search and interaction with the Ollama server.
+
+- **Integration Testing** checks the interaction between **QueryEngine** and **GraphManager**, ensuring seamless data retrieval and graph generation.
+
+### User Interface Testing
+
+UI testing uses decision coverage with a decision tree to test all possible outcomes. **Selenium** automates the process, ensuring correct system responses under various conditions, improving the user experience.
+
 ## Authors
 
 - [Leonardo Catello](https://github.com/Leonard2310)
