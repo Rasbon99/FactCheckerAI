@@ -39,8 +39,6 @@ To use this project, you need to configure the following tools:
 5. **NewsGuard Ranking Database** *(Recommended)*
 6. **Groq Cloud**
 
----
-
 ## Option 1: Run with Docker *(Recommended)*
 
 To simplify the setup process, you can run the application using Docker. There are two options depending on your system:
@@ -65,8 +63,6 @@ docker-compose -f docker-compose-gpu.yml up
 ```
 
 Note: Neo4j authentication is disabled in the Docker version, so you do not need to provide a username and password.
-
----
 
 ## Option 2: Manual Installation
 If you prefer to install and run the application locally without Docker, follow these steps:
@@ -198,6 +194,7 @@ GROQ_MODEL_NAME=llama-3.3-70b-versatile
 GROQ_LOW_MODEL_NAME=gemma2-9b-it
 GROQ_API_KEY=
 ```
+---
 
 ## Project Overview  
 
@@ -392,6 +389,8 @@ The dashboard retrieves previous conversations via a GET REST API. Users can fet
 - **Logging**: Logs are used to monitor and debug the application.
 - **Input Validation**: Numeric-only claims are flagged as invalid.
 
+--- 
+
 ## Testing (branch)
 
 Testing is a critical phase in FOX AI to ensure the system's reliability, accuracy, and robustness in information verification. The system undergoes unit, integration, and system tests, simulating real user interactions, assessing performance, and handling edge cases. A methodical approach identifies potential issues, ensuring the system operates with precision and reliability.
@@ -407,6 +406,8 @@ Testing is a critical phase in FOX AI to ensure the system's reliability, accura
 ### User Interface Testing
 
 UI testing uses decision coverage with a decision tree to test all possible outcomes. **Selenium** automates the process, ensuring correct system responses under various conditions, improving the user experience.
+
+--- 
 
 ## Authors
 
