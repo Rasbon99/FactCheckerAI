@@ -362,8 +362,6 @@ The **Backend Component** is responsible for orchestrating the entire response p
 3. **GraphRAG Retrieval**: Once the sources are refined, the GraphRAG mechanism analyzes the claim against the retrieved information, utilizing structured knowledge graphs to generate a well-founded response.
 4. **Data Management**: The backend ensures efficient data storage and management, maintaining a coherent and reliable history of fact-checking interactions within the SQLite database.
 
----
-
 ### Streamlit Dashboard
 
 The **Streamlit Dashboard** provides a user-friendly interface for interacting with the system, enabling users to input claims, view responses, and access past conversations.
