@@ -26,7 +26,10 @@ class Scraper:
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.ddg = DDGS()
-        self.ng_client = NewsGuardClient()
+        
+        self.news_guard_available = os.getenv("NEWSGUARD_RANKING")
+        if(self.news_guard_available == "true"):
+            self.ng_client = NewsGuardClient()
         
         self.model = os.getenv("GROQ_MODEL_NAME")
         self.client = Groq()
@@ -241,7 +244,6 @@ class Scraper:
         Raises:
             None: The function doesn't raise any custom exceptions, but logs errors if there are issues processing the sources.
         """
-
         correlated_sources = []
         
         for source in sources:
@@ -317,26 +319,29 @@ class Scraper:
             # Parse the URL to get a "clean" URL
             parsed_url = urlparse(href)
             cleared_url = parsed_url.netloc
-
-            # Get the site's rating
-            rating = self.ng_client.get_rating(cleared_url)
-
+            
             # Check if scraping is allowed for the site
             if not self.can_scrape(cleared_url):
                 self.logger.info(f"Skipping {cleared_url} due to scraping restrictions.")
                 continue
-                        
-            # If the rating is valid, check the rank and score
-            if rating:
-                rank = rating.get('rank')
-                score = rating.get('score')
-                
-                # If the site has rank 'T' and score >= score_threshold, include it
-                if rank == 'T' and score >= score_threshold:
-                    filtered_sites.append(site)
-                else:
-                    # Log for sites that are excluded
-                    self.logger.info("Excluded site %s with rank: %s, score: %s", cleared_url, rank, score)
+
+            # Get the site's rating
+            if (self.news_guard_available == "true"):
+                rating = self.ng_client.get_rating(cleared_url)
+    
+                # If the rating is valid, check the rank and score
+                if rating:
+                    rank = rating.get('rank')
+                    score = rating.get('score')
+                    
+                    # If the site has rank 'T' and score >= score_threshold, include it
+                    if rank == 'T' and score >= score_threshold:
+                        filtered_sites.append(site)
+                    else:
+                        # Log for sites that are excluded
+                        self.logger.info("Excluded site %s with rank: %s, score: %s", cleared_url, rank, score)
+            else:
+                filtered_sites.append(site)
 
         self.logger.info("Filtered websites: %s sites", len(filtered_sites))
 

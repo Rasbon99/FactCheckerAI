@@ -55,7 +55,6 @@ class QueryEngine:
         Returns:
             str: The result of the similarity query, or a message indicating no results were found.
         """
-        
         node_label = "Article"
         text_node_properties = ["topic", "title", "body"]
         embedding_node_property = "embedding"
@@ -87,7 +86,18 @@ class QueryEngine:
             return None
     
     def _is_ollama_running(self):
-        """Check if the Ollama server is active by querying the FastAPI API."""
+        """
+        Checks if the Ollama server is active by sending a GET request to the FastAPI API.
+
+        This method attempts to connect to the Ollama server URL (defined as an environment variable)
+        and checks if the server responds with an HTTP 200 status code, indicating it is running.
+
+        Returns:
+            bool: True if the Ollama server is active and returns status code 200; False otherwise.
+
+        Raises:
+            requests.exceptions.RequestException: If there is an error during the request (e.g., timeout, connection error).
+        """
         try:
             response = requests.get(os.getenv("OLLAMA_SERVER_URL"), timeout=2)
             return response.status_code == 200

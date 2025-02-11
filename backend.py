@@ -11,7 +11,6 @@ backend_app = FastAPI()
 
 db = Database()
 
-
 class InputText(BaseModel):
     text: str
 

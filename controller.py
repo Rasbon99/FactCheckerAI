@@ -6,6 +6,12 @@ from log import Logger
 from pydantic import BaseModel
 
 class InputText(BaseModel):
+    """
+    Data model for the input text used in POST requests.
+
+    Attributes:
+        text (str): The text to be processed.
+    """
     text: str
 
 # Load environment variables from the key.env file
@@ -13,6 +19,13 @@ load_dotenv("key.env")
 
 class Controller:
     def __init__(self):
+        """
+        Initializes the Controller instance.
+
+        This sets up the logger, reads environment variables for server URLs, initializes
+        the FastAPI app, and registers the API routes. It also starts the Ollama and Neo4j servers
+        if not running in a Docker environment.
+        """
         # Initialize the logger
         self.logger = Logger(self.__class__.__name__).get_logger()
 
@@ -56,14 +69,16 @@ class Controller:
 
     def post_results(self, input_text: InputText):
         """
-        Endpoint POST che accetta un parametro 'text' nel body della richiesta e lo passa al backend tramite l'API /run_pipeline.
-        Esempio di chiamata: POST /results con body JSON: {"text": "This is the text to process"}
+        Processes a text by calling the backend's /run_pipeline API.
 
         Args:
-            text (str): Il testo da processare.
+            input_text (InputText): The input text to process, passed as a JSON body.
 
         Returns:
-            dict: Un dizionario contenente lo status_code e la risposta JSON del backend.
+            dict: A dictionary containing the status code and response JSON from the backend.
+
+        Raises:
+            HTTPException: If the backend returns an error or if the request fails.
         """
         data = {"text": input_text.text}
         try:
@@ -81,8 +96,13 @@ class Controller:
 
     def clean_conversations(self):
         """
-        Endpoint that triggers a cleanup of conversations by calling the backend's /delete_db endpoint.
-        This endpoint does not return any content.
+        Cleans conversations by calling the backend's /delete_db API.
+
+        Returns:
+            dict: An empty dictionary to indicate successful cleanup.
+
+        Raises:
+            HTTPException: If the backend returns an error or if the request fails.
         """
         try:
             response = requests.post(f"{self.backend_server_url}/delete_db")
@@ -97,7 +117,13 @@ class Controller:
 
     def get_conversation(self):
         """
-        Endpoint that returns conversations by calling the backend's /get_history endpoint.
+        Retrieves conversation history by calling the backend's /get_history API.
+
+        Returns:
+            dict: A dictionary containing the status code and response JSON from the backend.
+
+        Raises:
+            HTTPException: If the backend returns an error or if the request fails.
         """
         try:
             response = requests.get(f"{self.backend_server_url}/get_history")
@@ -115,7 +141,12 @@ class Controller:
             raise HTTPException(status_code=500, detail=str(e))
 
     def _start_servers(self):
-        # Start the Ollama server
+        """
+        Starts the Ollama and Neo4j servers by making POST requests to their respective endpoints.
+
+        Raises:
+            Exception: If there is an error while starting either server.
+        """
         try:
             url = f"{self.ollama_server_url}/start"
             requests.post(url)
@@ -132,7 +163,12 @@ class Controller:
             self.logger.error(f"Error starting Neo4j server: {e}")
 
     def stop_servers(self):
-        # Method to stop both servers
+        """
+        Stops the Ollama and Neo4j servers by making POST requests to their respective endpoints.
+
+        Raises:
+            Exception: If there is an error while stopping either server.
+        """
         try:
             url = f"{self.ollama_server_url}/stop"
             requests.post(url)
@@ -146,13 +182,7 @@ class Controller:
             self.logger.info("Neo4j server stopped.")
         except Exception as e:
             self.logger.error(f"Error stopping Neo4j server: {e}")
-
+            
 # Create an instance of Controller and retrieve the FastAPI app
 controller = Controller()
 app = controller.app
-
-# Additional endpoint to stop the servers, if needed:
-@app.get("/stop_all")
-def stop_all():
-    controller.stop_servers()
-    return {"message": "All servers have been stopped."}
