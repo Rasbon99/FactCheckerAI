@@ -105,8 +105,7 @@ class GraphManager:
         UNWIND $data AS article
         MERGE (a:Article {title: article.title})
         SET a.url = article.url,
-            a.body = article.body,
-            a.score = article.score
+            a.body = article.body
 
         MERGE (s:Site {name: article.site})
         MERGE (a)-[:PUBLISHED_ON]->(s)
