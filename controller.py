@@ -182,19 +182,3 @@ class Controller:
             self.logger.info("Neo4j server stopped.")
         except Exception as e:
             self.logger.error(f"Error stopping Neo4j server: {e}")
-
-# Create an instance of Controller and retrieve the FastAPI app
-controller = Controller()
-app = controller.app
-
-# Additional endpoint to stop the servers, if needed:
-@app.get("/stop_all")
-def stop_all():
-    """
-    Stops all servers (Ollama and Neo4j).
-
-    Returns:
-        dict: A message indicating that the servers have been stopped.
-    """
-    controller.stop_servers()
-    return {"message": "All servers have been stopped."}
