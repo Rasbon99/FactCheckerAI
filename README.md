@@ -138,16 +138,18 @@ ollama pull phi3.5
 - **Windows:**
   1. Follow the instructions in the "Add Environment Variables" section and the installation path of Ollama.
 
-### Step 4: NewsGuard Ranking Database *(Recommended)*
+## Required Steps
+
+### Step 1: NewsGuard Ranking Database *(Recommended)*
 If available, request access to the NewsGuard Ranking Database API by contacting their team. Once you receive the credentials, update the configuration.  
 
 If the dataset is accessible, set `NEWSGUARD_RANKING = true` in the `key.env` file; otherwise, set `NEWSGUARD_RANKING = false`.
 
-### Step 5: Register on Groq Cloud
+### Step 2: Register on Groq Cloud
 1. Register on [Groq Cloud](https://console.groq.com/).
 2. After registration, generate an API key and store it securely.
 
-### Step 6: Create the `key.env` File
+### Step 3: Create the `key.env` File
 
 In case of launching with Docker, set `DOCKER=true` and uncomment all variables under the **Docker Version** section. Otherwise, set `DOCKER=false` and uncomment the variables under the **Local Version** section.
 
