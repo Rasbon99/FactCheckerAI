@@ -1,0 +1,65 @@
+services:
+  neo4j:
+    image: neo4j:5.26.2-community-ubi9
+    ports:
+      - "7474:7474"  # Port for the Neo4j browser
+      - "7687:7687"  # Port for the Bolt protocol
+    environment:
+      - NEO4J_AUTH=none
+      - NEO4JLABS_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_whitelist=apoc.*
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+    volumes:
+      - neo4j_data:/data
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"  # Maps the port exposed by Ollama
+    env_file:
+      - key.env
+    volumes:
+      - ollama_data:/root/.ollama
+    entrypoint: ["/bin/bash", "-c", "/bin/ollama serve & SERVE_PID=$! && sleep 5 && ollama pull phi3.5:latest && wait $SERVE_PID"]
+
+  backend:
+    build: .
+    command: uvicorn backend:backend_app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    env_file:
+      - key.env
+    depends_on:
+      - neo4j
+      - ollama
+    volumes:
+      - ./data:/app/data       # Volume for persistent data
+      - ./assets:/app/assets   # Volume for assets
+
+  controller:
+    build: .
+    command: uvicorn controller:app --host 0.0.0.0 --port 8003
+    ports:
+      - "8003:8003"
+    env_file:
+      - key.env
+    depends_on:
+      - backend   # Controller starts after the backend
+
+  dashboard:
+    build: .
+    command: streamlit run Dashboard/dashboard.py --server.runOnSave=true --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    env_file:
+      - key.env
+    depends_on:
+      - controller   # Dashboard starts after the controller
+    volumes:
+      - ./assets:/app/assets
+
+volumes:
+  neo4j_data:
+  data:
+  assets:
+  ollama_data:
