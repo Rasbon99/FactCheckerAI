@@ -1,4 +1,3 @@
-import io
 import uuid
 
 from Database.sqldb import Database
@@ -36,15 +35,6 @@ class Claim:
             Exception: If there is an error while saving the claim to the database.
         """
         self.logger.info("Saving claim to the database.")
-        create_table_sql = """
-            CREATE TABLE IF NOT EXISTS claims (
-                id TEXT PRIMARY KEY,
-                text TEXT,
-                title TEXT,
-                summary TEXT
-            )
-        """
-        self.db.create_table(create_table_sql)
         self.db.execute_query("INSERT INTO claims (id, text, title, summary) VALUES (?, ?, ?, ?)", 
                               (self.id, self.text, self.title, self.summary))
         self.logger.info("Claim with ID %s saved to the database.", self.id)
@@ -89,20 +79,6 @@ class Claim:
             Exception: If there is an error while inserting sources into the database.
         """
         self.logger.info("Adding sources for claim ID %s.", self.id)
-        create_table_sql = """
-            CREATE TABLE IF NOT EXISTS sources (
-                id TEXT PRIMARY KEY,
-                claim_id TEXT,
-                title TEXT,
-                url TEXT,
-                site TEXT,
-                body TEXT,
-                topic TEXT,
-                entities TEXT,
-                FOREIGN KEY (claim_id) REFERENCES claims(id)
-            )
-        """
-        self.db.create_table(create_table_sql)
 
         # Insert each source into the database
         for data in sources_data:
@@ -167,17 +143,6 @@ class Answer():
         Raises:
             Exception: If there is an error while saving the answer to the database.
         """
-        create_table_sql = """
-            CREATE TABLE IF NOT EXISTS answers (
-                id TEXT PRIMARY KEY,
-                claim_id TEXT,
-                answer TEXT,
-                graphs_folder TEXT,
-                FOREIGN KEY (claim_id) REFERENCES claims(id)
-            )
-        """
-        self.db.create_table(create_table_sql)
-        
         self.db.execute_query("INSERT INTO answers (id, claim_id, answer, graphs_folder) VALUES (?,?,?,?)",
                               (self.id, self.claim_id, self.answer, self.graphs_folder))
 
