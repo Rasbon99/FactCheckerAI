@@ -39,6 +39,6 @@ def delete_database():
     db.delete_all_conversations()
 
 @backend_app.get("/get_history")
-def delete_database():
+def get_database():
     history = db.get_history()
     return history
