@@ -88,17 +88,26 @@ Download the Community Edition of Neo4j Graph Database Self-Managed from the fol
 Note: In the local version, you need to set the username and password for Neo4j. The default admin credentials are neo4j for both the username and password.
 
 #### Configure APOC
-1. Copy the `apoc-5.26.1-core.jar` file from the `labs` folder and paste it into the `plugins` folder. Rename the copied file to `apoc.jar`.
-2. Edit the `neo4j.conf` file in the `conf` folder and add the following lines at the end of the file:
-   ```
-   # Configure the plugin directory
-   server.directories.plugins=plugins
+You can configure APOC in two ways:
 
-   # Enable APOC procedures
-   dbms.security.procedures.unrestricted=apoc.*, algo.*
+1. **Option 1 (Recommended): Install APOC from the instance Plugins menu**
+   - Open your Neo4j instance.
+   - Go to the **Plugins** section.
+   - Install **APOC** directly from the available plugins list.
+   - Restart the instance after installation.
 
-   dbms.security.procedures.allowlist=apoc.meta.data,apoc.help
-   ```
+2. **Option 2: Manual setup with JAR + config**
+   1. Copy the `apoc-5.26.1-core.jar` file from the `labs` folder and paste it into the `plugins` folder. Rename the copied file to `apoc.jar`.
+   2. Edit the `neo4j.conf` file in the `conf` folder and add the following lines at the end of the file:
+      ```
+      # Configure the plugin directory
+      server.directories.plugins=plugins
+
+      # Enable APOC procedures
+      dbms.security.procedures.unrestricted=apoc.*, algo.*
+
+      dbms.security.procedures.allowlist=apoc.meta.data,apoc.help
+      ```
 
 #### Set Up Environment Variables
 1. Add the path to the `bin` folder of Neo4j to your system's environment variables:
@@ -196,6 +205,17 @@ GROQ_MODEL_NAME=llama-3.3-70b-versatile
 GROQ_LOW_MODEL_NAME=gemma2-9b-it
 GROQ_API_KEY=
 ```
+
+### Step 4: Initialize SQLite Schema
+
+For local/manual execution, before starting the backend (or any stage that reads/writes claims/sources/answers), initialize the database tables once:
+
+```bash
+python init_db.py
+```
+
+If running with Docker, no extra command is needed: the `backend` service runs `python init_db.py` automatically before starting `uvicorn`.
+
 ---
 
 ## Project Overview  
