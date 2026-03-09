@@ -20,7 +20,7 @@ services:
       - key.env
     volumes:
       - ollama_data:/root/.ollama
-    entrypoint: ["/bin/bash", "-c", "/bin/ollama serve & SERVE_PID=$! && sleep 5 && ollama pull phi3.5:latest && wait $SERVE_PID"]
+    entrypoint: ["/bin/bash", "-c", "/bin/ollama serve & SERVE_PID=$$! && sleep 5 && ollama pull phi3.5:latest && wait $$SERVE_PID"]
 
   backend:
     build: .
@@ -34,7 +34,7 @@ services:
       - ollama
     volumes:
       - ./data:/app/data       # Volume for persistent data
-      - ./assets:/app/assets   # Volume for assets
+      - ./Assets:/app/Assets   # Volume for assets
 
   controller:
     build: .
@@ -56,10 +56,10 @@ services:
     depends_on:
       - controller   # Dashboard starts after the controller
     volumes:
-      - ./assets:/app/assets
+      - ./Assets:/app/Assets
 
 volumes:
   neo4j_data:
   data:
-  assets:
+  Assets:
   ollama_data:
