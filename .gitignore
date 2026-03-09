@@ -2,8 +2,7 @@
 *.env
 *.log
 *.pyc
-*.jpg
 *.csv
 __pycache__/
-*.db
+/data
 /ollama_data

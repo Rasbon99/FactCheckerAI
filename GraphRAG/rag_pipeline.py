@@ -41,7 +41,7 @@ class RAG_Pipeline:
         
         self.graph_manager.reset_data()
 
-        self.graph_folder = os.getenv("ASSET_PATH")
+        self.graph_folder = os.getenv("GRAPHS_PATH", "data/graphs")
 
         if not os.path.exists(self.graph_folder):
             os.makedirs(self.graph_folder)

@@ -193,6 +193,7 @@ NG_API_KEY =
 
 # DATABASE VARIABLES
 SQLDB_PATH=data/fact_checker.db
+GRAPHS_PATH=data/graphs
 ASSET_PATH=assets
 
 # GRAPHRAG VARIABLES
