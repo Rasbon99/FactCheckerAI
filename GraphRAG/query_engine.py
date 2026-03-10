@@ -5,11 +5,29 @@ import platform
 
 import dotenv
 from langchain.chains import RetrievalQA
+from langchain.callbacks.base import BaseCallbackHandler
 from langchain_community.vectorstores import Neo4jVector
 from langchain_ollama import OllamaEmbeddings
 from langchain_groq import ChatGroq
 
 from log import Logger
+
+
+class TokenTrackerCallback(BaseCallbackHandler):
+    """Listens to LangChain LLM calls to extract token usage and call counts."""
+
+    def __init__(self):
+        self.total_tokens = 0
+        self.llm_calls = 0
+
+    def on_llm_end(self, response, **kwargs):
+        self.llm_calls += 1
+        # ChatGroq populates token usage inside the llm_output dictionary
+        if response.llm_output and "token_usage" in response.llm_output:
+            self.total_tokens += response.llm_output["token_usage"].get(
+                "total_tokens", 0
+            )
+
 
 class QueryEngine:
     def __init__(self, env_file="key.env", index_name="articles"):
@@ -19,7 +37,7 @@ class QueryEngine:
         Args:
             env_file (str): Path to the .env file containing configuration settings for the Neo4j connection and models.
             index_name (str): The name of the index in the Neo4j database to be used for querying.
-        
+
         Raises:
             KeyError: If required environment variables are missing.
         """
@@ -38,27 +56,31 @@ class QueryEngine:
         # Model configuration
         self.model_name = os.environ["MODEL_LLM_NEO4J"]
         self.modelGroq_name = os.environ["GROQ_MODEL_NAME"]
-        self.embedding_model = OllamaEmbeddings(model=self.model_name, base_url=os.getenv("OLLAMA_SERVER_URL"))
+        self.embedding_model = OllamaEmbeddings(
+            model=self.model_name, base_url=os.getenv("OLLAMA_SERVER_URL")
+        )
         self.llm_model = ChatGroq(model=self.modelGroq_name)
         self.index_name = index_name
 
     def query_similarity(self, query):
         """
-        Creates a vector index on the Neo4j graph and performs a similarity-based query on the vector index.
+        Performs a vector-based similarity search and RAG query on the Neo4j graph.
 
         Args:
-            query (str): The query string to be executed for similarity-based retrieval from the Neo4j graph.
-        
-        Raises:
-            Exception: If there is an error during the execution of the similarity query.
-        
+            query (str): The claim and instructions to be processed by the LLM.
+
         Returns:
-            str: The result of the similarity query, or a message indicating no results were found.
+            tuple: A tuple containing:
+                - str: The verdict/answer from the LLM (e.g., Supported, Refuted, NEI).
+                - dict: Token usage metadata for RQ2 Efficiency (total tokens and call count).
+
+        Raises:
+            None: Exceptions are caught internally and logged to ensure the pipeline continues.
         """
         node_label = "Article"
         text_node_properties = ["topic", "title", "body"]
         embedding_node_property = "embedding"
-        
+
         retriever = Neo4jVector.from_existing_graph(
             self.embedding_model,
             url=self.neo4j_url,
@@ -67,24 +89,40 @@ class QueryEngine:
             index_name=self.index_name,
             node_label=node_label,
             text_node_properties=text_node_properties,
-            embedding_node_property=embedding_node_property
+            embedding_node_property=embedding_node_property,
         ).as_retriever()
-        
+
         vector_qa = RetrievalQA.from_chain_type(
             llm=self.llm_model, chain_type="stuff", retriever=retriever
         )
-        
-        self.logger.info(f"Executing similarity query...")
+
+        self.logger.info("Executing similarity query...")
+
+        # Instantiate our custom token tracker
+        token_tracker = TokenTrackerCallback()
+
         try:
             start_time_similarity = time.time()
-            result = vector_qa.invoke({"query": query})
+            # Pass the tracker into the invoke command via config
+            result = vector_qa.invoke(
+                {"query": query}, config={"callbacks": [token_tracker]}
+            )
             elapsed_time = time.time() - start_time_similarity
-            self.logger.info(f"Similarity query completed in {elapsed_time:.2f} seconds.")
-            return result.get("result", "No results found.")
+            self.logger.info(
+                f"Similarity query completed in {elapsed_time:.2f} seconds."
+            )
+
+            # Package the extracted metrics
+            token_data = {
+                "total": token_tracker.total_tokens,
+                "calls": token_tracker.llm_calls,
+            }
+            return result.get("result", "No results found."), token_data
+
         except Exception as e:
             self.logger.error(f"Error during similarity query: {e}")
-            return None
-    
+            return None, {"total": 0, "calls": 0}
+
     def _is_ollama_running(self):
         """
         Checks if the Ollama server is active by sending a GET request to the FastAPI API.
@@ -99,8 +137,9 @@ class QueryEngine:
             requests.exceptions.RequestException: If there is an error during the request (e.g., timeout, connection error).
         """
         try:
-            response = requests.get(os.getenv("OLLAMA_SERVER_URL"), timeout=2)
+            response = requests.get(
+                os.getenv("OLLAMA_SERVER_URL", "http://localhost:11434"), timeout=2
+            )
             return response.status_code == 200
         except requests.exceptions.RequestException:
             return False
-        
