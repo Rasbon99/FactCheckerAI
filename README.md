@@ -203,7 +203,7 @@ NEO4J_PASSWORD = ''
 
 # GROQ VARIABLES
 GROQ_MODEL_NAME=llama-3.3-70b-versatile
-GROQ_LOW_MODEL_NAME=gemma2-9b-it
+GROQ_LOW_MODEL_NAME=openai/gpt-oss-20b
 GROQ_API_KEY=
 ```
 
