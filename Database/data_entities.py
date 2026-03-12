@@ -167,12 +167,22 @@ class Answer:
 
 class Experiment:
     def __init__(
-        self, claim_id, latencies, tokens, evidence_data, experiment_id=None, db=None
+        self,
+        claim_id,
+        predicted_label,
+        ground_truth,
+        latencies,
+        tokens,
+        evidence_data,
+        experiment_id=None,
+        db=None,
     ):
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.db = db if db else Database()
         self.id = experiment_id if experiment_id else str(uuid.uuid4())
         self.claim_id = claim_id
+        self.predicted_label = predicted_label
+        self.ground_truth = ground_truth
 
         self.latencies = latencies
         self.tokens = tokens
@@ -200,14 +210,16 @@ class Experiment:
         return file_path
 
     def save_to_db(self):
-        self.logger.info("Saving experiment metrics to the database.")
         self.db.execute_query(
             """INSERT INTO experiments 
-               (id, claim_id, latency_preprocessor, latency_retrieval, latency_graph_rag, total_tokens, llm_calls, evidence_log_path) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               (id, claim_id, predicted_label, ground_truth, latency_preprocessor, 
+                latency_retrieval, latency_graph_rag, total_tokens, llm_calls, evidence_log_path) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 self.id,
                 self.claim_id,
+                self.predicted_label,
+                self.ground_truth,
                 self.latencies.get("preprocessor", 0.0),
                 self.latencies.get("retrieval", 0.0),
                 self.latencies.get("graph_rag", 0.0),

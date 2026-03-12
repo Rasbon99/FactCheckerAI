@@ -159,17 +159,24 @@ class RAG_Pipeline:
             # Step 2: Generate and save graphs
             self.generate_and_save_graphs(claim_graphs_folder)
 
-            query_prompt = """Based on the information provided in the articles, determine if the claim is confirmed or refuted. 
-                        - If the articles confirm the claim, validate it.
-                        - If the articles completely contradict the claim or present completely different information, consider it false.
-                        - If there is confusion because some articles confirm the claim while others deny it, refrain from giving an answer.
-                        Additional guidelines:
-                        - Keep in mind that some information may not be available in all articles, and some articles may cover only part of the claim. In such cases, evaluate the available information in each article to decide whether the claim should be accepted or not.
-                        - Do not provide a "partially confirmed" or "partially refuted" response. The decision must be either to confirm or refute the claim, or to refrain from answering if the evidence is conflicting.
-                        
-                        Make sure to cite the titles of the articles that support your conclusions. 
-                        Only use the information available in the articles, and do not include any external knowledge."""
-            question = 'Claim: "' + claim + '" ' + query_prompt
+            question = f"""
+                You are a strict fact-checking assistant. 
+            
+                CLAIM TO EVALUATE: "{claim}"
+
+                Based ONLY on the information provided in the retrieved articles, determine if the claim above is confirmed or refuted.
+
+                Your response MUST follow this exact structure:
+                VERDICT: [Choose ONLY one: Supported, Refuted, or Not Enough Info]
+                REASONING: [Your detailed explanation and citations here]
+
+                Follow these logical rules for the VERDICT:
+                - If the articles confirm the claim, use 'Supported'.
+                - If the articles completely contradict the claim, use 'Refuted'.
+                - If there is confusion or the articles do not mention the specific details of the claim, use 'Not Enough Info'.
+
+                Make sure to cite the titles of the articles that support your conclusions. Do not include any external knowledge.
+            """
 
             # Step 3: Execute the similarity query and catch token data
             result, token_data = self.query_similarity(question)

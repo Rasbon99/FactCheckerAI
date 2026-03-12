@@ -57,6 +57,8 @@ def initialize_database_schema(db: Database | None = None):
         CREATE TABLE IF NOT EXISTS experiments (
             id TEXT PRIMARY KEY,
             claim_id TEXT,
+            predicted_label TEXT,   -- What the AI said (Supported/Refuted/Not Enough Information or error message)
+            ground_truth TEXT,      -- The actual truth from the dataset for future implementation
             latency_preprocessor REAL,
             latency_retrieval REAL,
             latency_graph_rag REAL,
