@@ -21,6 +21,8 @@ class Claim:
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.db = db if db else Database()
+
+        # Use the provided claim_id, or generate a new one if None is passed
         self.id = claim_id if claim_id else str(uuid.uuid4())
         self.text = text
         self.title = title[2:]
@@ -173,6 +175,7 @@ class Experiment:
         ground_truth,
         latencies,
         tokens,
+        calls,
         evidence_data,
         experiment_id=None,
         db=None,
@@ -184,8 +187,10 @@ class Experiment:
         self.predicted_label = predicted_label
         self.ground_truth = ground_truth
 
+        # Store the metric dictionaries
         self.latencies = latencies
         self.tokens = tokens
+        self.calls = calls
 
         # Save evidence and get the file path
         self.evidence_log_path = self.save_evidence(evidence_data)
@@ -212,19 +217,29 @@ class Experiment:
     def save_to_db(self):
         self.db.execute_query(
             """INSERT INTO experiments 
-               (id, claim_id, predicted_label, ground_truth, latency_preprocessor, 
-                latency_retrieval, latency_graph_rag, total_tokens, llm_calls, evidence_log_path) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (id, claim_id, predicted_label, ground_truth, 
+                latency_preprocessor, latency_retrieval, latency_graph_rag, 
+                tokens_preprocessor, tokens_retrieval, tokens_graph_rag,
+                calls_preprocessor, calls_retrieval, calls_graph_rag,
+                evidence_log_path) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 self.id,
                 self.claim_id,
                 self.predicted_label,
                 self.ground_truth,
+                # Latencies
                 self.latencies.get("preprocessor", 0.0),
                 self.latencies.get("retrieval", 0.0),
                 self.latencies.get("graph_rag", 0.0),
-                self.tokens.get("total", 0),
-                self.tokens.get("calls", 0),
+                # Tokens
+                self.tokens.get("preprocessor", 0),
+                self.tokens.get("retrieval", 0),
+                self.tokens.get("graph_rag", 0),
+                # Calls
+                self.calls.get("preprocessor", 0),
+                self.calls.get("retrieval", 0),
+                self.calls.get("graph_rag", 0),
                 self.evidence_log_path,
             ),
         )

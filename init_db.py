@@ -59,11 +59,22 @@ def initialize_database_schema(db: Database | None = None):
             claim_id TEXT,
             predicted_label TEXT,   -- What the AI said (Supported/Refuted/Not Enough Information or error message)
             ground_truth TEXT,      -- The actual truth from the dataset for future implementation
+            
+            -- Latency Metrics (Seconds)
             latency_preprocessor REAL,
             latency_retrieval REAL,
             latency_graph_rag REAL,
-            total_tokens INTEGER,
-            llm_calls INTEGER,
+            
+            -- Token Metrics
+            tokens_preprocessor INTEGER,
+            tokens_retrieval INTEGER,
+            tokens_graph_rag INTEGER,
+            
+            -- LLM Call Metrics
+            calls_preprocessor INTEGER,
+            calls_retrieval INTEGER,
+            calls_graph_rag INTEGER,
+            
             evidence_log_path TEXT,
             FOREIGN KEY (claim_id) REFERENCES claims(id)
         )

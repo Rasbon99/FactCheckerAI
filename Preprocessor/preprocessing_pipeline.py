@@ -6,19 +6,20 @@ from Preprocessor.summarizer import Summarizer
 
 from log import Logger
 
-class Preprocessing_Pipeline():
+
+class Preprocessing_Pipeline:
     def __init__(self, env_file="key.env", config=None):
         """
         Initializes the preprocessing pipeline, setting up the necessary components like NER, Summarizer, and translation configuration.
-        
+
         Args:
             env_file (str, optional): The environment file containing API keys. Default is "Pkey.env".
-            config (dict, optional): Configuration options for translation, summarization, and NER. 
+            config (dict, optional): Configuration options for translation, summarization, and NER.
                                       Default is {"translation": True, "summarize": True, "NER": True}.
-        
+
         Returns:
             None
-        
+
         Raises:
             KeyError: If the environment variables for the API keys cannot be found.
         """
@@ -28,10 +29,7 @@ class Preprocessing_Pipeline():
         self.ner = NER()
         self.summarizer = Summarizer()
 
-        self.config = {
-            "summarize": True,
-            "NER": True
-        }
+        self.config = {"summarize": True, "NER": True}
         if config:
             self.config.update(config)
 
@@ -47,23 +45,35 @@ class Preprocessing_Pipeline():
 
         Returns:
             str: The preprocessed claim, translated and/or summarized based on configuration.
-        
+
         Raises:
             Exception: If there is an error during preprocessing (translation or summarization).
         """
         self.logger.info("Starting claim preprocessing...")
 
+        # Initialize token tracking for this stage
+        token_data = {"total": 0, "calls": 0}
+
         if self.config.get("summarize", True):
-            claim_title = self.summarizer.claim_title_summarize(claim, max_lenght)
-            claim_summary = self.summarizer.generate_summary(claim, max_lenght)
-            
+            claim_title, title_tokens = self.summarizer.claim_title_summarize(
+                claim, max_lenght
+            )
+            token_data["calls"] += 1
+            token_data["total"] += title_tokens
+
+            claim_summary, summary_tokens = self.summarizer.generate_summary(
+                claim, max_lenght
+            )
+            token_data["calls"] += 1
+            token_data["total"] += summary_tokens
+
             self.logger.info("Claim preprocessing completed.")
-            
-            return claim_title, claim_summary
+
+            # Wrap the outputs in parentheses, and append the token_data!
+            return (claim_title, claim_summary), token_data
 
         self.logger.info("Claim preprocessing completed.")
-
-        return claim, claim
+        return (claim, claim), token_data
 
     def run_sources_pipe(self, sources, max_lenght=1024):
         """
@@ -74,25 +84,39 @@ class Preprocessing_Pipeline():
 
         Returns:
             list: A list of preprocessed sources, each being a string of translated and/or summarized text.
-        
+
         Raises:
             NotImplementedError: If the implementation for sources preprocessing is not provided.
         """
         self.logger.info("Starting sources preprocessing...")
 
+        # Initialize token tracking for this stage
+        token_data = {"total": 0, "calls": 0}
+
         if self.config.get("summarize", True):
-            new_bodies = self.summarizer.summarize_texts([d['body'] for d in sources], max_lenght)
+            new_bodies = self.summarizer.summarize_texts(
+                [d["body"] for d in sources], max_lenght
+            )
+            token_data["calls"] += len(sources)  # Assuming one call per source
             for d, new_body in zip(sources, new_bodies):
-                d['body'] = new_body
-        
+                d["body"] = new_body
+
         if self.config.get("NER", True):
             for source in sources:
-                topic_and_entities = self.ner.extract_entities_and_topic(source['body'])
-                source['topic'] = topic_and_entities['topic']
-                source['entities'] = topic_and_entities['entities']
-            
-            sources = self.ner.merge_entities(sources)
+                topic_and_entities, tokens = self.ner.extract_entities_and_topic(
+                    source["body"]
+                )
+                token_data["calls"] += 1
+                token_data["total"] += tokens
+
+                if topic_and_entities is None:
+                    topic_and_entities = {"topic": None, "entities": []}
+
+                source["topic"] = topic_and_entities["topic"]
+                source["entities"] = topic_and_entities["entities"]
+
+            sources, merge_tokens = self.ner.merge_entities(sources)
+            token_data["total"] += merge_tokens
 
         self.logger.info("Sources preprocessing completed.")
-        
-        return sources
+        return sources, token_data
