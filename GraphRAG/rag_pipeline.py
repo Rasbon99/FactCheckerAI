@@ -167,13 +167,13 @@ class RAG_Pipeline:
                 Based ONLY on the information provided in the retrieved articles, determine if the claim above is confirmed or refuted.
 
                 Your response MUST follow this exact structure:
-                VERDICT: [Choose ONLY one: Supported, Refuted, or Not Enough Info]
+                VERDICT: [Choose ONLY one: SUPPORTS, REFUTES, or NOT ENOUGH INFO]
                 REASONING: [Your detailed explanation and citations here]
 
                 Follow these logical rules for the VERDICT:
-                - If the articles confirm the claim, use 'Supported'.
-                - If the articles completely contradict the claim, use 'Refuted'.
-                - If there is confusion or the articles do not mention the specific details of the claim, use 'Not Enough Info'.
+                - If the articles confirm the claim, use 'SUPPORTS'.
+                - If the articles completely contradict the claim, use 'REFUTES'.
+                - If there is confusion or the articles do not mention the specific details of the claim, use 'NOT ENOUGH INFO'.
 
                 Make sure to cite the titles of the articles that support your conclusions. Do not include any external knowledge.
             """
