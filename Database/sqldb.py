@@ -302,9 +302,7 @@ class Database:
             if graphs_folder and os.path.isdir(graphs_folder):
                 jpg_files = glob.glob(os.path.join(graphs_folder, "*.jpg"))
             else:
-                self.logger.warning(
-                    "La cartella dei grafici non esiste o non è stata specificata."
-                )
+                self.logger.warning("Graph folder does not exist or was not specified.")
 
             # Append the conversation data to the list
             conversations.append(
