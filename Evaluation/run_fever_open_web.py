@@ -7,7 +7,7 @@ import dotenv
 dotenv.load_dotenv("key.env", override=True)
 
 # 1. Configuration
-DATASET_PATH = os.getenv("EVALUATION_DATASET_PATH", "Datasets/fever2-fixers-dev.jsonl")
+DATASET_PATH = os.getenv("EVALUATION_DATASET_PATH", "Datasets/fever_dev_dataset.jsonl")
 BACKEND_URL = os.getenv("BACKEND_API_URL")
 API_URL = f"{BACKEND_URL}/run_pipeline"
 
