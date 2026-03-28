@@ -17,7 +17,7 @@ dotenv.load_dotenv("key.env", override=True)
 # Configuration
 DATASET_PATH = os.getenv("FEVER_DATASET_PATH", "Datasets/fever_dev_dataset.jsonl")
 WIKI_DB_PATH = os.getenv("FEVER_WIKIPEDIA_DB_PATH", "Datasets/fever_wiki.db")
-MAX_CLAIMS_TO_TEST = 10
+MAX_CLAIMS_TO_TEST = 100
 
 
 def extract_perfect_evidence(evidence_data, wiki_cursor):
@@ -157,6 +157,40 @@ def run_controlled_experiment():
                 )
                 claim.add_sources(preprocessed_sources)
 
+                # =========================================================
+                # 🛡️ SAFETY CHECK: Did Groq find any entities?
+                # =========================================================
+                has_entities = False
+                for src in preprocessed_sources:
+                    # Some strings might be literally "[]" or an actual empty list
+                    if (
+                        src.get("entities")
+                        and src.get("entities") != "[]"
+                        and len(src.get("entities")) > 0
+                    ):
+                        has_entities = True
+                        break
+
+                if not has_entities:
+                    print(
+                        "⏩ NER extracted 0 entities. Short-circuiting to prevent Neo4j/Ollama crash."
+                    )
+                    predicted_label = "Error: No Entities"
+                    query_result = "VERDICT: NOT ENOUGH INFO\nREASONING: Evidence was provided, but the NER model failed to extract any entities to build a graph."
+
+                    Answer(claim_id=claim.id, answer=query_result, graphs_folder=None)
+                    tracker.finalize(
+                        predicted_label,
+                        {
+                            "claim_text": claim_text,
+                            "raw_sources": sources,
+                            "query_result": query_result,
+                        },
+                    )
+                    successful_runs += 1
+                    continue  # Jump to the next claim!
+                # =========================================================
+
                 # --- 3. GraphRAG ---
                 def run_rag():
                     q_res, g_folder, t_usage = rag.run_pipeline(
@@ -197,10 +231,10 @@ def run_controlled_experiment():
                 )
 
                 successful_runs += 1
+                print("Sleeping for 15 seconds before next claim...")
                 time.sleep(
                     15
                 )  # Sleep to simulate time taken and avoid overwhelming resources
-                print("Sleeping for 15 seconds before next claim...")
 
     except FileNotFoundError:
         print(f"ERROR: Could not find dataset at {DATASET_PATH}.")
