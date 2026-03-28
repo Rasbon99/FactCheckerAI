@@ -300,7 +300,7 @@ class Database:
             images = []
             graphs_folder = row[4]
             if graphs_folder and os.path.isdir(graphs_folder):
-                jpg_files = glob.glob(os.path.join(graphs_folder, "*.jpg"))
+                images = glob.glob(os.path.join(graphs_folder, "*.jpg"))
             else:
                 self.logger.warning("Graph folder does not exist or was not specified.")
 
@@ -311,7 +311,7 @@ class Database:
                     "claim": row[1],
                     "title": row[2],
                     "answer": row[3],
-                    "images": jpg_files,
+                    "images": images,
                     "sources": sources,
                 }
             )
