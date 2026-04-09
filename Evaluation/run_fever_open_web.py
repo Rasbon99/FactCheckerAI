@@ -11,7 +11,7 @@ DATASET_PATH = os.getenv("FEVER_DATASET_PATH", "Datasets/fever_dev_dataset.jsonl
 BACKEND_URL = os.getenv("BACKEND_API_URL")
 API_URL = f"{BACKEND_URL}/run_pipeline"
 
-MAX_CLAIMS_TO_TEST = 5  # Start small for the first test!
+MAX_CLAIMS_TO_TEST = 5
 
 
 def run_experiment():
@@ -40,25 +40,35 @@ def run_experiment():
                 print(f"Ground Truth: {ground_truth}")
 
                 # 3. Prepare the payload
-                payload = {"text": claim_text, "ground_truth": ground_truth}
+                payload = {
+                    "text": claim_text,
+                    "ground_truth": ground_truth,
+                    "dataset_setting": "FEVER-OpenWeb",
+                }
 
                 # 4. Send the request to FoxAI
                 try:
-                    response = requests.post(API_URL, json=payload, timeout=120)
+                    response = requests.post(API_URL, json=payload, timeout=180)
 
                     if response.status_code == 200:
-                        print(f"Success! FoxAI Verdict generated.")
+                        print(f"✅ Success! FoxAI Verdict generated.")
                         successful_runs += 1
                     else:
-                        print(f"Backend Error {response.status_code}: {response.text}")
+                        print(
+                            f"❌ Backend Error {response.status_code}: {response.text}"
+                        )
                         failed_runs += 1
 
+                except requests.exceptions.Timeout:
+                    print(
+                        "🚨 Request timed out! The backend took too long (likely a slow scrape or Ollama freeze). Skipping to next claim."
+                    )
+                    failed_runs += 1
                 except Exception as e:
-                    print(f"Request failed: {e}")
+                    print(f"❌ Request failed: {e}")
                     failed_runs += 1
 
-                # Small sleep for the Groq API rate limits
-                time.sleep(2)
+                time.sleep(5)
 
     except FileNotFoundError:
         print(

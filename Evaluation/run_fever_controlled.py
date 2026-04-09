@@ -97,7 +97,10 @@ def run_controlled_experiment():
                     )
                     claim_id = str(uuid.uuid4())
                     tracker = ExperimentTracker(
-                        claim_id=claim_id, ground_truth=ground_truth
+                        claim_id=claim_id,
+                        ground_truth=ground_truth,
+                        system_type="FoxAI-GraphRAG",
+                        dataset_setting="FEVER-Controlled",
                     )
 
                     # 1. Create a Claim so it shows up in the UI sidebar
@@ -129,7 +132,10 @@ def run_controlled_experiment():
                 # --- NORMAL PIPELINE (Only runs if we have actual evidence) ---
                 claim_id = str(uuid.uuid4())
                 tracker = ExperimentTracker(
-                    claim_id=claim_id, ground_truth=ground_truth
+                    claim_id=claim_id,
+                    ground_truth=ground_truth,
+                    system_type="FoxAI-GraphRAG",
+                    dataset_setting="FEVER-Controlled",
                 )
 
                 # --- 1. Preprocessing ---

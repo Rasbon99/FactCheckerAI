@@ -168,6 +168,7 @@ class Answer:
 
 
 class Experiment:
+
     def __init__(
         self,
         claim_id,
@@ -177,6 +178,8 @@ class Experiment:
         tokens,
         calls,
         evidence_data,
+        system_type="FoxAI-GraphRAG",
+        dataset_setting="User-Query",
         experiment_id=None,
         db=None,
     ):
@@ -186,6 +189,9 @@ class Experiment:
         self.claim_id = claim_id
         self.predicted_label = predicted_label
         self.ground_truth = ground_truth
+
+        self.system_type = system_type
+        self.dataset_setting = dataset_setting
 
         # Store the metric dictionaries
         self.latencies = latencies
@@ -217,17 +223,19 @@ class Experiment:
     def save_to_db(self):
         self.db.execute_query(
             """INSERT INTO experiments 
-               (id, claim_id, predicted_label, ground_truth, 
+               (id, claim_id, predicted_label, ground_truth, system_type, dataset_setting, 
                 latency_preprocessor, latency_retrieval, latency_graph_rag, 
                 tokens_preprocessor, tokens_retrieval, tokens_graph_rag,
                 calls_preprocessor, calls_retrieval, calls_graph_rag,
                 evidence_log_path) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 self.id,
                 self.claim_id,
                 self.predicted_label,
                 self.ground_truth,
+                self.system_type,
+                self.dataset_setting,
                 # Latencies
                 self.latencies.get("preprocessor", 0.0),
                 self.latencies.get("retrieval", 0.0),

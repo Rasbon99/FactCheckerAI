@@ -18,6 +18,7 @@ db = Database()
 class InputText(BaseModel):
     text: str
     ground_truth: Optional[str] = "Not Provided"
+    dataset_setting: Optional[str] = "User-Query"
 
 
 @backend_app.post("/run_pipeline")
@@ -31,6 +32,8 @@ def process_text(input_text: InputText):
     tracker = ExperimentTracker(
         claim_id=claim_id,
         ground_truth=input_text.ground_truth or "Not Provided",
+        system_type="FoxAI-GraphRAG",
+        dataset_setting=input_text.dataset_setting or "User-Query",
     )
 
     preprocessor = Preprocessing_Pipeline()

@@ -7,12 +7,16 @@ class ExperimentTracker:
         self,
         claim_id,
         ground_truth="Not Provided",
+        system_type="FoxAI-GraphRAG",
+        dataset_setting="User-Query",
     ):
         """
         Initializes the tracker to monitor latency, tokens, calls, and cost across pipeline stages.
         """
         self.claim_id = claim_id
         self.ground_truth = ground_truth
+        self.system_type = system_type
+        self.dataset_setting = dataset_setting
 
         # Dictionaries to hold the metrics for each stage
         self.latencies = {}
@@ -63,6 +67,8 @@ class ExperimentTracker:
             claim_id=self.claim_id,
             predicted_label=predicted_label,
             ground_truth=self.ground_truth,
+            system_type=self.system_type,
+            dataset_setting=self.dataset_setting,
             latencies=self.latencies,
             tokens=self.tokens,
             calls=self.calls,
