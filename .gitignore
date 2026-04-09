@@ -1,6 +1,7 @@
 .DS_Store
 *.env
 *.log
+*.log.*
 *.pyc
 *.csv
 __pycache__/
