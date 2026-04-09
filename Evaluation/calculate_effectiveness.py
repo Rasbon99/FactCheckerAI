@@ -58,17 +58,6 @@ def calculate_effectiveness():
         acc = accuracy_score(y_true, y_pred)
         print(f"\nOverall Accuracy: {acc:.4f} ({acc*100:.2f}%)")
 
-        # Calculate FEVER Score (Currently matches accuracy for controlled evidence)
-        fever_score = acc
-        print(f"Strict FEVER Score: {fever_score:.4f} ({fever_score*100:.2f}%)")
-
-        if ds_setting == "FEVER-Controlled":
-            print(
-                "*(Note: In the Controlled setting, evidence is perfectly provided, so FEVER Score == Accuracy.)*\n"
-            )
-        else:
-            print("\n")
-
         # Generate the detailed per-label report
         report = classification_report(
             y_true,
