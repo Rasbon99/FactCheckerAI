@@ -8,7 +8,7 @@ from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from Database.data_entities import Claim, Answer
 from Database.sqldb import Database
 from GraphRAG.rag_pipeline import RAG_Pipeline
-from Evaluation.experiment_tracker import ExperimentTracker
+from Evaluation.Utils.experiment_tracker import ExperimentTracker
 
 backend_app = FastAPI()
 db = Database()

@@ -7,8 +7,7 @@ import re
 import dotenv
 from groq import Groq
 
-# --- Import Pipeline Components ---
-from Evaluation.experiment_tracker import ExperimentTracker
+from Evaluation.Utils.experiment_tracker import ExperimentTracker
 from Database.data_entities import Claim, Answer
 
 dotenv.load_dotenv("key.env", override=True)

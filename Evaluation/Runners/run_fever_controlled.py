@@ -7,7 +7,7 @@ import dotenv
 import requests
 
 # --- Import Pipeline Components ---
-from Evaluation.experiment_tracker import ExperimentTracker
+from Evaluation.Utils.experiment_tracker import ExperimentTracker
 from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from GraphRAG.rag_pipeline import RAG_Pipeline
 from Database.data_entities import Claim, Answer
