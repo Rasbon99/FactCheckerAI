@@ -4,6 +4,7 @@ import sqlite3
 import time
 import uuid
 import dotenv
+import requests
 
 # --- Import Pipeline Components ---
 from Evaluation.experiment_tracker import ExperimentTracker
@@ -237,6 +238,22 @@ def run_controlled_experiment():
                 )
 
                 successful_runs += 1
+
+                # The Ollama flush to avoid memory issues after each claim
+                try:
+                    ollama_url = os.getenv(
+                        "OLLAMA_SERVER_URL", "http://localhost:11434"
+                    ).rstrip("/")
+
+                    requests.post(
+                        f"{ollama_url}/api/generate",
+                        json={"model": "nomic-embed-text", "keep_alive": 0},
+                        timeout=5,
+                    )
+                    print("🧹 Flushed Ollama RAM successfully.")
+                except Exception as e:
+                    print(f"⚠️ Warning: Could not flush Ollama RAM: {e}")
+
                 print("Sleeping for 15 seconds before next claim...")
                 time.sleep(
                     15
