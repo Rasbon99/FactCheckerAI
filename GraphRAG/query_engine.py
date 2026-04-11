@@ -56,8 +56,11 @@ class QueryEngine:
         # Model configuration
         self.model_name = os.environ["MODEL_LLM_NEO4J"]
         self.modelGroq_name = os.environ["GROQ_MODEL_NAME"]
+
         self.embedding_model = OllamaEmbeddings(
-            model=self.model_name, base_url=os.getenv("OLLAMA_SERVER_URL")
+            model=self.model_name,
+            base_url=os.getenv("OLLAMA_SERVER_URL"),
+            client_kwargs={"timeout": 120.0},
         )
         self.llm_model = ChatGroq(model=self.modelGroq_name)
         self.index_name = index_name
@@ -77,36 +80,35 @@ class QueryEngine:
         Raises:
             None: Exceptions are caught internally and logged to ensure the pipeline continues.
         """
-        node_label = "Article"
-        text_node_properties = ["topic", "title", "body"]
-        embedding_node_property = "embedding"
-
-        retriever = Neo4jVector.from_existing_graph(
-            self.embedding_model,
-            url=self.neo4j_url,
-            username=self.neo4j_username,
-            password=self.neo4j_password,
-            index_name=self.index_name,
-            node_label=node_label,
-            text_node_properties=text_node_properties,
-            embedding_node_property=embedding_node_property,
-        ).as_retriever()
-
-        vector_qa = RetrievalQA.from_chain_type(
-            llm=self.llm_model, chain_type="stuff", retriever=retriever
-        )
-
         self.logger.info("Executing similarity query...")
-
-        # Instantiate our custom token tracker
         token_tracker = TokenTrackerCallback()
+        vector_store = None
 
         try:
             start_time_similarity = time.time()
-            # Pass the tracker into the invoke command via config
+
+            # 1. Initialize here so it calculates embeddings for the NEW evidence
+            self.logger.info("Syncing embeddings and initializing Retriever...")
+            vector_store = Neo4jVector.from_existing_graph(
+                self.embedding_model,
+                url=self.neo4j_url,
+                username=self.neo4j_username,
+                password=self.neo4j_password,
+                index_name=self.index_name,
+                node_label="Article",
+                text_node_properties=["topic", "title", "body"],
+                embedding_node_property="embedding",
+            )
+
+            retriever = vector_store.as_retriever()
+            vector_qa = RetrievalQA.from_chain_type(
+                llm=self.llm_model, chain_type="stuff", retriever=retriever
+            )
+
             result = vector_qa.invoke(
                 {"query": query}, config={"callbacks": [token_tracker]}
             )
+
             elapsed_time = time.time() - start_time_similarity
             self.logger.info(
                 f"Similarity query completed in {elapsed_time:.2f} seconds."
@@ -122,6 +124,16 @@ class QueryEngine:
         except Exception as e:
             self.logger.error(f"Error during similarity query: {e}")
             return None, {"total": 0, "calls": 0}
+
+        finally:
+            # 2. STRICT CLEANUP: Close the connection pool to prevent the RAM freeze!
+            if vector_store is not None:
+                try:
+                    # LangChain's Neo4jVector stores the active driver here
+                    vector_store._driver.close()
+                    self.logger.info("Neo4j vector store connection closed safely.")
+                except Exception as e:
+                    self.logger.warning(f"Could not close Neo4j connection: {e}")
 
     def _is_ollama_running(self):
         """
