@@ -65,7 +65,6 @@ class DashboardPipeline:
     def delete_chat_history(self):
         """
         Deletes the chat history by making a request to the controller server's endpoint.
-
         Raises:
             requests.exceptions.RequestException: If there is an error in the POST request.
         """
@@ -132,13 +131,20 @@ class DashboardPipeline:
 
     def _load_images_from_folder(self, folder):
         """
-        Loads images from the specified folder and returns them as a list.
+                Loads images from the specified folder and returns them as a list.
+        <<<<<<< HEAD
 
-        Args:
-            folder (str): The path to the folder containing image files.
+                Args:
+                    folder (str): The path to the folder containing image files.
 
-        Returns:
-            list: A list of PIL Image objects loaded from the folder.
+        =======
+
+                Args:
+                    folder (str): The path to the folder containing image files.
+
+        >>>>>>> 332a2855d2bdf7171044db7b4930e7c6db848864
+                Returns:
+                    list: A list of PIL Image objects loaded from the folder.
         """
         images = []
         if folder and os.path.isdir(folder):
@@ -157,12 +163,10 @@ class DashboardPipeline:
     def display_message(self, role, message, avatar=None):
         """
         Displays a chat message in the Streamlit interface.
-
         Args:
             role (str): The role of the sender, e.g., 'user' or 'assistant'.
             message (str): The content of the message to be displayed.
             avatar (str): The avatar to be used for the sender, default is 🦊.
-
         Raises:
             Exception: If there is an error in displaying the message.
         """
@@ -210,13 +214,20 @@ class DashboardPipeline:
 
     def get_conversations(self):
         """
-        Retrieves all conversations from the controller server.
+                Retrieves all conversations from the controller server.
+        <<<<<<< HEAD
 
-        Raises:
-            requests.exceptions.RequestException: If there is an error in the GET request.
+                Raises:
+                    requests.exceptions.RequestException: If there is an error in the GET request.
 
-        Returns:
-            list: A list of conversations.
+        =======
+
+                Raises:
+                    requests.exceptions.RequestException: If there is an error in the GET request.
+
+        >>>>>>> 332a2855d2bdf7171044db7b4930e7c6db848864
+                Returns:
+                    list: A list of conversations.
         """
         with st.spinner("Processing conversations..."):
             try:
@@ -294,7 +305,6 @@ class DashboardPipeline:
     def run(self):
         """
         Main function to run the Streamlit dashboard and manage the user interactions.
-
         Raises:
             Exception: If there is an error during the execution of the dashboard.
         """
@@ -353,7 +363,6 @@ class DashboardPipeline:
                     st.session_state.view_mode = "chat"
                     st.session_state.messages = []
                     st.session_state.selected_conversation = None
-
                     st.rerun()
 
             with col3:

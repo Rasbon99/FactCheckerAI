@@ -15,7 +15,6 @@ class Claim:
             text (str): The text of the claim.
             claim_id (str, optional): The ID of the claim. If not provided, a new UUID is generated.
             db (Database, optional): The database object to use. Defaults to a new Database instance.
-
         Raises:
             Exception: If there is an error during claim creation or database operation.
         """
@@ -51,7 +50,6 @@ class Claim:
 
         Returns:
             list: A list of dictionaries, each representing a source associated with this claim.
-
         Raises:
             Exception: If there is an error during fetching sources from the database.
         """
@@ -79,7 +77,6 @@ class Claim:
 
         Args:
             sources_data (list of dict): A list of dictionaries containing source data to insert.
-
         Raises:
             Exception: If there is an error while inserting sources into the database.
         """
@@ -142,7 +139,6 @@ class Answer:
             answer (str): The answer to the claim.
             answer_id (str, optional): The ID of the answer. If not provided, a new UUID is generated.
             db (Database, optional): The database object to use. Defaults to a new Database instance.
-
         Raises:
             Exception: If there is an error during answer object initialization.
         """

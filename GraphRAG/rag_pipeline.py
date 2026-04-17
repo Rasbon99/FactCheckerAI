@@ -16,7 +16,6 @@ class RAG_Pipeline:
         Args:
             env_file (str): Path to the .env file containing configuration settings.
             config (dict, optional): Custom configuration to override default settings (load_data, generate_graphs, query_similarity).
-
         Raises:
             KeyError: If required environment variables are missing.
         """

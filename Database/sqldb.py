@@ -15,7 +15,6 @@ class Database:
 
         Args:
             env_file (str): The env file containing the API keys or database file paths. Default: "key.env".
-
         Raises:
             KeyError: If the environment variable for the database file path is not set.
         """
@@ -40,7 +39,6 @@ class Database:
 
         Returns:
             sqlite3.Connection: A connection object to interact with the database.
-
         Raises:
             sqlite3.DatabaseError: If the connection to the database fails.
         """
@@ -62,7 +60,6 @@ class Database:
             exc_type (type): The exception type, if any.
             exc_val (Exception): The exception value, if any.
             exc_tb (traceback): The traceback object, if any.
-
         Raises:
             Exception: If there is an error during the exit process of the database connection.
         """
@@ -80,7 +77,6 @@ class Database:
 
         Args:
             create_table_sql (str): The SQL statement used to create the table.
-
         Raises:
             sqlite3.DatabaseError: If there is an error while creating the table.
         """
@@ -285,7 +281,6 @@ class Database:
 
         for row in rows:
             claim_id = row[0]
-
             # Query to fetch sources associated with the claim
             sources_query = """
             SELECT title, url, body 

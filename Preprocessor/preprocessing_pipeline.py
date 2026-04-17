@@ -45,7 +45,6 @@ class Preprocessing_Pipeline:
 
         Returns:
             str: The preprocessed claim, translated and/or summarized based on configuration.
-
         Raises:
             Exception: If there is an error during preprocessing (translation or summarization).
         """
@@ -84,7 +83,6 @@ class Preprocessing_Pipeline:
 
         Returns:
             list: A list of preprocessed sources, each being a string of translated and/or summarized text.
-
         Raises:
             NotImplementedError: If the implementation for sources preprocessing is not provided.
         """

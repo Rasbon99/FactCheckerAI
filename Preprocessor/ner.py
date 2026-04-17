@@ -36,7 +36,6 @@ class NER:
 
         Returns:
             dict: A dictionary containing the topic and a list of entities extracted from the text.
-
         Raises:
             json.JSONDecodeError: If the API response cannot be parsed as JSON.
             Exception: If an error occurs during the API call or entity extraction.
@@ -84,7 +83,6 @@ class NER:
 
         Returns:
             dict: A dictionary mapping unified entity names to their original variants.
-
         Raises:
             Exception: If there is an error during entity normalization.
         """
@@ -92,7 +90,6 @@ class NER:
 
         try:
             input_entities = ", ".join(entities)
-
             response = self.client.chat.completions.create(
                 messages=[
                     {
@@ -159,7 +156,6 @@ class NER:
 
         Returns:
             list: A list of sources with unified entities.
-
         Raises:
             Exception: If there is an error during the merging process.
         """

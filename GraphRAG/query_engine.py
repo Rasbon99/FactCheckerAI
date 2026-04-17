@@ -37,7 +37,6 @@ class QueryEngine:
         Args:
             env_file (str): Path to the .env file containing configuration settings for the Neo4j connection and models.
             index_name (str): The name of the index in the Neo4j database to be used for querying.
-
         Raises:
             KeyError: If required environment variables are missing.
         """
