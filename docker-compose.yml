@@ -34,7 +34,7 @@ services:
       - ollama
     volumes:
       - ./data:/app/data       # Volume for persistent data
-      - ./Assets:/app/Assets   # Volume for assets
+      - ./assets:/app/assets   # Volume for assets
 
   controller:
     build: .
@@ -56,10 +56,10 @@ services:
     depends_on:
       - controller   # Dashboard starts after the controller
     volumes:
-      - ./Assets:/app/Assets
+      - ./assets:/app/assets
 
 volumes:
   neo4j_data:
   data:
-  Assets:
+  assets:
   ollama_data:
