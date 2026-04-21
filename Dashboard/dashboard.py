@@ -131,20 +131,12 @@ class DashboardPipeline:
 
     def _load_images_from_folder(self, folder):
         """
-                Loads images from the specified folder and returns them as a list.
-        <<<<<<< HEAD
+        Loads images from the specified folder and returns them as a list.
+        Args:
+            folder (str): The path to the folder containing image files.
 
-                Args:
-                    folder (str): The path to the folder containing image files.
-
-        =======
-
-                Args:
-                    folder (str): The path to the folder containing image files.
-
-        >>>>>>> 332a2855d2bdf7171044db7b4930e7c6db848864
-                Returns:
-                    list: A list of PIL Image objects loaded from the folder.
+        Returns:
+            list: A list of PIL Image objects loaded from the folder.
         """
         images = []
         if folder and os.path.isdir(folder):
@@ -214,20 +206,11 @@ class DashboardPipeline:
 
     def get_conversations(self):
         """
-                Retrieves all conversations from the controller server.
-        <<<<<<< HEAD
-
-                Raises:
-                    requests.exceptions.RequestException: If there is an error in the GET request.
-
-        =======
-
-                Raises:
-                    requests.exceptions.RequestException: If there is an error in the GET request.
-
-        >>>>>>> 332a2855d2bdf7171044db7b4930e7c6db848864
-                Returns:
-                    list: A list of conversations.
+        Retrieves all conversations from the controller server.
+        Raises:
+            requests.exceptions.RequestException: If there is an error in the GET request.
+        Returns:
+            list: A list of conversations.
         """
         with st.spinner("Processing conversations..."):
             try:
