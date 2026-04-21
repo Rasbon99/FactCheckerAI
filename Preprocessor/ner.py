@@ -118,7 +118,7 @@ class NER:
             # Handling the response carefully
             if response_content is None:
                 self.logger.error("API response content is None")
-                return {entity: [entity] for entity in entities}
+                return {entity: [entity] for entity in entities}, 0
 
             unified_entities_list = [ue.strip() for ue in response_content.split(",")]
 
