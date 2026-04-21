@@ -4,7 +4,6 @@ import sqlite3
 import time
 import uuid
 import dotenv
-import requests
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.experiment_tracker import ExperimentTracker
@@ -18,7 +17,7 @@ dotenv.load_dotenv("key.env", override=True)
 # Configuration
 DATASET_PATH = os.getenv("FEVER_DATASET_PATH", "Datasets/fever_dev_dataset.jsonl")
 WIKI_DB_PATH = os.getenv("FEVER_WIKIPEDIA_DB_PATH", "Datasets/fever_wiki.db")
-MAX_CLAIMS_TO_TEST = 100
+MAX_CLAIMS_TO_TEST = 5
 
 
 def extract_perfect_evidence(evidence_data, wiki_cursor):
@@ -205,7 +204,7 @@ def run_controlled_experiment():
                     )
                     return (q_res, g_folder), t_usage
 
-                (query_result, graphs_folder) = tracker.run_stage("graph_rag", run_rag)
+                (query_result, graphs_folder) = tracker.run_stage("generation", run_rag)
 
                 # --- 4. Verdict Parsing ---
                 try:

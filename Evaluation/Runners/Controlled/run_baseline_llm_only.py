@@ -14,7 +14,7 @@ dotenv.load_dotenv("key.env", override=True)
 
 # Configuration
 DATASET_PATH = os.getenv("FEVER_DATASET_PATH", "Datasets/fever_dev_dataset.jsonl")
-MAX_CLAIMS_TO_TEST = 100
+MAX_CLAIMS_TO_TEST = 5
 
 # Initialize Groq Client
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -85,9 +85,9 @@ def run_llm_baseline():
                 # 2. Call the LLM
                 def run_llm():
                     res_text, toks = get_llm_only_verdict(claim_text)
-                    return (res_text, None), {"graph_rag": toks}
+                    return (res_text, None), {"total": toks, "calls": 1}
 
-                (query_result, graphs_folder) = tracker.run_stage("graph_rag", run_llm)
+                (query_result) = tracker.run_stage("generation", run_llm)
 
                 if isinstance(query_result, tuple):
                     query_result = query_result[0]

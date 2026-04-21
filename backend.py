@@ -69,7 +69,7 @@ def process_text(input_text: InputText):
         # We group the first two outputs so the tracker sees exactly (result, tokens)
         return (q_res, g_folder), t_usage
 
-    (query_result, graphs_folder) = tracker.run_stage("graph_rag", run_rag)
+    (query_result, graphs_folder) = tracker.run_stage("generation", run_rag)
 
     # --- 4. Verdict Parsing for RQ1 ---
     # Extract the "Supported/Refuted/NEI" label from the structured response

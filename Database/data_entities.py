@@ -220,9 +220,9 @@ class Experiment:
         self.db.execute_query(
             """INSERT INTO experiments 
                (id, claim_id, predicted_label, ground_truth, system_type, dataset_setting, 
-                latency_preprocessor, latency_retrieval, latency_graph_rag, 
-                tokens_preprocessor, tokens_retrieval, tokens_graph_rag,
-                calls_preprocessor, calls_retrieval, calls_graph_rag,
+                latency_preprocessor, latency_retrieval, latency_generation, 
+                tokens_preprocessor, tokens_retrieval, tokens_generation,
+                calls_preprocessor, calls_retrieval, calls_generation,
                 evidence_log_path) 
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
@@ -235,15 +235,15 @@ class Experiment:
                 # Latencies
                 self.latencies.get("preprocessor", 0.0),
                 self.latencies.get("retrieval", 0.0),
-                self.latencies.get("graph_rag", 0.0),
+                self.latencies.get("generation", 0.0),
                 # Tokens
                 self.tokens.get("preprocessor", 0),
                 self.tokens.get("retrieval", 0),
-                self.tokens.get("graph_rag", 0),
+                self.tokens.get("generation", 0),
                 # Calls
                 self.calls.get("preprocessor", 0),
                 self.calls.get("retrieval", 0),
-                self.calls.get("graph_rag", 0),
+                self.calls.get("generation", 0),
                 self.evidence_log_path,
             ),
         )

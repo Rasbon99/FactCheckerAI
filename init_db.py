@@ -66,17 +66,17 @@ def initialize_database_schema(db: Database | None = None):
             -- Latency Metrics (Seconds)
             latency_preprocessor REAL,
             latency_retrieval REAL,
-            latency_graph_rag REAL,
+            latency_generation REAL,
             
             -- Token Metrics
             tokens_preprocessor INTEGER,
             tokens_retrieval INTEGER,
-            tokens_graph_rag INTEGER,
+            tokens_generation INTEGER,
             
             -- LLM Call Metrics
             calls_preprocessor INTEGER,
             calls_retrieval INTEGER,
-            calls_graph_rag INTEGER,
+            calls_generation INTEGER,
             
             evidence_log_path TEXT,
             FOREIGN KEY (claim_id) REFERENCES claims(id)

@@ -23,7 +23,7 @@ dotenv.load_dotenv("key.env", override=True)
 # Configuration
 DATASET_PATH = os.getenv("FEVER_DATASET_PATH", "Datasets/fever_dev_dataset.jsonl")
 WIKI_DB_PATH = os.getenv("FEVER_WIKIPEDIA_DB_PATH", "Datasets/fever_wiki.db")
-MAX_CLAIMS_TO_TEST = 100
+MAX_CLAIMS_TO_TEST = 5
 
 # Initialize Groq Client
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -153,8 +153,12 @@ def run_dense_baseline():
                 # --- THE RETRIEVAL STEP (LangChain Invocation) ---
                 print("  -> Searching SQLite & Re-ranking with Ollama...")
 
-                # This single line runs the SQLite query AND the Ollama embedding re-ranking!
-                best_docs = dense_rag_retriever.invoke(claim_text)
+                def run_retrieval():
+                    # This single line runs the SQLite query AND the Ollama embedding re-ranking!
+                    return dense_rag_retriever.invoke(claim_text)
+
+                # Run the stopwatch!
+                best_docs = tracker.run_stage("retrieval", run_retrieval)
 
                 combined_evidence = ""
                 raw_sources = []
@@ -174,9 +178,9 @@ def run_dense_baseline():
                 # --- THE GENERATION STEP ---
                 def run_llm():
                     res_text, toks = get_dense_verdict(claim_text, combined_evidence)
-                    return (res_text, None), {"graph_rag": toks}
+                    return (res_text, None), {"total": toks, "calls": 1}
 
-                (query_result, graphs_folder) = tracker.run_stage("graph_rag", run_llm)
+                (query_result) = tracker.run_stage("generation", run_llm)
 
                 if isinstance(query_result, tuple):
                     query_result = query_result[0]
