@@ -439,6 +439,7 @@ UI testing uses decision coverage with a decision tree to test all possible outc
 - [Gennaro Iannicelli](https://github.com/Gennaro2806)
 - [Carmine Grosso](https://github.com/httpix3l)
 - [Aurora D'Ambrosio](https://github.com/AuroraD-99)
+- [Alireza Fazel](https://github.com/aliknot)
 
 ---
 
