@@ -63,7 +63,7 @@ def get_bm25_verdict(claim_text, best_evidence_string):
 
 
 def run_bm25_baseline():
-    print(f"Starting Baseline 2 (BM25 Keyword RAG) with {MAX_CLAIMS_TO_TEST} claims...")
+    print(f"Starting Baseline BM25 Keyword RAG with {MAX_CLAIMS_TO_TEST} claims...")
 
     successful_runs = 0
 
