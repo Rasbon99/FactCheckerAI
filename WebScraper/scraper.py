@@ -142,6 +142,7 @@ class Scraper:
         search_results=None,
         retries=0,
         attempts=0,
+        use_llm_filter=True,
     ):
         """
         Performs a search using the provided query, and extracts the title, body, and site of the resulting pages.
@@ -216,6 +217,12 @@ class Scraper:
                         search_results.append(extracted_data)
                         visited_urls.add(url)
 
+                if not use_llm_filter:
+                    self.logger.info(
+                        "Bypassing LLM correlation filter for baseline run."
+                    )
+                    return search_results[:num_results]
+
                 # Phase 3: Apply correlation filter
                 self.logger.info("Applying correlation filter...")
                 filtered_results = self.correlation_filter(query, search_results)
@@ -238,6 +245,7 @@ class Scraper:
                         search_results=search_results,
                         retries=retries,
                         attempts=attempts,
+                        use_llm_filter=use_llm_filter,
                     )
                     # Ensure more_sources is not None before extending
                     if more_sources:
@@ -310,15 +318,15 @@ class Scraper:
                     {
                         "role": "system",
                         "content": f"""
-                    You are an expert validator tasked with determining whether a source found online is directly related to the provided claim ('{claim}'). 
-                    Your goal is to check if the source discusses the same topic or provides relevant information about the claim. 
-                    Focus on the core subject of the claim and the source. Ignore unrelated or vaguely related content.
+                        You are an expert validator tasked with determining whether a source found online is directly related to the provided claim ('{claim}'). 
+                        Your goal is to check if the source discusses the same topic or provides relevant information about the claim. 
+                        Focus on the core subject of the claim and the source. Ignore unrelated or vaguely related content.
 
-                    Respond with one of the following:
-                    - 'Correlated' if the source is about the same topic as the claim.
-                    - 'Not Correlated' if the source is unrelated or only tangentially related.
-                    Be concise and accurate in your evaluation.
-                    Use only 'Correlated' or 'Not Correlated' in your response.""",
+                        Respond with one of the following:
+                        - 'Correlated' if the source is about the same topic as the claim.
+                        - 'Not Correlated' if the source is unrelated or only tangentially related.
+                        Be concise and accurate in your evaluation.
+                        Use only 'Correlated' or 'Not Correlated' in your response.""",
                     },
                     {"role": "user", "content": source_body},
                 ]
@@ -396,7 +404,11 @@ class Scraper:
                     score = rating.get("score")
 
                     # If the site has rank 'T' and score >= score_threshold, include it
-                    if rank == "T" and isinstance(score, (int, float)) and score >= score_threshold:
+                    if (
+                        rank == "T"
+                        and isinstance(score, (int, float))
+                        and score >= score_threshold
+                    ):
                         filtered_sites.append(site)
                     else:
                         # Log for sites that are excluded

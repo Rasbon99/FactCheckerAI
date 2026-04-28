@@ -87,7 +87,9 @@ def run_prompt_stuffing_baseline():
 
                 # --- 1. Retrieval (Scraper) ---
                 def run_retrieval():
-                    return scraper.search_and_extract(claim_text, num_results=10)
+                    return scraper.search_and_extract(
+                        claim_text, num_results=10, use_llm_filter=False
+                    )
 
                 raw_scraped_sources = tracker.run_stage("retrieval", run_retrieval)
                 print(f"  -> Scraped {len(raw_scraped_sources)} pages from the web.")
