@@ -101,7 +101,7 @@ def run_bm25_baseline():
                 def run_retrieval():
                     # The current scraper only returns a list of sources
                     raw_scraped_sources = scraper.search_and_extract(
-                        claim_text, num_results=10, use_llm_filter=False
+                        claim_text, num_results=10
                     )
 
                     print(

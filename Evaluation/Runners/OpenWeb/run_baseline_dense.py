@@ -100,7 +100,7 @@ def run_dense_rag_baseline():
                 def run_retrieval():
                     # Scrape with LLM filter OFF (saves tokens and ensures pure baseline comparison)
                     raw_scraped_sources = scraper.search_and_extract(
-                        claim_text, num_results=10, use_llm_filter=False
+                        claim_text, num_results=10
                     )
 
                     if not raw_scraped_sources:
