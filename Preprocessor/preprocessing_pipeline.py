@@ -92,10 +92,20 @@ class Preprocessing_Pipeline:
         token_data = {"total": 0, "calls": 0}
 
         if self.config.get("summarize", True):
-            new_bodies = self.summarizer.summarize_texts(
+            summarize_result = self.summarizer.summarize_texts(
                 [d["body"] for d in sources], max_lenght
             )
-            token_data["calls"] += len(sources)  # Assuming one call per source
+
+            # Safely handle the response whether it returns a tuple or just the list
+            if isinstance(summarize_result, tuple):
+                new_bodies, sum_tokens = summarize_result
+                token_data["total"] += sum_tokens
+            else:
+                new_bodies = summarize_result
+
+            token_data["calls"] += len(
+                sources
+            )  # Assuming one API call per source summarized
             for d, new_body in zip(sources, new_bodies):
                 d["body"] = new_body
 
@@ -114,6 +124,7 @@ class Preprocessing_Pipeline:
                 source["entities"] = topic_and_entities["entities"]
 
             sources, merge_tokens = self.ner.merge_entities(sources)
+            token_data["calls"] += 1  # Add 1 call for the final merge operation
             token_data["total"] += merge_tokens
 
         self.logger.info("Sources preprocessing completed.")

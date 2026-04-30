@@ -142,7 +142,6 @@ class Scraper:
         search_results=None,
         retries=0,
         attempts=0,
-        use_llm_filter=True,
     ):
         """
         Performs a search using the provided query, and extracts the title, body, and site of the resulting pages.
@@ -171,6 +170,8 @@ class Scraper:
             search_results = []
         visited_urls = set(result["url"] for result in search_results)
 
+        token_data = {"total": 0, "calls": 0}
+
         self.logger.info("Start searching and extracting query...")
 
         while retries < max_retries and attempts < 3:
@@ -185,7 +186,7 @@ class Scraper:
 
                 if not results:  # If there are no results, log and return empty list
                     self.logger.warning(f"No results found for query '{query}'.")
-                    return []
+                    return [], token_data
 
                 self.logger.info("Scraped websites: %i sites", len(results))
 
@@ -198,7 +199,7 @@ class Scraper:
                     self.logger.warning(
                         f"No valid results after filtering for query '{query}'."
                     )
-                    return []
+                    return [], token_data
 
                 for result in results:
                     url = result["href"]
@@ -217,15 +218,14 @@ class Scraper:
                         search_results.append(extracted_data)
                         visited_urls.add(url)
 
-                if not use_llm_filter:
-                    self.logger.info(
-                        "Bypassing LLM correlation filter for baseline run."
-                    )
-                    return search_results[:num_results]
-
                 # Phase 3: Apply correlation filter
                 self.logger.info("Applying correlation filter...")
-                filtered_results = self.correlation_filter(query, search_results)
+                filtered_results, filter_token_data = self.correlation_filter(
+                    query, search_results
+                )
+
+                token_data["total"] += filter_token_data["total"]
+                token_data["calls"] += filter_token_data["calls"]
 
                 # Check if there are fewer than the required number of valid sources
                 if len(filtered_results) < min_valid_sources:
@@ -237,7 +237,7 @@ class Scraper:
                     attempts += 1
 
                     # Perform another search to get more results
-                    more_sources = self.search_and_extract(
+                    more_sources, more_tokens_data = self.search_and_extract(
                         query,
                         num_results=remaining_sources_needed,
                         max_retries=max_retries,
@@ -245,11 +245,13 @@ class Scraper:
                         search_results=search_results,
                         retries=retries,
                         attempts=attempts,
-                        use_llm_filter=use_llm_filter,
                     )
+
                     # Ensure more_sources is not None before extending
                     if more_sources:
                         search_results.extend(more_sources)
+                        token_data["total"] += more_tokens_data["total"]
+                        token_data["calls"] += more_tokens_data["calls"]
 
                 # Phase 4: Return only the filtered results
                 if len(filtered_results) < min_valid_sources:
@@ -260,13 +262,13 @@ class Scraper:
                         self.logger.warning(
                             f"Max attempts reached. Returning the {len(filtered_results)} sources found."
                         )
-                        return filtered_results
+                        return filtered_results, token_data
                     continue
 
                 self.logger.info(
                     f"Filtered results: {len(filtered_results)} sources correlated to the claim."
                 )
-                return filtered_results
+                return filtered_results, token_data
 
             except Exception as e:
                 self.logger.error(
@@ -302,6 +304,7 @@ class Scraper:
             None: The function doesn't raise any custom exceptions, but logs errors if there are issues processing the sources.
         """
         correlated_sources = []
+        token_data = {"total": 0, "calls": 0}
 
         for source in sources:
             try:
@@ -341,6 +344,11 @@ class Scraper:
                 content = response.choices[0].message.content
                 result = content.strip() if content else ""
 
+                token_data["calls"] += 1
+                token_data["total"] += (
+                    response.usage.total_tokens if response.usage else 0
+                )
+
                 # Add the source to the list of correlated sources if it is related
                 if result == "Correlated":
                     correlated_sources.append(source)
@@ -359,7 +367,7 @@ class Scraper:
         # Log the number of correlated sources found
         self.logger.info(f"Number of correlated sources: {len(correlated_sources)}")
 
-        return correlated_sources
+        return correlated_sources, token_data
 
     def filter_sites(self, sites_list, score_threshold=70):
         """

@@ -48,18 +48,23 @@ def process_text(input_text: InputText):
 
     claim = Claim(text, claim_title, claim_summary, claim_id=claim_id)
 
-    # --- 2. Retrieval (Scraper) ---
+    # --- 2. Retrieval (Scraper + Preprocessor) ---
     def run_retrieval():
-        srcs = scraper.search_and_extract(claim_title, num_results=10)
+        srcs, scraper_metrics = scraper.search_and_extract(claim_title, num_results=10)
 
-        # Unpack the new return structure from the preprocessor!
-        prep_srcs, prep_tokens = preprocessor.run_sources_pipe(srcs)
+        prep_srcs, prep_metrics = preprocessor.run_sources_pipe(srcs)
 
-        # Group the results, and pass the tokens to the tracker
-        return (prep_srcs, srcs), prep_tokens
+        # Combine the dictionaries mathematically
+        total_retrieval_tokens = scraper_metrics["total"] + prep_metrics["total"]
+        total_retrieval_calls = scraper_metrics["calls"] + prep_metrics["calls"]
 
-    (preprocessed_sources, sources) = tracker.run_stage("retrieval", run_retrieval)
-    claim.add_sources(preprocessed_sources)
+        # Pass the unified dictionary to the tracker!
+        return (prep_srcs, srcs), {
+            "total": total_retrieval_tokens,
+            "calls": total_retrieval_calls,
+        }
+
+    preprocessed_sources, sources = tracker.run_stage("retrieval", run_retrieval)
 
     # --- 3. GraphRAG ---
     def run_rag():
@@ -69,7 +74,7 @@ def process_text(input_text: InputText):
         # We group the first two outputs so the tracker sees exactly (result, tokens)
         return (q_res, g_folder), t_usage
 
-    (query_result, graphs_folder) = tracker.run_stage("generation", run_rag)
+    query_result, graphs_folder = tracker.run_stage("generation", run_rag)
 
     # --- 4. Verdict Parsing for RQ1 ---
     # Extract the "Supported/Refuted/NEI" label from the structured response
