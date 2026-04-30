@@ -60,7 +60,6 @@ def get_dense_rag_verdict(claim_text, best_evidence_string):
 def run_dense_rag_baseline():
     print(f"\nStarting Baseline Dense Semantic RAG with {MAX_CLAIMS_TO_TEST} claims...")
 
-    # --- Initialize Embeddings (Consistent with your Controlled Baseline) ---
     print("Loading Ollama Embeddings (This takes a few seconds)...")
     embeddings = OllamaEmbeddings(model="nomic-embed-text")
 
@@ -72,7 +71,6 @@ def run_dense_rag_baseline():
                 if line_number >= MAX_CLAIMS_TO_TEST:
                     break
 
-                # Instantiate Scraper inside the loop to avoid DuckDuckGo session bans
                 scraper = Scraper()
 
                 data = json.loads(line)
@@ -98,16 +96,12 @@ def run_dense_rag_baseline():
 
                 # --- 1. Retrieval & Filtering (Scraper + LangChain Dense RAG) ---
                 def run_retrieval():
-                    # Scrape with LLM filter OFF (saves tokens and ensures pure baseline comparison)
-                    raw_scraped_sources = scraper.search_and_extract(
+                    raw_scraped_sources, scraper_metrics = scraper.search_and_extract(
                         claim_text, num_results=10
                     )
 
                     if not raw_scraped_sources:
-                        return "No relevant articles could be scraped.", {
-                            "total": 0,
-                            "calls": 1,
-                        }
+                        return "No relevant articles could be scraped.", scraper_metrics
 
                     # Step A: Convert raw scraped dictionaries into LangChain Documents
                     docs = []
@@ -131,7 +125,7 @@ def run_dense_rag_baseline():
                     )
                     splits = text_splitter.split_documents(docs)
 
-                    # Step C: Embed the chunks and store them in a temporary local vector space
+                    # Step C: Esmbed the chunks and store them in a temporary local vector space
                     vectorstore = InMemoryVectorStore.from_documents(splits, embeddings)
 
                     # Step D: Perform the semantic search to get the Top 3 chunks
@@ -143,19 +137,15 @@ def run_dense_rag_baseline():
                     for i, doc in enumerate(top_docs):
                         best_evidence += f"\n--- MATCH {i+1} (Source: {doc.metadata['source']}) ---\n{doc.page_content}\n"
 
-                    # Return evidence and 0 tokens (since scraping and embedding were free/local)
-                    return best_evidence, {"total": 0, "calls": 1}
+                    return best_evidence, scraper_metrics
 
-                # Run the retrieval stage (No tuple unpacking needed based on our previous fix)
                 best_evidence = tracker.run_stage("retrieval", run_retrieval)
 
-                # Safely clear tuple bug if it appears deep inside the tracker
                 if isinstance(best_evidence, tuple):
                     best_evidence = best_evidence[0]
 
                 # --- 2. Generation (The LLM Call) ---
                 def run_llm():
-                    # Groq reads the Top 3 dense chunks
                     res_text, toks = get_dense_rag_verdict(claim_text, best_evidence)
                     return res_text, {"total": toks, "calls": 1}
 

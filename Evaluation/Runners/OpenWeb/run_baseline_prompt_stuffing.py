@@ -87,36 +87,34 @@ def run_prompt_stuffing_baseline():
 
                 # --- 1. Retrieval (Scraper) ---
                 def run_retrieval():
-                    return scraper.search_and_extract(claim_text, num_results=10)
-
-                raw_scraped_sources = tracker.run_stage("retrieval", run_retrieval)
-                print(f"  -> Scraped {len(raw_scraped_sources)} pages from the web.")
-
-                # --- 2. Concatenation ---
-                massive_evidence = ""
-
-                # Limit to 2000 chars per page so Groq doesn't crash from Token Limits
-                CHARACTER_LIMIT_PER_PAGE = 2000
-
-                for src in raw_scraped_sources:
-                    url = src.get("url", "Unknown URL")
-                    # Slice the body text to prevent rate limit
-                    body = src.get("body", "")[:CHARACTER_LIMIT_PER_PAGE]
-                    massive_evidence += f"\n--- Source: {url} ---\n{body}\n"
-
-                if not massive_evidence.strip():
-                    massive_evidence = "No relevant articles could be scraped."
-
-                # --- 3. Generation ---
-                def run_llm():
-                    res_text, toks = get_prompt_stuffing_verdict(
-                        claim_text, massive_evidence
+                    # Unpack the new tuple and dictionary
+                    raw_scraped_sources, scraper_metrics = scraper.search_and_extract(
+                        claim_text, num_results=10
                     )
+
+                    combined_evidence = ""
+                    for src in raw_scraped_sources:
+                        combined_evidence += f"\n--- Source: {src.get('url')} ---\n{src.get('body', '')}\n"
+
+                    # Pass the scraper's token dictionary directly to the tracker
+                    return combined_evidence, scraper_metrics
+
+                best_evidence = tracker.run_stage("retrieval", run_retrieval)
+                # Safely clear tuple bug
+                if isinstance(best_evidence, tuple):
+                    best_evidence = best_evidence[0]
+
+                # --- 2. Generation (The LLM Call) ---
+                def run_llm():
+                    # Assuming your get_verdict returns (result_text, tokens_used)
+                    res_text, toks = get_prompt_stuffing_verdict(
+                        claim_text, best_evidence
+                    )
+
+                    # Format as the required dictionary
                     return res_text, {"total": toks, "calls": 1}
 
                 query_result = tracker.run_stage("generation", run_llm)
-
-                # Safety check to clear the tuple bug!
                 if isinstance(query_result, tuple):
                     query_result = query_result[0]
 
@@ -142,7 +140,7 @@ def run_prompt_stuffing_baseline():
                     predicted_label,
                     {
                         "claim_text": claim_text,
-                        "raw_sources": raw_scraped_sources,
+                        "best_evidence": best_evidence,
                         "query_result": query_result,
                     },
                 )

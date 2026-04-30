@@ -99,15 +99,13 @@ def run_bm25_baseline():
 
                 # --- 2. Retrieval & Filtering (Scraper + BM25) ---
                 def run_retrieval():
-                    # The current scraper only returns a list of sources
-                    raw_scraped_sources = scraper.search_and_extract(
+                    raw_scraped_sources, scraper_metrics = scraper.search_and_extract(
                         claim_text, num_results=10
                     )
 
                     print(
                         f"  -> Scraped {len(raw_scraped_sources)} pages. Running BM25 math..."
                     )
-
                     # Combine all text from all scraped pages
                     all_text = ""
                     for src in raw_scraped_sources:
@@ -117,10 +115,7 @@ def run_bm25_baseline():
                     chunks = simple_chunker(all_text)
 
                     if not chunks:
-                        return "No relevant articles could be scraped.", {
-                            "total": 0,
-                            "calls": 1,
-                        }
+                        return "No relevant articles could be scraped.", scraper_metrics
 
                     # --- THE BM25 ALGORITHM ---
                     # Tokenize the chunks and the claim (lowercase, split by spaces)
@@ -130,22 +125,17 @@ def run_bm25_baseline():
 
                     # Get the Top 3 most mathematically relevant chunks
                     top_3_chunks = bm25.get_top_n(tokenized_query, chunks, n=3)
-
                     best_evidence = "\n--- BM25 TOP MATCH ---\n".join(top_3_chunks)
 
-                    # Return the evidence and 0 tokens (since we aren't tracking scraper tokens here)
-                    return best_evidence, {"total": 0, "calls": 1}
+                    return best_evidence, scraper_metrics
 
-                # Run the retrieval stage
                 best_evidence = tracker.run_stage("retrieval", run_retrieval)
 
-                # Safely clear tuple bug if it appears
                 if isinstance(best_evidence, tuple):
                     best_evidence = best_evidence[0]
 
                 # --- 3. Generation (The LLM Call) ---
                 def run_llm():
-                    # Groq now only has to read the Top 3 chunks, saving massive tokens!
                     res_text, toks = get_bm25_verdict(claim_text, best_evidence)
                     return res_text, {"total": toks, "calls": 1}
 
