@@ -250,8 +250,11 @@ class Scraper:
                     # Ensure more_sources is not None before extending
                     if more_sources:
                         search_results.extend(more_sources)
-                        token_data["total"] += more_tokens_data["total"]
-                        token_data["calls"] += more_tokens_data["calls"]
+                        filtered_results.extend(more_sources)
+
+                    # Adding token data from the recursive call, to ensure we keep track of all tokens used
+                    token_data["total"] += more_tokens_data["total"]
+                    token_data["calls"] += more_tokens_data["calls"]
 
                 # Phase 4: Return only the filtered results
                 if len(filtered_results) < min_valid_sources:
@@ -288,6 +291,9 @@ class Scraper:
                         raise e
                 else:
                     raise e
+
+        # Make sure that it returns something even if there are no results or if it fails after retries
+        return [], token_data
 
     def correlation_filter(self, claim, sources):
         """
