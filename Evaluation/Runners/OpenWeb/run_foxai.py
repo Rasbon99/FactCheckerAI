@@ -78,12 +78,12 @@ def run_experiment():
         )
         return
 
-    logger.info("=" * 40)
+    logger.info("=" * 20)
     logger.info("EXPERIMENT COMPLETE!")
     logger.info(f"Successful processing: {successful_runs}")
     logger.info(f"Failed processing: {failed_runs}")
     logger.info("Check your SQLite 'experiments' table to see the logged metrics!")
-    logger.info("=" * 40)
+    logger.info("=" * 20)
 
 
 if __name__ == "__main__":

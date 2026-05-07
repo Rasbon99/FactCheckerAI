@@ -273,10 +273,10 @@ def run_controlled_experiment():
         if wiki_conn:
             wiki_conn.close()
 
-    logger.info("=" * 40)
+    logger.info("=" * 20)
     logger.info("CONTROLLED EXPERIMENT COMPLETE!")
     logger.info(f"Successfully processed: {successful_runs}")
-    logger.info("=" * 40)
+    logger.info("=" * 20)
 
 
 if __name__ == "__main__":

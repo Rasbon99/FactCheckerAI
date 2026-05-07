@@ -233,9 +233,9 @@ def run_bm25_baseline():
         if wiki_conn:
             wiki_conn.close()
 
-    logger.info("=" * 40)
+    logger.info("=" * 20)
     logger.info("BM25 BASELINE COMPLETE!")
-    logger.info("=" * 40)
+    logger.info("=" * 20)
 
 
 if __name__ == "__main__":

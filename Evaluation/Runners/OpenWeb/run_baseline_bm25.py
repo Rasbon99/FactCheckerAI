@@ -186,9 +186,9 @@ def run_bm25_baseline():
     except Exception as e:
         logger.error(f"{e}")
 
-    logger.info("=" * 40)
+    logger.info("=" * 20)
     logger.info("BM25 (OPEN WEB) COMPLETE!")
-    logger.info("=" * 40)
+    logger.info("=" * 20)
 
 
 if __name__ == "__main__":

@@ -144,10 +144,10 @@ def run_llm_baseline():
     except Exception as e:
         logger.error(f"Error during execution: {e}")
 
-    logger.info("=" * 40)
+    logger.info("=" * 20)
     logger.info("LLM-ONLY BASELINE COMPLETE!")
     logger.info(f"Successfully processed: {successful_runs}")
-    logger.info("=" * 40)
+    logger.info("=" * 20)
 
 
 if __name__ == "__main__":
