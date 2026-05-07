@@ -18,7 +18,7 @@ from Database.data_entities import Claim, Answer
 dotenv.load_dotenv("key.env", override=True)
 
 MAX_CLAIMS_TO_TEST = 5
-USE_METADATA = bool(os.getenv("AVERITEC_USE_METADATA"))
+USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 logger = Logger("Fox-AI-Controlled").get_logger()
 
 
