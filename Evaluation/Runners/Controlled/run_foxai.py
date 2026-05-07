@@ -18,6 +18,7 @@ from Database.data_entities import Claim, Answer
 dotenv.load_dotenv("key.env", override=True)
 
 MAX_CLAIMS_TO_TEST = 5
+USE_METADATA = bool(os.getenv("AVERITEC_USE_METADATA"))
 logger = Logger("Fox-AI-Controlled").get_logger()
 
 
@@ -63,6 +64,7 @@ def run_controlled_experiment():
         f"Starting Controlled Experiment (FoxAI) with {MAX_CLAIMS_TO_TEST} claims..."
     )
     logger.info(f"Active Dataset: {active_dataset}")
+    logger.info(f"Using Metadata Super Query: {USE_METADATA}")
 
     # --- 1. Load the correct Database/Retriever based on environment ---
     wiki_conn = None
@@ -78,23 +80,25 @@ def run_controlled_experiment():
     elif active_dataset == "AVERITEC":
         averitec_retriever = AVeriTeCKnowledgeRetriever()
 
-    # Initialize the heavy pipeline components once (so we don't reload models every loop)
+    # Initialize the heavy pipeline components once
     preprocessor = Preprocessing_Pipeline()
     rag = RAG_Pipeline()
 
     successful_runs = 0
 
     try:
-        # Ask the DatasetManager for the claims (handles JSON vs JSONL automatically)
+        # Ask the DatasetManager for the claims
         claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
 
         for line_number, data in enumerate(claims_data):
             claim_text = data.get("claim", "")
             ground_truth = data.get("label", "")
 
-            # --- THE SUPER QUERY ---
-            # Automatically appends Speaker, Location, and Date for AVeriTeC claims
-            search_query = dataset_manager.build_search_query(data)
+            # --- CONDITIONAL METADATA QUERY ---
+            # If the flag is True, build the enriched query. Otherwise, just use the claim.
+            search_query = claim_text
+            if active_dataset == "AVERITEC" and USE_METADATA:
+                search_query = dataset_manager.build_search_query(data)
 
             # Use dynamic labels for missing info depending on the dataset
             nei_label = (
@@ -104,6 +108,8 @@ def run_controlled_experiment():
             )
 
             logger.info(f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
+            if search_query != claim_text:
+                logger.info(f"Enriched Search Query: {search_query}")
             logger.info(f"Ground Truth: {ground_truth}")
 
             # --- 3. Extract Evidence Dynamically ---
@@ -120,10 +126,10 @@ def run_controlled_experiment():
                 )
 
                 if all_sentences:
-                    # --- THE FOXAI LIFESAVER + METADATA FILTER ---
+                    # --- THE FOXAI LIFESAVER + CONDITIONAL METADATA FILTER ---
                     from rank_bm25 import BM25Okapi
 
-                    # Tokenize corpus and the ENRICHED query (Metadata included!)
+                    # Tokenize corpus and the search_query (which may or may not include metadata)
                     tokenized_corpus = [s.lower().split() for s in all_sentences]
                     bm25 = BM25Okapi(tokenized_corpus)
                     tokenized_query = search_query.lower().split()
@@ -140,7 +146,6 @@ def run_controlled_experiment():
             logger.info(f"Perfect Evidence Retrieved: {perfect_evidence[:100]}...")
 
             # --- THE SHORT-CIRCUIT ---
-            # If there is no evidence, skip the heavy AI processing entirely!
             if not perfect_evidence:
                 logger.info(f"No evidence available. Short-circuiting to {nei_label}.")
                 claim_id = str(uuid.uuid4())
@@ -148,7 +153,7 @@ def run_controlled_experiment():
                     claim_id=claim_id,
                     ground_truth=ground_truth,
                     system_type="FoxAI-GraphRAG",
-                    dataset_setting=tracker_env_name,  # Dynamic Tracker Name
+                    dataset_setting=tracker_env_name,
                 )
 
                 Claim(
@@ -175,13 +180,13 @@ def run_controlled_experiment():
                 successful_runs += 1
                 continue
 
-            # --- NORMAL PIPELINE (Only runs if we have actual evidence) ---
+            # --- NORMAL PIPELINE ---
             claim_id = str(uuid.uuid4())
             tracker = ExperimentTracker(
                 claim_id=claim_id,
                 ground_truth=ground_truth,
                 system_type="FoxAI-GraphRAG",
-                dataset_setting=tracker_env_name,  # Dynamic Tracker Name
+                dataset_setting=tracker_env_name,
             )
 
             # --- 1. Preprocessing (Pass the original claim to keep LLM focused) ---
