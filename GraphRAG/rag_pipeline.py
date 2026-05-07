@@ -125,7 +125,7 @@ class RAG_Pipeline:
             self.logger.error(f"Error during similarity query execution: {e}")
             return None, {"total": 0, "calls": 0}
 
-    def run_pipeline(self, data, claim, claim_id):
+    def run_pipeline(self, data, claim, claim_id, prompt_instructions=None):
         """
         Executes the entire RAG pipeline: data loading, graph generation, and fact-checking.
 
@@ -133,6 +133,7 @@ class RAG_Pipeline:
             data (list): List of dictionaries containing the scraped article data.
             claim (str): The specific claim text to be verified.
             claim_id (str): The unique ID of the claim, used to organize graph assets.
+            prompt_instructions (str, optional): Custom instructions for the LLM prompt.
 
         Returns:
             tuple: A tuple containing:
@@ -158,6 +159,21 @@ class RAG_Pipeline:
             # Step 2: Generate and save graphs
             self.generate_and_save_graphs(claim_graphs_folder)
 
+            fallback_instructions = """
+            Your response MUST follow this exact structure:
+            VERDICT: [Choose ONLY one: SUPPORTS, REFUTES, or NOT ENOUGH INFO]
+            REASONING: [Your detailed explanation and citations here]
+
+            Follow these logical rules for the VERDICT:
+            - If the articles confirm the claim, use 'SUPPORTS'.
+            - If the articles completely contradict the claim, use 'REFUTES'.
+            - If there is confusion or the articles do not mention the specific details of the claim, use 'NOT ENOUGH INFO'.
+            """
+
+            active_instructions = (
+                prompt_instructions if prompt_instructions else fallback_instructions
+            )
+
             question = f"""
                 You are a strict fact-checking assistant. 
             
@@ -165,14 +181,7 @@ class RAG_Pipeline:
 
                 Based ONLY on the information provided in the retrieved articles, determine if the claim above is confirmed or refuted.
 
-                Your response MUST follow this exact structure:
-                VERDICT: [Choose ONLY one: SUPPORTS, REFUTES, or NOT ENOUGH INFO]
-                REASONING: [Your detailed explanation and citations here]
-
-                Follow these logical rules for the VERDICT:
-                - If the articles confirm the claim, use 'SUPPORTS'.
-                - If the articles completely contradict the claim, use 'REFUTES'.
-                - If there is confusion or the articles do not mention the specific details of the claim, use 'NOT ENOUGH INFO'.
+                {active_instructions}
 
                 Make sure to cite the titles of the articles that support your conclusions. Do not include any external knowledge.
             """
