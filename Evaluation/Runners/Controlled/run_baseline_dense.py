@@ -1,5 +1,4 @@
 import os
-import json
 import sqlite3
 import uuid
 import re
@@ -30,6 +29,7 @@ MAX_CLAIMS_TO_TEST = 5
 # Initialize Groq Client
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
+USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 client = Groq(api_key=GROQ_API_KEY)
 logger = Logger("Dense-Baseline").get_logger()
 
@@ -114,6 +114,7 @@ def run_dense_baseline():
         f"Starting Baseline 3 (Dense-RAG Re-ranking) with {MAX_CLAIMS_TO_TEST} claims..."
     )
     logger.info(f"Active Dataset: {active_dataset}")
+    logger.info(f"Using Metadata Super Query: {USE_METADATA}")
 
     # ---------------------------------------------------------
     # 2. CONFIGURE THE RETRIEVAL PIPELINE BASED ON DATASET
@@ -147,7 +148,15 @@ def run_dense_baseline():
             claim_text = data.get("claim", "")
             ground_truth = data.get("label", "")
 
+            # --- CONDITIONAL METADATA QUERY ---
+            search_query = claim_text
+            if active_dataset == "AVERITEC" and USE_METADATA:
+                search_query = dataset_manager.build_search_query(data)
+
             logger.info(f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
+            if search_query != claim_text:
+                logger.info(f"Enriched Search Query: {search_query}")
+            logger.info(f"Ground Truth: {ground_truth}")
 
             claim_id = str(uuid.uuid4())
             tracker = ExperimentTracker(
@@ -173,8 +182,8 @@ def run_dense_baseline():
                         raise RuntimeError(
                             "FEVER Retriever was not properly initialized."
                         )
-                    # Let LangChain handle the full SQLite -> Embedding pipeline
-                    return dense_rag_retriever.invoke(claim_text)
+                    # Use the search_query (which is identical to claim_text for FEVER)
+                    return dense_rag_retriever.invoke(search_query)
 
                 elif active_dataset == "AVERITEC":
                     if averitec_retriever is None:
@@ -210,8 +219,8 @@ def run_dense_baseline():
                         base_compressor=embeddings_filter, base_retriever=bm25_retriever
                     )
 
-                    # Execute the two-stage pipeline
-                    return compression_retriever.invoke(claim_text)
+                    # Execute the two-stage pipeline using the ENRICHED query
+                    return compression_retriever.invoke(search_query)
 
             best_docs = tracker.run_stage("retrieval", run_retrieval)
 
@@ -234,6 +243,7 @@ def run_dense_baseline():
 
             # --- THE GENERATION STEP ---
             def run_llm():
+                # Strictly pass the original claim_text, not the search_query
                 res_text, toks = get_dense_verdict(
                     claim_text, combined_evidence, prompt_instructions, nei_label
                 )
