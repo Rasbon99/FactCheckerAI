@@ -2,10 +2,13 @@ import pandas as pd
 from sklearn.metrics import classification_report, accuracy_score
 
 from Database.sqldb import Database
+from log import Logger
+
+logger = Logger(__name__).get_logger()
 
 
 def calculate_effectiveness():
-    print("Loading experiment data using the Database manager...")
+    logger.info("Loading experiment data using the Database manager...")
 
     # 1. Initialize your Database connection
     db = Database()
@@ -20,14 +23,16 @@ def calculate_effectiveness():
         # 2. Use our existing fetch_all method
         rows = db.fetch_all(query)
     except Exception as e:
-        print(f"Failed to fetch data: {e}")
+        logger.error(f"Failed to fetch data: {e}")
         return
 
     if not rows:
-        print("No valid experiment data found! Have you run any evaluations yet?")
+        logger.warning(
+            "No valid experiment data found! Have you run any evaluations yet?"
+        )
         return
 
-    print(f"Successfully loaded {len(rows)} fact-checking trials.\n")
+    logger.info(f"Successfully loaded {len(rows)} fact-checking trials.")
 
     # 3. Convert the SQLite rows into a Pandas DataFrame
     df = pd.DataFrame([dict(row) for row in rows])
@@ -45,18 +50,18 @@ def calculate_effectiveness():
     grouped_experiments = df.groupby(["system_type", "dataset_setting"])
 
     for (sys_type, ds_setting), group in grouped_experiments:
-        print("=" * 70)
-        print(f"🚀 SYSTEM: {sys_type}")
-        print(f"📁 DATASET: {ds_setting}")
-        print(f"📊 SAMPLE SIZE: {len(group)} claims")
-        print("=" * 70)
+        logger.info("=" * 70)
+        logger.info(f"SYSTEM: {sys_type}")
+        logger.info(f"DATASET: {ds_setting}")
+        logger.info(f"SAMPLE SIZE: {len(group)} claims")
+        logger.info("=" * 70)
 
         y_true = group["ground_truth"].tolist()
         y_pred = group["predicted_label"].tolist()
 
         # Calculate Overall Accuracy
         acc = accuracy_score(y_true, y_pred)
-        print(f"\nOverall Accuracy: {acc:.4f} ({acc*100:.2f}%)")
+        logger.info(f"Overall Accuracy: {acc:.4f} ({acc*100:.2f}%)")
 
         # Generate the detailed per-label report
         report = classification_report(
@@ -66,9 +71,9 @@ def calculate_effectiveness():
             zero_division=0,
         )
 
-        print("Per-Label Breakdown:")
-        print(report)
-        print("-" * 70 + "\n")
+        logger.info("Per-Label Breakdown:")
+        logger.info("%s", report)
+        logger.info("-" * 70)
 
 
 if __name__ == "__main__":

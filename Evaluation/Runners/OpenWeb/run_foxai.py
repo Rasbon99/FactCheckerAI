@@ -3,6 +3,7 @@ import json
 import requests
 import time
 import dotenv
+from log import Logger
 
 dotenv.load_dotenv("key.env", override=True)
 
@@ -12,12 +13,13 @@ BACKEND_URL = os.getenv("BACKEND_API_URL")
 API_URL = f"{BACKEND_URL}/run_pipeline"
 
 MAX_CLAIMS_TO_TEST = 5
+logger = Logger(__name__).get_logger()
 
 
 def run_experiment():
-    print(f"Starting Experiment B (Open Web) with {MAX_CLAIMS_TO_TEST} claims...")
-    print(f"Reading dataset from: {DATASET_PATH}")
-    print(f"Sending requests to: {API_URL}")
+    logger.info(f"Starting Experiment B (Open Web) with {MAX_CLAIMS_TO_TEST} claims...")
+    logger.info(f"Reading dataset from: {DATASET_PATH}")
+    logger.info(f"Sending requests to: {API_URL}")
 
     successful_runs = 0
     failed_runs = 0
@@ -34,10 +36,10 @@ def run_experiment():
                 claim_text = data.get("claim", "")
                 ground_truth = data.get("label", "")
 
-                print(
-                    f"\n[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Processing: {claim_text[:50]}..."
+                logger.info(
+                    f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Processing: {claim_text[:50]}..."
                 )
-                print(f"Ground Truth: {ground_truth}")
+                logger.info(f"Ground Truth: {ground_truth}")
 
                 # 3. Prepare the payload
                 payload = {
@@ -51,37 +53,37 @@ def run_experiment():
                     response = requests.post(API_URL, json=payload, timeout=180)
 
                     if response.status_code == 200:
-                        print(f"✅ Success! FoxAI Verdict generated.")
+                        logger.info("Success! FoxAI Verdict generated.")
                         successful_runs += 1
                     else:
-                        print(
-                            f"❌ Backend Error {response.status_code}: {response.text}"
+                        logger.error(
+                            f"Backend Error {response.status_code}: {response.text}"
                         )
                         failed_runs += 1
 
                 except requests.exceptions.Timeout:
-                    print(
-                        "🚨 Request timed out! The backend took too long (likely a slow scrape or Ollama freeze). Skipping to next claim."
+                    logger.warning(
+                        "Request timed out! The backend took too long (likely a slow scrape or Ollama freeze). Skipping to next claim."
                     )
                     failed_runs += 1
                 except Exception as e:
-                    print(f"❌ Request failed: {e}")
+                    logger.error(f"Request failed: {e}")
                     failed_runs += 1
 
                 time.sleep(5)
 
     except FileNotFoundError:
-        print(
+        logger.error(
             f"ERROR: Could not find the dataset at {DATASET_PATH}. Please check your .env file!"
         )
         return
 
-    print("\n" + "=" * 40)
-    print(f"EXPERIMENT COMPLETE!")
-    print(f"Successful processing: {successful_runs}")
-    print(f"Failed processing: {failed_runs}")
-    print("Check your SQLite 'experiments' table to see the logged metrics!")
-    print("=" * 40)
+    logger.info("=" * 40)
+    logger.info("EXPERIMENT COMPLETE!")
+    logger.info(f"Successful processing: {successful_runs}")
+    logger.info(f"Failed processing: {failed_runs}")
+    logger.info("Check your SQLite 'experiments' table to see the logged metrics!")
+    logger.info("=" * 40)
 
 
 if __name__ == "__main__":

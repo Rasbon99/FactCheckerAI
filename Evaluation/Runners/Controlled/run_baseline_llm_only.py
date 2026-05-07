@@ -4,6 +4,7 @@ import time
 import uuid
 import dotenv
 from groq import Groq
+from log import Logger
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.experiment_tracker import ExperimentTracker
@@ -20,6 +21,7 @@ MAX_CLAIMS_TO_TEST = 5
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
 client = Groq(api_key=GROQ_API_KEY)
+logger = Logger(__name__).get_logger()
 
 
 def get_llm_only_verdict(claim_text):
@@ -48,8 +50,8 @@ def get_llm_only_verdict(claim_text):
 
 
 def run_llm_baseline():
-    print(f"Starting Baseline 1 (LLM-Only) with {MAX_CLAIMS_TO_TEST} claims...")
-    print(f"Using Model: {GROQ_MODEL}\n")
+    logger.info(f"Starting Baseline 1 (LLM-Only) with {MAX_CLAIMS_TO_TEST} claims...")
+    logger.info(f"Using Model: {GROQ_MODEL}")
 
     successful_runs = 0
 
@@ -63,8 +65,10 @@ def run_llm_baseline():
                 claim_text = data.get("claim", "")
                 ground_truth = data.get("label", "")
 
-                print(f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
-                print(f"Ground Truth: {ground_truth}")
+                logger.info(
+                    f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}"
+                )
+                logger.info(f"Ground Truth: {ground_truth}")
 
                 claim_id = str(uuid.uuid4())
                 tracker = ExperimentTracker(
@@ -87,7 +91,7 @@ def run_llm_baseline():
                     res_text, toks = get_llm_only_verdict(claim_text)
                     return (res_text, None), {"total": toks, "calls": 1}
 
-                (query_result) = tracker.run_stage("generation", run_llm)
+                query_result = tracker.run_stage("generation", run_llm)
 
                 if isinstance(query_result, tuple):
                     query_result = query_result[0]
@@ -105,7 +109,7 @@ def run_llm_baseline():
                 except Exception:
                     predicted_label = "Parsing Error"
 
-                print(f"LLM Verdict: {predicted_label}")
+                logger.info(f"LLM Verdict: {predicted_label}")
 
                 # 4. Create Answer Entity for the UI
                 Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
@@ -126,12 +130,12 @@ def run_llm_baseline():
                 time.sleep(2)
 
     except FileNotFoundError:
-        print(f"ERROR: Could not find dataset at {DATASET_PATH}.")
+        logger.error(f"Could not find dataset at {DATASET_PATH}.")
 
-    print("\n" + "=" * 40)
-    print("LLM-ONLY BASELINE COMPLETE!")
-    print(f"Successfully processed: {successful_runs}")
-    print("=" * 40)
+    logger.info("=" * 40)
+    logger.info("LLM-ONLY BASELINE COMPLETE!")
+    logger.info(f"Successfully processed: {successful_runs}")
+    logger.info("=" * 40)
 
 
 if __name__ == "__main__":

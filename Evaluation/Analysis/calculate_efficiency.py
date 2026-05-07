@@ -1,10 +1,13 @@
 import pandas as pd
 
 from Database.sqldb import Database
+from log import Logger
+
+logger = Logger(__name__).get_logger()
 
 
 def calculate_efficiency():
-    print("Loading efficiency data using the Database manager...")
+    logger.info("Loading efficiency data using the Database manager...")
 
     db = Database()
 
@@ -20,16 +23,16 @@ def calculate_efficiency():
     try:
         rows = db.fetch_all(query)
     except Exception as e:
-        print(f"Failed to fetch data: {e}")
+        logger.error(f"Failed to fetch data: {e}")
         return
 
     if not rows:
-        print(
+        logger.warning(
             "No valid experiment data found! Have you run the open web evaluation yet?"
         )
         return
 
-    print(f"Successfully loaded {len(rows)} fact-checking trials.\n")
+    logger.info(f"Successfully loaded {len(rows)} fact-checking trials.")
 
     # 2. Convert to Pandas DataFrame
     df = pd.DataFrame([dict(row) for row in rows])
@@ -46,22 +49,22 @@ def calculate_efficiency():
     )
 
     # 4. Print the beautifully formatted Academic Table
-    print("=" * 75)
-    print("RQ2: EFFICIENCY METRICS (Averages per Claim)")
-    print("=" * 75)
+    logger.info("=" * 75)
+    logger.info("RQ2: EFFICIENCY METRICS (Averages per Claim)")
+    logger.info("=" * 75)
 
     # Helper function to print a row nicely
     def print_stage_metrics(stage_name, latency_col, token_col, call_col):
         avg_lat = df[latency_col].mean()
         avg_tok = df[token_col].mean()
         avg_cal = df[call_col].mean()
-        print(
+        logger.info(
             f"{stage_name:<25} | {avg_lat:>9.2f} sec | {avg_tok:>10.1f} tokens | {avg_cal:>6.1f} calls"
         )
 
     # Table Header
-    print(f"{'STAGE':<25} | {'LATENCY':>13} | {'TOKENS':>17} | {'CALLS':>12}")
-    print("-" * 75)
+    logger.info(f"{'STAGE':<25} | {'LATENCY':>13} | {'TOKENS':>17} | {'CALLS':>12}")
+    logger.info("-" * 75)
 
     # Stage Rows
     print_stage_metrics(
@@ -82,14 +85,14 @@ def calculate_efficiency():
         "tokens_graph_rag",
         "calls_graph_rag",
     )
-    print("-" * 75)
+    logger.info("-" * 75)
 
     # Total Row
     print_stage_metrics(
         "TOTAL END-TO-END", "total_latency", "total_tokens", "total_calls"
     )
 
-    print("=" * 75)
+    logger.info("=" * 75)
 
 
 if __name__ == "__main__":

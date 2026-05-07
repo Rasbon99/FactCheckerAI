@@ -2,6 +2,7 @@ import os
 import json
 import random
 import dotenv
+from log import Logger
 
 # Load environment variables
 dotenv.load_dotenv("key.env", override=True)
@@ -11,6 +12,7 @@ ORIGINAL_DATASET_PATH = os.getenv(
     "FEVER_DATASET_PATH", "Datasets/fever_dev_dataset.jsonl"
 )
 ROBUSTNESS_DIR = "Datasets/RobustnessTests"
+logger = Logger(__name__).get_logger()
 
 # Ensure the new directory exists
 os.makedirs(ROBUSTNESS_DIR, exist_ok=True)
@@ -45,7 +47,7 @@ def generate_missing_dataset(base_claims):
 
     out_path = os.path.join(ROBUSTNESS_DIR, "missing.jsonl")
     save_dataset(dataset, out_path)
-    print(f"✅ Generated Missing Dataset: {out_path}")
+    logger.info(f"Generated Missing Dataset: {out_path}")
 
 
 def generate_noisy_dataset(base_claims):
@@ -76,7 +78,7 @@ def generate_noisy_dataset(base_claims):
 
     out_path = os.path.join(ROBUSTNESS_DIR, "noisy.jsonl")
     save_dataset(dataset, out_path)
-    print(f"✅ Generated Noisy Dataset: {out_path}")
+    logger.info(f"Generated Noisy Dataset: {out_path}")
 
 
 def generate_conflicting_dataset(base_claims):
@@ -112,7 +114,7 @@ def generate_conflicting_dataset(base_claims):
 
     out_path = os.path.join(ROBUSTNESS_DIR, "conflicting.jsonl")
     save_dataset(dataset, out_path)
-    print(f"✅ Generated Conflicting Dataset: {out_path}")
+    logger.info(f"Generated Conflicting Dataset: {out_path}")
 
 
 def save_dataset(dataset, filepath):
@@ -124,13 +126,13 @@ def save_dataset(dataset, filepath):
 
 if __name__ == "__main__":
     if not os.path.exists(ORIGINAL_DATASET_PATH):
-        print(f"❌ Error: Could not find original dataset at {ORIGINAL_DATASET_PATH}")
+        logger.error(f"Could not find original dataset at {ORIGINAL_DATASET_PATH}")
     else:
-        print("🚀 Starting Robustness Dataset Generation...\n")
+        logger.info("Starting Robustness Dataset Generation...")
         claims = load_base_claims(ORIGINAL_DATASET_PATH)
 
         generate_missing_dataset(claims)
         generate_noisy_dataset(claims)
         generate_conflicting_dataset(claims)
 
-        print("\n🎉 All 3 robustness datasets are ready for evaluation!")
+        logger.info("All 3 robustness datasets are ready for evaluation!")

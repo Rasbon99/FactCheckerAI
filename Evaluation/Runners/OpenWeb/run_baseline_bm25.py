@@ -5,6 +5,7 @@ import uuid
 import dotenv
 from groq import Groq
 from rank_bm25 import BM25Okapi
+from log import Logger
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.experiment_tracker import ExperimentTracker
@@ -17,6 +18,7 @@ dotenv.load_dotenv("key.env", override=True)
 # Configuration
 DATASET_PATH = os.getenv("FEVER_DATASET_PATH", "Datasets/fever_dev_dataset.jsonl")
 MAX_CLAIMS_TO_TEST = 5
+logger = Logger(__name__).get_logger()
 
 # Initialize Groq Client
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -63,7 +65,9 @@ def get_bm25_verdict(claim_text, best_evidence_string):
 
 
 def run_bm25_baseline():
-    print(f"Starting Baseline BM25 Keyword RAG with {MAX_CLAIMS_TO_TEST} claims...")
+    logger.info(
+        f"Starting Baseline BM25 Keyword RAG with {MAX_CLAIMS_TO_TEST} claims..."
+    )
 
     successful_runs = 0
 
@@ -80,7 +84,9 @@ def run_bm25_baseline():
                 claim_text = data.get("claim", "")
                 ground_truth = data.get("label", "")
 
-                print(f"\n[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
+                logger.info(
+                    f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}"
+                )
 
                 claim_id = str(uuid.uuid4())
                 tracker = ExperimentTracker(
@@ -103,8 +109,8 @@ def run_bm25_baseline():
                         claim_text, num_results=10
                     )
 
-                    print(
-                        f"  -> Scraped {len(raw_scraped_sources)} pages. Running BM25 math..."
+                    logger.info(
+                        f"Scraped {len(raw_scraped_sources)} pages. Running BM25 math..."
                     )
                     # Combine all text from all scraped pages
                     all_text = ""
@@ -157,7 +163,7 @@ def run_bm25_baseline():
                 except Exception:
                     predicted_label = "Parsing Error"
 
-                print(f"  -> BM25 Verdict: {predicted_label}")
+                logger.info(f"BM25 Verdict: {predicted_label}")
 
                 Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
 
@@ -172,15 +178,17 @@ def run_bm25_baseline():
                 )
 
                 successful_runs += 1
-                print("Sleeping for 15 seconds to respect DuckDuckGo rate limits...")
+                logger.info(
+                    "Sleeping for 15 seconds to respect DuckDuckGo rate limits..."
+                )
                 time.sleep(15)
 
     except Exception as e:
-        print(f"ERROR: {e}")
+        logger.error(f"{e}")
 
-    print("\n" + "=" * 40)
-    print("BM25 (OPEN WEB) COMPLETE!")
-    print("=" * 40)
+    logger.info("=" * 40)
+    logger.info("BM25 (OPEN WEB) COMPLETE!")
+    logger.info("=" * 40)
 
 
 if __name__ == "__main__":

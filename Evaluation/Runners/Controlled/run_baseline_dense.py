@@ -6,6 +6,7 @@ import re
 import dotenv
 from typing import List
 from groq import Groq
+from log import Logger
 
 # --- LangChain Imports ---
 from langchain_core.retrievers import BaseRetriever
@@ -29,6 +30,7 @@ MAX_CLAIMS_TO_TEST = 5
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
 client = Groq(api_key=GROQ_API_KEY)
+logger = Logger(__name__).get_logger()
 
 
 # ====================================================================
@@ -100,14 +102,14 @@ CLAIM: {claim_text}
 
 
 def run_dense_baseline():
-    print(
+    logger.info(
         f"Starting Baseline 3 (Dense-RAG Re-ranking) with {MAX_CLAIMS_TO_TEST} claims..."
     )
 
     # ---------------------------------------------------------
     # 2. THE LANGCHAIN TWO-STAGE PIPELINE (STAGE 2: EMBEDDINGS)
     # ---------------------------------------------------------
-    print("Loading Ollama Embeddings (This takes a few seconds)...")
+    logger.info("Loading Ollama Embeddings (This takes a few seconds)...")
     # Note: If you ever want to use OpenAI, swap this to OpenAIEmbeddings()
     embeddings = OllamaEmbeddings(model="nomic-embed-text")
 
@@ -133,7 +135,9 @@ def run_dense_baseline():
                 claim_text = data.get("claim", "")
                 ground_truth = data.get("label", "")
 
-                print(f"\n[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
+                logger.info(
+                    f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}"
+                )
 
                 claim_id = str(uuid.uuid4())
                 tracker = ExperimentTracker(
@@ -151,7 +155,7 @@ def run_dense_baseline():
                 )
 
                 # --- THE RETRIEVAL STEP (LangChain Invocation) ---
-                print("  -> Searching SQLite & Re-ranking with Ollama...")
+                logger.info("Searching SQLite & Re-ranking with Ollama...")
 
                 def run_retrieval():
                     # This single line runs the SQLite query AND the Ollama embedding re-ranking!
@@ -180,7 +184,7 @@ def run_dense_baseline():
                     res_text, toks = get_dense_verdict(claim_text, combined_evidence)
                     return (res_text, None), {"total": toks, "calls": 1}
 
-                (query_result) = tracker.run_stage("generation", run_llm)
+                query_result = tracker.run_stage("generation", run_llm)
 
                 if isinstance(query_result, tuple):
                     query_result = query_result[0]
@@ -198,7 +202,7 @@ def run_dense_baseline():
                 except Exception:
                     predicted_label = "Parsing Error"
 
-                print(f"  -> Dense Verdict: {predicted_label}")
+                logger.info(f"Dense Verdict: {predicted_label}")
 
                 Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
 
@@ -214,11 +218,11 @@ def run_dense_baseline():
                 successful_runs += 1
 
     except Exception as e:
-        print(f"ERROR: {e}")
+        logger.error(f"{e}")
 
-    print("\n" + "=" * 40)
-    print("DENSE-RAG BASELINE COMPLETE!")
-    print("=" * 40)
+    logger.info("=" * 40)
+    logger.info("DENSE-RAG BASELINE COMPLETE!")
+    logger.info("=" * 40)
 
 
 if __name__ == "__main__":

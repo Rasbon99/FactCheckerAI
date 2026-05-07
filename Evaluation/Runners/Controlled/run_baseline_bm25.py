@@ -6,6 +6,7 @@ import uuid
 import re
 import dotenv
 from groq import Groq
+from log import Logger
 
 from Evaluation.Utils.experiment_tracker import ExperimentTracker
 from Database.data_entities import Claim, Answer
@@ -21,6 +22,7 @@ MAX_CLAIMS_TO_TEST = 5
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
 client = Groq(api_key=GROQ_API_KEY)
+logger = Logger(__name__).get_logger()
 
 
 def clean_query_for_fts(text):
@@ -57,7 +59,7 @@ def get_bm25_verdict(claim_text, retrieved_evidence):
 
 
 def run_bm25_baseline():
-    print(
+    logger.info(
         f"Starting Baseline 2 (BM25 Keyword Search) with {MAX_CLAIMS_TO_TEST} claims..."
     )
 
@@ -77,7 +79,9 @@ def run_bm25_baseline():
                 claim_text = data.get("claim", "")
                 ground_truth = data.get("label", "")
 
-                print(f"\n[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
+                logger.info(
+                    f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}"
+                )
 
                 claim_id = str(uuid.uuid4())
                 tracker = ExperimentTracker(
@@ -136,7 +140,7 @@ def run_bm25_baseline():
                     res_text, toks = get_bm25_verdict(claim_text, combined_evidence)
                     return (res_text, None), {"total": toks, "calls": 1}
 
-                (query_result) = tracker.run_stage("generation", run_llm)
+                query_result = tracker.run_stage("generation", run_llm)
 
                 if isinstance(query_result, tuple):
                     query_result = query_result[0]
@@ -154,7 +158,7 @@ def run_bm25_baseline():
                 except Exception:
                     predicted_label = "Parsing Error"
 
-                print(f"BM25 Verdict: {predicted_label}")
+                logger.info(f"BM25 Verdict: {predicted_label}")
 
                 Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
 
@@ -171,13 +175,13 @@ def run_bm25_baseline():
                 time.sleep(2)
 
     except Exception as e:
-        print(f"ERROR: {e}")
+        logger.error(f"{e}")
     finally:
         wiki_conn.close()
 
-    print("\n" + "=" * 40)
-    print("BM25 BASELINE COMPLETE!")
-    print("=" * 40)
+    logger.info("=" * 40)
+    logger.info("BM25 BASELINE COMPLETE!")
+    logger.info("=" * 40)
 
 
 if __name__ == "__main__":

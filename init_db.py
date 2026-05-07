@@ -1,4 +1,7 @@
 from Database.sqldb import Database
+from log import Logger
+
+logger = Logger(__name__).get_logger()
 
 
 def initialize_database_schema(db: Database | None = None):
@@ -13,19 +16,16 @@ def initialize_database_schema(db: Database | None = None):
     """
     db_manager = db if db is not None else Database()
 
-    db_manager.create_table(
-        """
+    db_manager.create_table("""
         CREATE TABLE IF NOT EXISTS claims (
             id TEXT PRIMARY KEY,
             text TEXT,
             title TEXT,
             summary TEXT
         )
-    """
-    )
+    """)
 
-    db_manager.create_table(
-        """
+    db_manager.create_table("""
         CREATE TABLE IF NOT EXISTS sources (
             id TEXT PRIMARY KEY,
             claim_id TEXT,
@@ -37,11 +37,9 @@ def initialize_database_schema(db: Database | None = None):
             entities TEXT,
             FOREIGN KEY (claim_id) REFERENCES claims(id)
         )
-    """
-    )
+    """)
 
-    db_manager.create_table(
-        """
+    db_manager.create_table("""
         CREATE TABLE IF NOT EXISTS answers (
             id TEXT PRIMARY KEY,
             claim_id TEXT,
@@ -49,11 +47,9 @@ def initialize_database_schema(db: Database | None = None):
             graphs_folder TEXT,
             FOREIGN KEY (claim_id) REFERENCES claims(id)
         )
-    """
-    )
+    """)
 
-    db_manager.create_table(
-        """
+    db_manager.create_table("""
         CREATE TABLE IF NOT EXISTS experiments (
             id TEXT PRIMARY KEY,
             claim_id TEXT,
@@ -81,12 +77,11 @@ def initialize_database_schema(db: Database | None = None):
             evidence_log_path TEXT,
             FOREIGN KEY (claim_id) REFERENCES claims(id)
         )
-    """
-    )
+    """)
 
     return db_manager
 
 
 if __name__ == "__main__":
     initialize_database_schema()
-    print("✅ Database tables verified.")
+    logger.info("Database tables verified.")

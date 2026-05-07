@@ -4,6 +4,7 @@ import sqlite3
 import time
 import uuid
 import dotenv
+from log import Logger
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.experiment_tracker import ExperimentTracker
@@ -18,6 +19,7 @@ dotenv.load_dotenv("key.env", override=True)
 DATASET_PATH = os.getenv("FEVER_DATASET_PATH", "Datasets/fever_dev_dataset.jsonl")
 WIKI_DB_PATH = os.getenv("FEVER_WIKIPEDIA_DB_PATH", "Datasets/fever_wiki.db")
 MAX_CLAIMS_TO_TEST = 5
+logger = Logger(__name__).get_logger()
 
 
 def extract_perfect_evidence(evidence_data, wiki_cursor):
@@ -52,7 +54,7 @@ def extract_perfect_evidence(evidence_data, wiki_cursor):
 
 
 def run_controlled_experiment():
-    print(
+    logger.info(
         f"Starting Controlled Experiment A (Perfect Evidence) with {MAX_CLAIMS_TO_TEST} claims..."
     )
 
@@ -77,23 +79,25 @@ def run_controlled_experiment():
                 ground_truth = data.get("label", "")
                 evidence_data = data.get("evidence", [])
 
-                print(f"\n[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
-                print(f"Ground Truth: {ground_truth}")
-                print(f"Raw Evidence Array from FEVER: {evidence_data}")
+                logger.info(
+                    f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}"
+                )
+                logger.info(f"Ground Truth: {ground_truth}")
+                logger.info(f"Raw Evidence Array from FEVER: {evidence_data}")
 
                 # Extract the perfect evidence from the local DB!
                 perfect_evidence = extract_perfect_evidence(evidence_data, wiki_cursor)
 
                 if not perfect_evidence and ground_truth != "NOT ENOUGH INFO":
-                    print("⚠️ Warning: Could not find evidence in DB for this claim.")
+                    logger.warning("Could not find evidence in DB for this claim.")
 
-                print(f"Perfect Evidence Retrieved: {perfect_evidence[:100]}...")
+                logger.info(f"Perfect Evidence Retrieved: {perfect_evidence[:100]}...")
 
                 # --- THE SHORT-CIRCUIT ---
                 # If there is no evidence, skip the heavy AI processing entirely!
                 if not perfect_evidence:
-                    print(
-                        "⏩ No evidence available. Short-circuiting to NOT ENOUGH INFO."
+                    logger.info(
+                        "No evidence available. Short-circuiting to NOT ENOUGH INFO."
                     )
                     claim_id = str(uuid.uuid4())
                     tracker = ExperimentTracker(
@@ -158,7 +162,7 @@ def run_controlled_experiment():
                     prep_srcs, prep_tokens = preprocessor.run_sources_pipe(mock_srcs)
                     return (prep_srcs, mock_srcs), prep_tokens
 
-                (preprocessed_sources, sources) = tracker.run_stage(
+                preprocessed_sources, sources = tracker.run_stage(
                     "retrieval", run_retrieval
                 )
                 claim.add_sources(preprocessed_sources)
@@ -178,8 +182,8 @@ def run_controlled_experiment():
                         break
 
                 if not has_entities:
-                    print(
-                        "⏩ NER extracted 0 entities. Short-circuiting to prevent Neo4j/Ollama crash."
+                    logger.info(
+                        "NER extracted 0 entities. Short-circuiting to prevent Neo4j/Ollama crash."
                     )
                     predicted_label = "Error: No Entities"
                     query_result = "VERDICT: NOT ENOUGH INFO\nREASONING: Evidence was provided, but the NER model failed to extract any entities to build a graph."
@@ -204,7 +208,7 @@ def run_controlled_experiment():
                     )
                     return (q_res, g_folder), t_usage
 
-                (query_result, graphs_folder) = tracker.run_stage("generation", run_rag)
+                query_result, graphs_folder = tracker.run_stage("generation", run_rag)
 
                 # --- 4. Verdict Parsing ---
                 try:
@@ -219,7 +223,7 @@ def run_controlled_experiment():
                 except Exception:
                     predicted_label = "Parsing Error"
 
-                print(f"FoxAI Verdict: {predicted_label}")
+                logger.info(f"FoxAI Verdict: {predicted_label}")
 
                 # --- Create Answer Entity for the UI ---
                 Answer(
@@ -238,20 +242,20 @@ def run_controlled_experiment():
 
                 successful_runs += 1
 
-                print("Sleeping for 5 seconds before next claim...")
+                logger.info("Sleeping for 5 seconds before next claim...")
                 time.sleep(
                     5
                 )  # Sleep to simulate time taken and avoid overwhelming resources
 
     except FileNotFoundError:
-        print(f"ERROR: Could not find dataset at {DATASET_PATH}.")
+        logger.error(f"Could not find dataset at {DATASET_PATH}.")
     finally:
         wiki_conn.close()
 
-    print("\n" + "=" * 40)
-    print("CONTROLLED EXPERIMENT COMPLETE!")
-    print(f"Successfully processed: {successful_runs}")
-    print("=" * 40)
+    logger.info("=" * 40)
+    logger.info("CONTROLLED EXPERIMENT COMPLETE!")
+    logger.info(f"Successfully processed: {successful_runs}")
+    logger.info("=" * 40)
 
 
 if __name__ == "__main__":
