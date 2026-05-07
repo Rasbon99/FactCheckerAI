@@ -23,7 +23,7 @@ dotenv.load_dotenv("key.env", override=True)
 # Configuration
 DATASET_PATH = os.getenv("FEVER_DATASET_PATH", "Datasets/fever_dev_dataset.jsonl")
 MAX_CLAIMS_TO_TEST = 5
-logger = Logger(__name__).get_logger()
+logger = Logger("run_baseline_dense").get_logger()
 
 # Initialize Groq Client
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")

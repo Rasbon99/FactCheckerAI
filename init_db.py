@@ -1,7 +1,7 @@
 from Database.sqldb import Database
 from log import Logger
 
-logger = Logger(__name__).get_logger()
+logger = Logger("init_db").get_logger()
 
 
 def initialize_database_schema(db: Database | None = None):

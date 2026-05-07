@@ -12,7 +12,7 @@ ORIGINAL_DATASET_PATH = os.getenv(
     "FEVER_DATASET_PATH", "Datasets/fever_dev_dataset.jsonl"
 )
 ROBUSTNESS_DIR = "Datasets/RobustnessTests"
-logger = Logger(__name__).get_logger()
+logger = Logger("generate_robustness_datasets").get_logger()
 
 # Ensure the new directory exists
 os.makedirs(ROBUSTNESS_DIR, exist_ok=True)

@@ -6,7 +6,7 @@ from log import Logger
 
 dotenv.load_dotenv("key.env", override=True)
 WIKI_DB_PATH = os.getenv("FEVER_WIKIPEDIA_DB_PATH", "Datasets/fever_wiki.db")
-logger = Logger(__name__).get_logger()
+logger = Logger("setup_bm25_index").get_logger()
 
 
 def build_fts_index():

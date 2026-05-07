@@ -10,7 +10,7 @@ dotenv.load_dotenv("key.env", override=True)
 
 WIKIPEDIA_FOLDER = os.getenv("FEVER_WIKIPEDIA_PAGES_PATH", "Datasets/wiki-pages")
 DB_PATH = os.getenv("FEVER_WIKIPEDIA_DB_PATH", "Datasets/fever_wiki.db")
-logger = Logger(__name__).get_logger()
+logger = Logger("build_fever_db").get_logger()
 
 
 def build_wikipedia_database():

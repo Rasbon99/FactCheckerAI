@@ -3,7 +3,7 @@ import pandas as pd
 from Database.sqldb import Database
 from log import Logger
 
-logger = Logger(__name__).get_logger()
+logger = Logger("calculate_efficiency").get_logger()
 
 
 def calculate_efficiency():

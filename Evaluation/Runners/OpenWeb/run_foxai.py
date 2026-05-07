@@ -13,7 +13,7 @@ BACKEND_URL = os.getenv("BACKEND_API_URL")
 API_URL = f"{BACKEND_URL}/run_pipeline"
 
 MAX_CLAIMS_TO_TEST = 5
-logger = Logger(__name__).get_logger()
+logger = Logger("run_foxai").get_logger()
 
 
 def run_experiment():
