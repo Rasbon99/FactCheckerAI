@@ -92,6 +92,10 @@ def run_controlled_experiment():
             claim_text = data.get("claim", "")
             ground_truth = data.get("label", "")
 
+            # --- THE SUPER QUERY ---
+            # Automatically appends Speaker, Location, and Date for AVeriTeC claims
+            search_query = dataset_manager.build_search_query(data)
+
             # Use dynamic labels for missing info depending on the dataset
             nei_label = (
                 "NOT ENOUGH INFO"
@@ -108,10 +112,25 @@ def run_controlled_experiment():
                 evidence_data = data.get("evidence", [])
                 logger.info(f"Raw Evidence Array from FEVER: {evidence_data}")
                 perfect_evidence = extract_perfect_evidence(evidence_data, wiki_cursor)
+
             elif active_dataset == "AVERITEC" and averitec_retriever is not None:
                 claim_id_internal = data.get("internal_id")
-                sentences = averitec_retriever.get_evidence_for_claim(claim_id_internal)
-                perfect_evidence = " ".join(sentences)
+                all_sentences = averitec_retriever.get_evidence_for_claim(
+                    claim_id_internal
+                )
+
+                if all_sentences:
+                    # --- THE FOXAI LIFESAVER + METADATA FILTER ---
+                    from rank_bm25 import BM25Okapi
+
+                    # Tokenize corpus and the ENRICHED query (Metadata included!)
+                    tokenized_corpus = [s.lower().split() for s in all_sentences]
+                    bm25 = BM25Okapi(tokenized_corpus)
+                    tokenized_query = search_query.lower().split()
+
+                    # Grab only the 30 most keyword-relevant sentences for GraphRAG
+                    top_sentences = bm25.get_top_n(tokenized_query, all_sentences, n=30)
+                    perfect_evidence = " ".join(top_sentences)
 
             if not perfect_evidence and ground_truth != nei_label:
                 logger.warning(
@@ -132,7 +151,6 @@ def run_controlled_experiment():
                     dataset_setting=tracker_env_name,  # Dynamic Tracker Name
                 )
 
-                # 1. Create a Claim so it shows up in the UI sidebar
                 Claim(
                     text=claim_text,
                     title="[NEI] " + claim_text[:30] + "...",
@@ -143,7 +161,6 @@ def run_controlled_experiment():
                 predicted_label = nei_label
                 query_result = f"VERDICT: {nei_label}\nREASONING: No evidence provided by the dataset."
 
-                # 2. Create the Answer so the UI has text to display
                 Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
 
                 tracker.finalize(
@@ -156,7 +173,7 @@ def run_controlled_experiment():
                 )
 
                 successful_runs += 1
-                continue  # Jump immediately to the next claim in the loop!
+                continue
 
             # --- NORMAL PIPELINE (Only runs if we have actual evidence) ---
             claim_id = str(uuid.uuid4())
@@ -167,7 +184,7 @@ def run_controlled_experiment():
                 dataset_setting=tracker_env_name,  # Dynamic Tracker Name
             )
 
-            # --- 1. Preprocessing ---
+            # --- 1. Preprocessing (Pass the original claim to keep LLM focused) ---
             def run_prep():
                 return preprocessor.run_claim_pipe(claim_text)
 
@@ -222,7 +239,7 @@ def run_controlled_experiment():
                     },
                 )
                 successful_runs += 1
-                continue  # Jump to the next claim!
+                continue
             # =========================================================
 
             # --- 3. GraphRAG ---
