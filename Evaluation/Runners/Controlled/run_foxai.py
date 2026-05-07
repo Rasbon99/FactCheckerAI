@@ -8,6 +8,8 @@ from log import Logger
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.experiment_tracker import ExperimentTracker
+from Evaluation.Utils.dataset_manager import DatasetManager
+from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
 from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from GraphRAG.rag_pipeline import RAG_Pipeline
 from Database.data_entities import Claim, Answer
@@ -15,11 +17,8 @@ from Database.data_entities import Claim, Answer
 # Load environment variables
 dotenv.load_dotenv("key.env", override=True)
 
-# Configuration
-DATASET_PATH = os.getenv("FEVER_DATASET_PATH", "Datasets/fever_dev_dataset.jsonl")
-WIKI_DB_PATH = os.getenv("FEVER_WIKIPEDIA_DB_PATH", "Datasets/fever_wiki.db")
 MAX_CLAIMS_TO_TEST = 5
-logger = Logger(__name__).get_logger()
+logger = Logger("Fox-AI-Controlled").get_logger()
 
 
 def extract_perfect_evidence(evidence_data, wiki_cursor):
@@ -54,13 +53,30 @@ def extract_perfect_evidence(evidence_data, wiki_cursor):
 
 
 def run_controlled_experiment():
-    logger.info(
-        f"Starting Controlled Experiment A (Perfect Evidence) with {MAX_CLAIMS_TO_TEST} claims..."
-    )
+    # Initialize the Smart Dataset Manager
+    dataset_manager = DatasetManager()
+    active_dataset = dataset_manager.active_dataset
+    tracker_env_name = dataset_manager.get_tracker_dataset_name("Controlled")
+    prompt_instructions = dataset_manager.get_prompt_instructions()
 
-    # Connect to the Wikipedia DB (Read Only)
-    wiki_conn = sqlite3.connect(WIKI_DB_PATH)
-    wiki_cursor = wiki_conn.cursor()
+    logger.info(
+        f"Starting Controlled Experiment (FoxAI) with {MAX_CLAIMS_TO_TEST} claims..."
+    )
+    logger.info(f"Active Dataset: {active_dataset}")
+
+    # --- 1. Load the correct Database/Retriever based on environment ---
+    wiki_conn = None
+    wiki_cursor = None
+    averitec_retriever = None
+
+    if active_dataset == "FEVER":
+        wiki_db_path = os.getenv(
+            "FEVER_WIKIPEDIA_DB_PATH", "Datasets/FEVER/fever_wiki.db"
+        )
+        wiki_conn = sqlite3.connect(wiki_db_path)
+        wiki_cursor = wiki_conn.cursor()
+    elif active_dataset == "AVERITEC":
+        averitec_retriever = AVeriTeCKnowledgeRetriever()
 
     # Initialize the heavy pipeline components once (so we don't reload models every loop)
     preprocessor = Preprocessing_Pipeline()
@@ -69,168 +85,134 @@ def run_controlled_experiment():
     successful_runs = 0
 
     try:
-        with open(DATASET_PATH, "r", encoding="utf-8") as file:
-            for line_number, line in enumerate(file):
-                if line_number >= MAX_CLAIMS_TO_TEST:
-                    break
+        # Ask the DatasetManager for the claims (handles JSON vs JSONL automatically)
+        claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
 
-                data = json.loads(line)
-                claim_text = data.get("claim", "")
-                ground_truth = data.get("label", "")
+        for line_number, data in enumerate(claims_data):
+            claim_text = data.get("claim", "")
+            ground_truth = data.get("label", "")
+
+            # Use dynamic labels for missing info depending on the dataset
+            nei_label = (
+                "NOT ENOUGH INFO"
+                if active_dataset == "FEVER"
+                else "Not Enough Evidence"
+            )
+
+            logger.info(f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
+            logger.info(f"Ground Truth: {ground_truth}")
+
+            # --- 3. Extract Evidence Dynamically ---
+            perfect_evidence = ""
+            if active_dataset == "FEVER":
                 evidence_data = data.get("evidence", [])
-
-                logger.info(
-                    f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}"
-                )
-                logger.info(f"Ground Truth: {ground_truth}")
                 logger.info(f"Raw Evidence Array from FEVER: {evidence_data}")
-
-                # Extract the perfect evidence from the local DB!
                 perfect_evidence = extract_perfect_evidence(evidence_data, wiki_cursor)
+            elif active_dataset == "AVERITEC" and averitec_retriever is not None:
+                claim_id_internal = data.get("internal_id")
+                sentences = averitec_retriever.get_evidence_for_claim(claim_id_internal)
+                perfect_evidence = " ".join(sentences)
 
-                if not perfect_evidence and ground_truth != "NOT ENOUGH INFO":
-                    logger.warning("Could not find evidence in DB for this claim.")
+            if not perfect_evidence and ground_truth != nei_label:
+                logger.warning(
+                    "Could not find evidence in knowledge base for this claim."
+                )
 
-                logger.info(f"Perfect Evidence Retrieved: {perfect_evidence[:100]}...")
+            logger.info(f"Perfect Evidence Retrieved: {perfect_evidence[:100]}...")
 
-                # --- THE SHORT-CIRCUIT ---
-                # If there is no evidence, skip the heavy AI processing entirely!
-                if not perfect_evidence:
-                    logger.info(
-                        "No evidence available. Short-circuiting to NOT ENOUGH INFO."
-                    )
-                    claim_id = str(uuid.uuid4())
-                    tracker = ExperimentTracker(
-                        claim_id=claim_id,
-                        ground_truth=ground_truth,
-                        system_type="FoxAI-GraphRAG",
-                        dataset_setting="FEVER-Controlled",
-                    )
-
-                    # 1. Create a Claim so it shows up in the UI sidebar
-                    Claim(
-                        text=claim_text,
-                        title="[NEI] " + claim_text[:30] + "...",
-                        summary="Short-circuited due to lack of FEVER evidence.",
-                        claim_id=claim_id,
-                    )
-
-                    predicted_label = "NOT ENOUGH INFO"
-                    query_result = "VERDICT: NOT ENOUGH INFO\nREASONING: No evidence provided by the FEVER dataset."
-
-                    # 2. Create the Answer so the UI has text to display
-                    Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
-
-                    tracker.finalize(
-                        predicted_label,
-                        {
-                            "claim_text": claim_text,
-                            "raw_sources": [],
-                            "query_result": query_result,
-                        },
-                    )
-
-                    successful_runs += 1
-                    continue  # Jump immediately to the next claim in the loop!
-
-                # --- NORMAL PIPELINE (Only runs if we have actual evidence) ---
+            # --- THE SHORT-CIRCUIT ---
+            # If there is no evidence, skip the heavy AI processing entirely!
+            if not perfect_evidence:
+                logger.info(f"No evidence available. Short-circuiting to {nei_label}.")
                 claim_id = str(uuid.uuid4())
                 tracker = ExperimentTracker(
                     claim_id=claim_id,
                     ground_truth=ground_truth,
                     system_type="FoxAI-GraphRAG",
-                    dataset_setting="FEVER-Controlled",
+                    dataset_setting=tracker_env_name,  # Dynamic Tracker Name
                 )
 
-                # --- 1. Preprocessing ---
-                def run_prep():
-                    return preprocessor.run_claim_pipe(claim_text)
-
-                claim_title, claim_summary = tracker.run_stage("preprocessor", run_prep)
-                claim = Claim(claim_text, claim_title, claim_summary, claim_id=claim_id)
-
-                # --- 2. Retrieval (BYPASSED SCRAPER) ---
-                def run_retrieval():
-                    mock_srcs = [
-                        {
-                            "title": "FEVER Perfect Evidence",
-                            "url": "https://en.wikipedia.org",
-                            "site": "Wikipedia",
-                            "body": perfect_evidence,
-                        }
-                    ]
-                    prep_srcs, prep_tokens = preprocessor.run_sources_pipe(mock_srcs)
-                    return (prep_srcs, mock_srcs), prep_tokens
-
-                preprocessed_sources, sources = tracker.run_stage(
-                    "retrieval", run_retrieval
-                )
-                claim.add_sources(preprocessed_sources)
-
-                # =========================================================
-                # 🛡️ SAFETY CHECK: Did Groq find any entities?
-                # =========================================================
-                has_entities = False
-                for src in preprocessed_sources:
-                    # Some strings might be literally "[]" or an actual empty list
-                    if (
-                        src.get("entities")
-                        and src.get("entities") != "[]"
-                        and len(src.get("entities")) > 0
-                    ):
-                        has_entities = True
-                        break
-
-                if not has_entities:
-                    logger.info(
-                        "NER extracted 0 entities. Short-circuiting to prevent Neo4j/Ollama crash."
-                    )
-                    predicted_label = "Error: No Entities"
-                    query_result = "VERDICT: NOT ENOUGH INFO\nREASONING: Evidence was provided, but the NER model failed to extract any entities to build a graph."
-
-                    Answer(claim_id=claim.id, answer=query_result, graphs_folder=None)
-                    tracker.finalize(
-                        predicted_label,
-                        {
-                            "claim_text": claim_text,
-                            "raw_sources": sources,
-                            "query_result": query_result,
-                        },
-                    )
-                    successful_runs += 1
-                    continue  # Jump to the next claim!
-                # =========================================================
-
-                # --- 3. GraphRAG ---
-                def run_rag():
-                    q_res, g_folder, t_usage = rag.run_pipeline(
-                        preprocessed_sources, claim.text, claim.id
-                    )
-                    return (q_res, g_folder), t_usage
-
-                query_result, graphs_folder = tracker.run_stage("generation", run_rag)
-
-                # --- 4. Verdict Parsing ---
-                try:
-                    if query_result and "VERDICT:" in query_result:
-                        predicted_label = (
-                            query_result.split("REASONING:")[0]
-                            .replace("VERDICT:", "")
-                            .strip()
-                        )
-                    else:
-                        predicted_label = "Error: Unstructured Response"
-                except Exception:
-                    predicted_label = "Parsing Error"
-
-                logger.info(f"FoxAI Verdict: {predicted_label}")
-
-                # --- Create Answer Entity for the UI ---
-                Answer(
-                    claim_id=claim.id, answer=query_result, graphs_folder=graphs_folder
+                # 1. Create a Claim so it shows up in the UI sidebar
+                Claim(
+                    text=claim_text,
+                    title="[NEI] " + claim_text[:30] + "...",
+                    summary="Short-circuited due to lack of evidence.",
+                    claim_id=claim_id,
                 )
 
-                # --- 5. Log Experiment Metrics ---
+                predicted_label = nei_label
+                query_result = f"VERDICT: {nei_label}\nREASONING: No evidence provided by the dataset."
+
+                # 2. Create the Answer so the UI has text to display
+                Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
+
+                tracker.finalize(
+                    predicted_label,
+                    {
+                        "claim_text": claim_text,
+                        "raw_sources": [],
+                        "query_result": query_result,
+                    },
+                )
+
+                successful_runs += 1
+                continue  # Jump immediately to the next claim in the loop!
+
+            # --- NORMAL PIPELINE (Only runs if we have actual evidence) ---
+            claim_id = str(uuid.uuid4())
+            tracker = ExperimentTracker(
+                claim_id=claim_id,
+                ground_truth=ground_truth,
+                system_type="FoxAI-GraphRAG",
+                dataset_setting=tracker_env_name,  # Dynamic Tracker Name
+            )
+
+            # --- 1. Preprocessing ---
+            def run_prep():
+                return preprocessor.run_claim_pipe(claim_text)
+
+            claim_title, claim_summary = tracker.run_stage("preprocessor", run_prep)
+            claim = Claim(claim_text, claim_title, claim_summary, claim_id=claim_id)
+
+            # --- 2. Retrieval (BYPASSED SCRAPER) ---
+            def run_retrieval():
+                mock_srcs = [
+                    {
+                        "title": f"{active_dataset} Perfect Evidence",
+                        "url": "Local_DB",
+                        "site": "Dataset",
+                        "body": perfect_evidence,
+                    }
+                ]
+                prep_srcs, prep_tokens = preprocessor.run_sources_pipe(mock_srcs)
+                return (prep_srcs, mock_srcs), prep_tokens
+
+            preprocessed_sources, sources = tracker.run_stage(
+                "retrieval", run_retrieval
+            )
+            claim.add_sources(preprocessed_sources)
+
+            # =========================================================
+            # 🛡️ SAFETY CHECK: Did Groq find any entities?
+            # =========================================================
+            has_entities = False
+            for src in preprocessed_sources:
+                if (
+                    src.get("entities")
+                    and src.get("entities") != "[]"
+                    and len(src.get("entities")) > 0
+                ):
+                    has_entities = True
+                    break
+
+            if not has_entities:
+                logger.info(
+                    "NER extracted 0 entities. Short-circuiting to prevent Neo4j/Ollama crash."
+                )
+                predicted_label = "Error: No Entities"
+                query_result = f"VERDICT: {nei_label}\nREASONING: Evidence was provided, but the NER model failed to extract any entities to build a graph."
+
+                Answer(claim_id=claim.id, answer=query_result, graphs_folder=None)
                 tracker.finalize(
                     predicted_label,
                     {
@@ -239,18 +221,57 @@ def run_controlled_experiment():
                         "query_result": query_result,
                     },
                 )
-
                 successful_runs += 1
+                continue  # Jump to the next claim!
+            # =========================================================
 
-                logger.info("Sleeping for 5 seconds before next claim...")
-                time.sleep(
-                    5
-                )  # Sleep to simulate time taken and avoid overwhelming resources
+            # --- 3. GraphRAG ---
+            def run_rag():
+                q_res, g_folder, t_usage = rag.run_pipeline(
+                    preprocessed_sources, claim.text, claim.id, prompt_instructions
+                )
+                return (q_res, g_folder), t_usage
 
-    except FileNotFoundError:
-        logger.error(f"Could not find dataset at {DATASET_PATH}.")
+            query_result, graphs_folder = tracker.run_stage("generation", run_rag)
+
+            # --- 4. Verdict Parsing ---
+            try:
+                if query_result and "VERDICT:" in query_result:
+                    predicted_label = (
+                        query_result.split("REASONING:")[0]
+                        .replace("VERDICT:", "")
+                        .strip()
+                    )
+                else:
+                    predicted_label = "Error: Unstructured Response"
+            except Exception:
+                predicted_label = "Parsing Error"
+
+            logger.info(f"FoxAI Verdict: {predicted_label}")
+
+            # --- Create Answer Entity for the UI ---
+            Answer(claim_id=claim.id, answer=query_result, graphs_folder=graphs_folder)
+
+            # --- 5. Log Experiment Metrics ---
+            tracker.finalize(
+                predicted_label,
+                {
+                    "claim_text": claim_text,
+                    "raw_sources": sources,
+                    "query_result": query_result,
+                },
+            )
+
+            successful_runs += 1
+
+            logger.info("Sleeping for 5 seconds before next claim...")
+            time.sleep(5)
+
+    except FileNotFoundError as e:
+        logger.error(f"Could not find dataset files. {e}")
     finally:
-        wiki_conn.close()
+        if wiki_conn:
+            wiki_conn.close()
 
     logger.info("=" * 40)
     logger.info("CONTROLLED EXPERIMENT COMPLETE!")
