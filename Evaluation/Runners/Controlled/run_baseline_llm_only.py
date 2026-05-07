@@ -20,19 +20,24 @@ MAX_CLAIMS_TO_TEST = 5
 # Initialize Groq Client
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
+USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
+
 client = Groq(api_key=GROQ_API_KEY)
 logger = Logger("LLM-Only-Baseline").get_logger()
 
 
-def get_llm_only_verdict(claim_text, prompt_instructions, nei_label):
-    """Asks the LLM to verify the claim using ONLY its internal weights."""
+def get_llm_only_verdict(
+    claim_text, prompt_instructions, nei_label, metadata_context=""
+):
+    """Asks the LLM to verify the claim using ONLY its internal weights, providing context if available."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY your internal knowledge. 
-    Do not assume any external context. If you do not know the answer with absolute certainty, answer exactly: {nei_label}.
+    Do not assume any external context other than what is provided. If you do not know the answer with absolute certainty, answer exactly: {nei_label}.
 
     {prompt_instructions}
 
-    Claim: {claim_text}
+    CLAIM: {claim_text}
+    {metadata_context}
     """
     response = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
@@ -66,6 +71,7 @@ def run_llm_baseline():
 
     logger.info(f"Starting Baseline 1 (LLM-Only) with {MAX_CLAIMS_TO_TEST} claims...")
     logger.info(f"Active Dataset: {active_dataset}")
+    logger.info(f"Using Metadata Context: {USE_METADATA}")
     logger.info(f"Using Model: {GROQ_MODEL}")
 
     successful_runs = 0
@@ -77,6 +83,25 @@ def run_llm_baseline():
         for line_number, data in enumerate(claims_data):
             claim_text = data.get("claim", "")
             ground_truth = data.get("label", "")
+
+            # --- OPTIONAL METADATA INJECTION ---
+            # Safely extract context for the LLM without modifying the core claim
+            metadata_context = ""
+            if active_dataset == "AVERITEC" and USE_METADATA:
+                speaker = data.get("speaker", "")
+                date = data.get("claim_date", "")
+
+                meta_parts = []
+                if speaker:
+                    meta_parts.append(f"- Speaker: {speaker}")
+                if date:
+                    meta_parts.append(f"- Date: {date}")
+
+                if meta_parts:
+                    metadata_context = (
+                        "\nCONTEXT PROVIDED FOR THIS CLAIM:\n" + "\n".join(meta_parts)
+                    )
+            # -----------------------------------
 
             logger.info(f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
             logger.info(f"Ground Truth: {ground_truth}")
@@ -96,10 +121,10 @@ def run_llm_baseline():
                 claim_id=claim_id,
             )
 
-            # --- UPDATED: Pass nei_label to the LLM Call ---
+            # --- Pass the safe metadata context to the LLM Call ---
             def run_llm():
                 res_text, toks = get_llm_only_verdict(
-                    claim_text, prompt_instructions, nei_label
+                    claim_text, prompt_instructions, nei_label, metadata_context
                 )
                 return (res_text, None), {"total": toks, "calls": 1}
 
