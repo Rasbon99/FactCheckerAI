@@ -11,7 +11,7 @@ class DatasetManager:
         dotenv.load_dotenv(env_file, override=True)
 
         # Load controls
-        self.active_dataset = os.getenv("ACTIVE_DATASET", "FEVER").upper()
+        self.active_dataset = os.getenv("EXPERIMENT_ACTIVE_DATASET", "FEVER").upper()
         self.use_metadata = (
             os.getenv("AVERITEC_USE_METADATA", "false").lower() == "true"
         )
@@ -96,5 +96,12 @@ class DatasetManager:
             - Conflicting Evidence/Cherry-picking: The claim is technically true but leaves out crucial context, is misleading, or the evidence is heavily mixed."""
 
     def get_tracker_dataset_name(self, environment="OpenWeb"):
-        """Returns the correct dataset string for the SQLite Experiment Tracker"""
+        """
+        Returns the correct dataset string for the Experiment Tracker.
+        If an EXPERIMENT_NAME is set in the .env file (e.g., for Robustness tests), it overrides the default.
+        """
+        custom_name = os.getenv("EXPERIMENT_NAME")
+        if custom_name:
+            return custom_name
+
         return f"{self.active_dataset}-{environment}"
