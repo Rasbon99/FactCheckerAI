@@ -14,11 +14,16 @@ backend_app = FastAPI()
 db = Database()
 
 
-# Updated model to include optional ground_truth for future use
+# --- UPGRADED MODEL ---
+# Now accepts the enriched metadata and prompt instructions from the Open-Web Client
 class InputText(BaseModel):
     text: str
     ground_truth: Optional[str] = "Not Provided"
-    dataset_setting: Optional[str] = "User-Query"
+    dataset_setting: Optional[str] = "FoxAI-OpenWeb"
+    search_query: Optional[str] = None
+    active_dataset: Optional[str] = "FEVER"
+    prompt_instructions: Optional[str] = None
+    nei_label: Optional[str] = "NOT ENOUGH INFO"
 
 
 @backend_app.post("/run_pipeline")
@@ -33,7 +38,7 @@ def process_text(input_text: InputText):
         claim_id=claim_id,
         ground_truth=input_text.ground_truth or "Not Provided",
         system_type="FoxAI-GraphRAG",
-        dataset_setting=input_text.dataset_setting or "User-Query",
+        dataset_setting=input_text.dataset_setting or "FoxAI-OpenWeb",
     )
 
     preprocessor = Preprocessing_Pipeline()
@@ -48,9 +53,18 @@ def process_text(input_text: InputText):
 
     claim = Claim(text, claim_title, claim_summary, claim_id=claim_id)
 
+    # Determine the best query for DuckDuckGo
+    # (Uses enriched search_query from eval scripts, or falls back to AI-generated claim_title for normal UI usage)
+    target_search_query = (
+        input_text.search_query if input_text.search_query else claim_title
+    )
+
     # --- 2. Retrieval (Scraper + Preprocessor) ---
     def run_retrieval():
-        srcs, scraper_metrics = scraper.search_and_extract(claim_title, num_results=10)
+        # Pass the TARGET search query to DuckDuckGo!
+        srcs, scraper_metrics = scraper.search_and_extract(
+            target_search_query, num_results=10
+        )
 
         prep_srcs, prep_metrics = preprocessor.run_sources_pipe(srcs)
 
@@ -68,8 +82,13 @@ def process_text(input_text: InputText):
 
     # --- 3. GraphRAG ---
     def run_rag():
+        # Pass the dynamic prompt instructions and NEI label down to the RAG pipeline
         q_res, g_folder, t_usage = rag.run_pipeline(
-            preprocessed_sources, claim.text, claim.id
+            preprocessed_sources,
+            claim.text,
+            claim.id,
+            prompt_instructions=input_text.prompt_instructions,
+            nei_label=input_text.nei_label or "NOT ENOUGH INFO",
         )
         # We group the first two outputs so the tracker sees exactly (result, tokens)
         return (q_res, g_folder), t_usage

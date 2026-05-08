@@ -125,7 +125,15 @@ class RAG_Pipeline:
             self.logger.error(f"Error during similarity query execution: {e}")
             return None, {"total": 0, "calls": 0}
 
-    def run_pipeline(self, data, claim, claim_id, prompt_instructions=None):
+    # --- Added nei_label parameter to match the backend payload ---
+    def run_pipeline(
+        self,
+        data,
+        claim,
+        claim_id,
+        prompt_instructions=None,
+        nei_label="NOT ENOUGH INFO",
+    ):
         """
         Executes the entire RAG pipeline: data loading, graph generation, and fact-checking.
 
@@ -134,6 +142,7 @@ class RAG_Pipeline:
             claim (str): The specific claim text to be verified.
             claim_id (str): The unique ID of the claim, used to organize graph assets.
             prompt_instructions (str, optional): Custom instructions for the LLM prompt.
+            nei_label (str, optional): The specific string to output if evidence is lacking.
 
         Returns:
             tuple: A tuple containing:
@@ -159,31 +168,26 @@ class RAG_Pipeline:
             # Step 2: Generate and save graphs
             self.generate_and_save_graphs(claim_graphs_folder)
 
+            # Fallback specifically tailored to FEVER if no dynamic instructions are provided
             fallback_instructions = """
-            Your response MUST follow this exact structure:
-            VERDICT: [Choose ONLY one: SUPPORTS, REFUTES, or NOT ENOUGH INFO]
-            REASONING: [Your detailed explanation and citations here]
-
-            Follow these logical rules for the VERDICT:
-            - If the articles confirm the claim, use 'SUPPORTS'.
-            - If the articles completely contradict the claim, use 'REFUTES'.
-            - If there is confusion or the articles do not mention the specific details of the claim, use 'NOT ENOUGH INFO'.
+            You must format your response EXACTLY like this:
+            VERDICT: [SUPPORTS or REFUTES or NOT ENOUGH INFO]
+            REASONING: [Your detailed explanation citing the provided evidence]
             """
 
             active_instructions = (
                 prompt_instructions if prompt_instructions else fallback_instructions
             )
 
-            question = f"""
-                You are a strict fact-checking assistant. 
-            
-                CLAIM TO EVALUATE: "{claim}"
+            # --- THE UNIVERSAL PROMPT ---
+            # Perfectly synchronized with all of other baseline scripts!
+            question = f"""You are a strict fact-checking AI.
+            Verify the following claim using ONLY the provided evidence. 
+            If the evidence does not contain enough information to make a definitive decision, answer exactly: {nei_label}.
 
-                Based ONLY on the information provided in the retrieved articles, determine if the claim above is confirmed or refuted.
+            {active_instructions}
 
-                {active_instructions}
-
-                Make sure to cite the titles of the articles that support your conclusions. Do not include any external knowledge.
+            CLAIM: {claim}
             """
 
             # Step 3: Execute the similarity query and catch token data
