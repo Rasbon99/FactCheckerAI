@@ -19,6 +19,9 @@ dotenv.load_dotenv("key.env", override=True)
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
 
+# --- CONFIGURATION FLAG ---
+USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
+
 # Initialize Groq Client
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
@@ -71,6 +74,7 @@ def run_bm25_baseline():
         f"Starting Baseline 2 (BM25 Keyword Search) with {MAX_CLAIMS_TO_TEST} claims..."
     )
     logger.info(f"Active Dataset: {active_dataset}")
+    logger.info(f"Using Metadata Super Query: {USE_METADATA}")
 
     # --- Load Databases based on Environment ---
     wiki_conn = None
@@ -95,7 +99,14 @@ def run_bm25_baseline():
             claim_text = data.get("claim", "")
             ground_truth = data.get("label", "")
 
+            # --- CONDITIONAL METADATA QUERY ---
+            search_query = claim_text
+            if active_dataset == "AVERITEC" and USE_METADATA:
+                search_query = dataset_manager.build_search_query(data)
+
             logger.info(f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
+            if search_query != claim_text:
+                logger.info(f"Enriched Search Query: {search_query}")
 
             claim_id = str(uuid.uuid4())
             tracker = ExperimentTracker(
@@ -121,7 +132,7 @@ def run_bm25_baseline():
                     if wiki_cursor is None:
                         logger.error("wiki_cursor is None: cannot query FEVER database")
                     else:
-                        clean_claim = clean_query_for_fts(claim_text)
+                        clean_claim = clean_query_for_fts(search_query)
                         wiki_cursor.execute(
                             """
                             SELECT page_id, lines FROM wiki_fts 
@@ -154,7 +165,9 @@ def run_bm25_baseline():
                     if sentences:
                         tokenized_corpus = [s.lower().split() for s in sentences]
                         bm25 = BM25Okapi(tokenized_corpus)
-                        tokenized_query = claim_text.lower().split()
+
+                        # Use the enriched query for retrieval
+                        tokenized_query = search_query.lower().split()
 
                         # Grab exactly Top 2 to match FEVER methodology
                         top_sentences = bm25.get_top_n(tokenized_query, sentences, n=2)
@@ -188,6 +201,7 @@ def run_bm25_baseline():
 
             # --- THE GENERATION STEP ---
             def run_llm():
+                # Strictly pass the original claim_text to the LLM Verifier
                 res_text, toks = get_bm25_verdict(
                     claim_text, combined_evidence, prompt_instructions, nei_label
                 )
