@@ -125,6 +125,15 @@ def run_controlled_experiment():
                     claim_id_internal
                 )
 
+                # INJECT NOISE (If running the Noisy robustness test)
+                if "noisy_ids" in data and all_sentences is not None:
+                    for n_id in data["noisy_ids"]:
+                        noisy_sentences = averitec_retriever.get_evidence_for_claim(
+                            n_id
+                        )
+                        if noisy_sentences:
+                            all_sentences.extend(noisy_sentences)
+
                 if all_sentences:
                     # --- THE FOXAI LIFESAVER + CONDITIONAL METADATA FILTER ---
                     from rank_bm25 import BM25Okapi
