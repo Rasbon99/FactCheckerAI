@@ -9,25 +9,26 @@ from Evaluation.Utils.dataset_manager import DatasetManager
 # Load environment variables
 dotenv.load_dotenv("key.env", override=True)
 
-ROBUSTNESS_DIR = "Datasets/RobustnessTests"
+BASE_ROBUSTNESS_DIR = "Datasets/RobustnessTests"
 logger = Logger("generate_robustness_datasets").get_logger()
-
-# Ensure the new directory exists
-os.makedirs(ROBUSTNESS_DIR, exist_ok=True)
 
 # Set a random seed so your thesis experiments are 100% reproducible!
 random.seed(42)
 
 
 def save_dataset(dataset, filename_base, active_dataset):
-    """Saves as JSONL for FEVER, or JSON Array for AVeriTeC."""
+    """Saves as JSONL for FEVER, or JSON Array for AVeriTeC, in specific subfolders."""
+    # Ensure the dataset-specific subfolder exists
+    target_dir = os.path.join(BASE_ROBUSTNESS_DIR, active_dataset)
+    os.makedirs(target_dir, exist_ok=True)
+
     if active_dataset == "FEVER":
-        filepath = os.path.join(ROBUSTNESS_DIR, f"{filename_base}.jsonl")
+        filepath = os.path.join(target_dir, f"{filename_base}.jsonl")
         with open(filepath, "w", encoding="utf-8") as f:
             for row in dataset:
                 f.write(json.dumps(row) + "\n")
     else:
-        filepath = os.path.join(ROBUSTNESS_DIR, f"{filename_base}.json")
+        filepath = os.path.join(target_dir, f"{filename_base}.json")
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(dataset, f, indent=4)
 
@@ -148,6 +149,8 @@ if __name__ == "__main__":
         generate_noisy_dataset(claims, active)
         generate_conflicting_dataset(claims, active)
 
-        logger.info(f"All 3 robustness datasets are ready for {active} evaluation!")
+        logger.info(
+            f"All 3 robustness datasets are ready and safely stored in Datasets/RobustnessTests/{active}/!"
+        )
     except Exception as e:
         logger.error(f"Failed to generate datasets: {e}")
