@@ -63,22 +63,18 @@ class DatasetManager:
         location_ISO_code = data.get("location_ISO_code", "")
         reporting_source = data.get("reporting_source", "")
 
-        meta_parts = []
-        if speaker:
-            meta_parts.append(speaker)
-        if location_ISO_code:
-            meta_parts.append(location_ISO_code)
-
-        speaker_loc_str = " ".join(meta_parts)
-
+        # Add everything to a single list
         final_query_parts = [claim]
-        if speaker_loc_str:
-            final_query_parts.append(speaker_loc_str)
+
+        if speaker:
+            final_query_parts.append(speaker)
+        if location_ISO_code:
+            final_query_parts.append(location_ISO_code)
         if reporting_source:
             final_query_parts.append(f"Source: {reporting_source}")
 
+        # Join them all perfectly with semicolons
         return " ; ".join(final_query_parts)
-        # Example Output: "The sky is green ; John Doe London ; Source: BBC News"
 
     def get_prompt_instructions(self):
         """Returns the exact prompt rules based on the active dataset."""
