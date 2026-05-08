@@ -53,21 +53,32 @@ class DatasetManager:
 
         return data_list
 
-    def build_search_query(self, claim_data):
-        """Appends metadata to the search query if AVeriTeC and metadata are enabled."""
-        base_claim = claim_data.get("claim", "")
+    def build_search_query(self, data):
+        """Builds an enriched query using metadata for AVeriTeC."""
+        if self.active_dataset != "AVERITEC":
+            return data.get("claim", "")
 
-        if self.active_dataset == "AVERITEC" and self.use_metadata:
-            speaker = claim_data.get("speaker", "")
-            location = claim_data.get("location_ISO_code", "")
-            date = claim_data.get("claim_date", "")
+        claim = data.get("claim", "")
+        speaker = data.get("speaker", "")
+        location = data.get("location", "")
+        reporting_source = data.get("reporting_source", "")
 
-            # Combine the valid metadata fields
-            extras = " ".join([val for val in [speaker, location, date] if val])
-            if extras:
-                return f"{base_claim} {extras}"
+        meta_parts = []
+        if speaker:
+            meta_parts.append(speaker)
+        if location:
+            meta_parts.append(location)
 
-        return base_claim
+        speaker_loc_str = " ".join(meta_parts)
+
+        final_query_parts = [claim]
+        if speaker_loc_str:
+            final_query_parts.append(speaker_loc_str)
+        if reporting_source:
+            final_query_parts.append(f"Source: {reporting_source}")
+
+        return " ; ".join(final_query_parts)
+        # Example Output: "The sky is green ; John Doe London ; Source: BBC News"
 
     def get_prompt_instructions(self):
         """Returns the exact prompt rules based on the active dataset."""
