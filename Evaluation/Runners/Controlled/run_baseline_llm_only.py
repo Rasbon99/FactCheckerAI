@@ -90,12 +90,18 @@ def run_llm_baseline():
             if active_dataset == "AVERITEC" and USE_METADATA:
                 speaker = data.get("speaker", "")
                 date = data.get("claim_date", "")
+                location_ISO_code = data.get("location_ISO_code", "")
+                reporting_source = data.get("reporting_source", "")
 
                 meta_parts = []
                 if speaker:
                     meta_parts.append(f"- Speaker: {speaker}")
+                if location_ISO_code:
+                    meta_parts.append(f"- Location: {location_ISO_code}")
                 if date:
                     meta_parts.append(f"- Date: {date}")
+                if reporting_source:
+                    meta_parts.append(f"- Source: {reporting_source}")
 
                 if meta_parts:
                     metadata_context = (

@@ -60,14 +60,14 @@ class DatasetManager:
 
         claim = data.get("claim", "")
         speaker = data.get("speaker", "")
-        location = data.get("location", "")
+        location_ISO_code = data.get("location_ISO_code", "")
         reporting_source = data.get("reporting_source", "")
 
         meta_parts = []
         if speaker:
             meta_parts.append(speaker)
-        if location:
-            meta_parts.append(location)
+        if location_ISO_code:
+            meta_parts.append(location_ISO_code)
 
         speaker_loc_str = " ".join(meta_parts)
 
