@@ -10,4 +10,6 @@ __pycache__/
 .vscode/
 .vs/
 .venv/
-/Datasets
+/Datasets/FEVER/
+/Datasets/AVERITEC/
+/Datasets/RobustnessTests/
