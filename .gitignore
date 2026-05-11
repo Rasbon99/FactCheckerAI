@@ -5,7 +5,7 @@
 *.pyc
 *.csv
 __pycache__/
-/data
+/Outputs
 /ollama_data
 .vscode/
 .vs/
