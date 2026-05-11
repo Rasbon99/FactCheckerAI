@@ -28,16 +28,22 @@ class Scraper:
         self.client = Groq()
 
     def _load_iffy_index(self, filepath):
-        """Loads the 'Domain' column from the Iffy.news CSV into a set."""
+        """Loads domains from the Iffy.news CSV into a set ONLY if they have Low/Very Low factuality."""
         unreliable_domains = set()
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    if "Domain" in row and row["Domain"].strip():
-                        unreliable_domains.add(row["Domain"].strip().lower())
+                    # Extract the factual reporting rating
+                    mbfc_fact = row.get("MBFC Fact", "").strip().upper()
+
+                    # ONLY block sites explicitly rated as Low (L) or Very Low (VL)
+                    if mbfc_fact in ["L", "VL"]:
+                        if "Domain" in row and row["Domain"].strip():
+                            unreliable_domains.add(row["Domain"].strip().lower())
+
             self.logger.info(
-                f"Loaded {len(unreliable_domains)} untrustworthy domains from Iffy Index."
+                f"Loaded {len(unreliable_domains)} strictly untrustworthy (Low/Very Low) domains from Iffy Index."
             )
         except Exception as e:
             self.logger.warning(
