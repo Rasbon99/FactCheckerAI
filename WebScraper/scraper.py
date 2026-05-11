@@ -3,36 +3,48 @@ import time
 import urllib.robotparser
 import urllib.parse
 from urllib.parse import urlparse
+import csv
 
 from bs4 import BeautifulSoup
 from ddgs import DDGS
 from groq import Groq
 import requests
 
-from WebScraper.ng_client import NewsGuardClient
-
 from log import Logger
 
 
 class Scraper:
-    def __init__(self):
+    def __init__(self, iffy_csv_path="Datasets/iffy_index.csv"):
         """
-        Initializes the Scraper class, setting up the logger and DuckDuckGo search client.
-
-        Args:
-            None
-
-        Returns:
-            None
+        Initializes the Scraper class, setting up the logger, DuckDuckGo search client,
+        and the Iffy.news domain immune system.
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
 
-        self.news_guard_available = os.getenv("NEWSGUARD_RANKING")
-        if self.news_guard_available == "true":
-            self.ng_client = NewsGuardClient()
+        # Load the Iffy.news domains into a fast-lookup set for instant filtering
+        self.iffy_domains = self._load_iffy_index(iffy_csv_path)
 
         self.model = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
         self.client = Groq()
+
+    def _load_iffy_index(self, filepath):
+        """Loads the 'Domain' column from the Iffy.news CSV into a set."""
+        unreliable_domains = set()
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if "Domain" in row and row["Domain"].strip():
+                        unreliable_domains.add(row["Domain"].strip().lower())
+            self.logger.info(
+                f"Loaded {len(unreliable_domains)} untrustworthy domains from Iffy Index."
+            )
+        except Exception as e:
+            self.logger.warning(
+                f"Could not load Iffy Index CSV at {filepath}. Filter disabled. Error: {e}"
+            )
+
+        return unreliable_domains
 
     def extract_context(self, url):
         """
@@ -375,19 +387,10 @@ class Scraper:
 
         return correlated_sources, token_data
 
-    def filter_sites(self, sites_list, score_threshold=70):
+    def filter_sites(self, sites_list):
         """
-        Filters a list of sites by their rating from the NewsGuard API.
-
-        Args:
-            sites_list (list): List of dictionaries containing site information, each with an 'href' key.
-            score_threshold (int): Minimum score threshold to filter sites (default is 70).
-
-        Returns:
-            list: A filtered list of sites that meet the criteria (rank == 'T' and score >= score_threshold) with append the score.
-
-        Raises:
-            None
+        Filters a list of sites by rejecting domains found in the Iffy.news Index
+        and verifying robots.txt permissions.
         """
         filtered_sites = []
 
@@ -397,44 +400,27 @@ class Scraper:
             if not href:
                 continue  # If there is no href, skip this iteration
 
-            # Parse the URL to get a "clean" URL
+            # Clean the URL to extract just the domain (e.g., 'infowars.com')
             parsed_url = urlparse(href)
-            cleared_url = parsed_url.netloc
+            domain = parsed_url.netloc.replace("www.", "").lower()
 
-            # Check if scraping is allowed for the site
-            if not self.can_scrape(cleared_url):
+            # 1. THE IMMUNE SYSTEM CHECK (Iffy.news)
+            if domain in self.iffy_domains:
                 self.logger.info(
-                    f"Skipping {cleared_url} due to scraping restrictions."
+                    f"🛡️ BLOCKED: Filtered out known unreliable source: {domain}"
                 )
+                continue  # Instantly drop it, do not scrape!
+
+            # 2. ROBOTS.TXT CHECK
+            if not self.can_scrape(parsed_url.scheme + "://" + parsed_url.netloc):
+                self.logger.info(f"Skipping {domain} due to scraping restrictions.")
                 continue
 
-            # Get the site's rating
-            if self.news_guard_available == "true":
-                rating = self.ng_client.get_rating(cleared_url)
+            # If it passes both checks, it is allowed into the pipeline
+            filtered_sites.append(site)
 
-                # If the rating is valid, check the rank and score
-                if rating:
-                    rank = rating.get("rank")
-                    score = rating.get("score")
-
-                    # If the site has rank 'T' and score >= score_threshold, include it
-                    if (
-                        rank == "T"
-                        and isinstance(score, (int, float))
-                        and score >= score_threshold
-                    ):
-                        filtered_sites.append(site)
-                    else:
-                        # Log for sites that are excluded
-                        self.logger.info(
-                            "Excluded site %s with rank: %s, score: %s",
-                            cleared_url,
-                            rank,
-                            score,
-                        )
-            else:
-                filtered_sites.append(site)
-
-        self.logger.info("Filtered websites: %s sites", len(filtered_sites))
+        self.logger.info(
+            f"Filtered websites: {len(filtered_sites)} safe sites remaining."
+        )
 
         return filtered_sites
