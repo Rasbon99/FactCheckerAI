@@ -23,7 +23,7 @@ class Database:
             dotenv.load_dotenv(env_file, override=True)
             self.db_file = os.environ["SQLDB_PATH"]
             self.assets_dir = os.environ["ASSET_PATH"]
-            self.experiments_dir = os.environ["EXPERIMENTS_PATH"]
+            self.experiments_dir = os.environ["EXPERIMENTS_EVIDENCES_PATH"]
         except KeyError as e:
             self.logger.error("Environment variable SQLDB_PATH not found.")
             raise e

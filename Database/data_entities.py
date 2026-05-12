@@ -204,7 +204,7 @@ class Experiment:
         self.logger.info("Saving raw evidence to JSON for experiment ID %s.", self.id)
 
         # Pull the path directly from the environment variable
-        log_dir = os.environ.get("EXPERIMENTS_PATH", "data/experiments")
+        log_dir = os.environ.get("EXPERIMENTS_EVIDENCES_PATH", "data/experiments")
 
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
