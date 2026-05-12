@@ -1,225 +1,453 @@
 ![Logo](assets/Logo.png)
 
+# FOX AI - Fact Online eXamination AI
+
 **Fact Online eXamination AI** (FOX AI) is an advanced application designed to evaluate the reliability of a news item through state-of-the-art deep fact-checking techniques, leveraging highly credible sources.
 
-Beginning with a claim provided by the user, related news articles are retrieved and assessed based on the reliability of their sources. 
+Beginning with a claim provided by the user, related news articles are retrieved and assessed based on the reliability of their sources. The system performs a dual filtering process using domain credibility assessment and LLM-powered correlation testing to ensure only reliable and relevant sources are used for fact-checking.
 
-To ensure high accuracy in source selection, the system performs a dual filtering process:
+---
 
-1. **NewsGuard Ranking Database**: Sources are initially filtered using the NewsGuard Ranking Database to prioritize reliability.
-2. **Correlation Testing**: An additional correlation test is conducted using an LLM to verify the relevance and alignment between the source and the claim to be validated. This step minimizes the risk of selecting irrelevant or misleading articles.
+## Table of Contents
 
-These articles are then processed and linked within a GraphRAG framework. The Large Language Model (LLM) generates a contextual response to the claim.
+- [Features & Objectives](#features--objectives)
+- [Architecture Overview](#architecture-overview)
+- [Quick Start](#quick-start)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Running the Project](#running-the-project)
+- [Usage Examples](#usage-examples)
+- [Evaluation Framework](#evaluation)
+- [Project Structure](#project-overview)
+- [Components](#components)
+- [Contributing](#contributing)
+- [Authors](#authors)
+- [Credits & Acknowledgments](#credits--acknowledgments)
+- [License](#license)
 
-**Objectives**:
+---
 
-- **Truthfulness Assessment**: Determine the truthfulness of the analyzed news item based on the identified sources.
-- **Transparent Explanations**: Provide clear and detailed explanations of the classification process, explicitly citing the sources used in the evaluation.
-- **Knowledge Graphs**: Generate knowledge graphs from the identified sources to enhance interpretability.
-- **Comprehensive Reporting**: Deliver a user-friendly, interactive report accessible via a dashboard.
+## Features & Objectives
 
-### Tools and Technologies
+FOX AI provides comprehensive fact-checking capabilities through:
 
-- **Dashboard**: Built using **Streamlit** to provide an interactive and intuitive user interface.
-- **Large Language Models (LLMs)**: Hosted on **Groq Cloud** and **Ollama** for advanced reasoning and validation tasks.
-- **GraphRAG Framework**: Utilizes **Neo4j** for constructing and analyzing relational knowledge graphs.
+- **Truthfulness Assessment**: Determine the truthfulness of analyzed news items based on identified sources.
+- **Transparent Explanations**: Provide clear, detailed explanations with explicit source citations.
+- **Knowledge Graphs**: Generate visual knowledge graphs from identified sources to enhance interpretability.
+- **Comprehensive Reporting**: Deliver user-friendly, interactive reports via an intuitive dashboard.
+- **Scientific Evaluation**: Benchmark GraphRAG architecture across two datasets in two settings:
+  - **Controlled Environment**: Compared against LLM-Only, BM25 Keyword Search, and Hybrid RAG baselines
+  - **Open-Web Environment**: Compared against Prompt Stuffing, BM25 Keyword Search, and Hybrid RAG baselines
+
+---
+
+## Architecture Overview
+
+FOX AI follows a **microservices architecture** with an **object-oriented, pipeline-based design**:
 
 ![FOX_AI_Architecture](assets/FOX_AI_SYS.png)
+
+### Core Components
+
+- **Backend**: Orchestrates the fact-checking pipeline and manages data persistence
+- **Dashboard**: Streamlit-based user interface for claim submission and result visualization
+- **Controller**: API Gateway managing inter-service communication and request routing
+- **Ollama Server**: Hosts local LLM and embedding models for fast inference
+- **Neo4j Database**: Stores and retrieves knowledge graphs for RAG operations
+
+### Key Technologies
+
+- **Dashboard**: Built using **Streamlit** for intuitive user interfaces
+- **Large Language Models (LLMs)**: **Groq Cloud** (for high-speed inference) and **Ollama** (for local embeddings)
+- **GraphRAG Framework**: **Neo4j** for constructing and analyzing relational knowledge graphs
+- **Web Scraping**: **DuckDuckGo** + **BeautifulSoup** for reliable source retrieval
+- **Credibility Filtering**: **Iffy/MBFC** dataset for domain reliability assessment
+
+---
+
+## Quick Start
+
+### Using Docker (Recommended - 1 minute setup)
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/FactCheckerAI.git
+cd FactCheckerAI
+
+# Run with Docker Compose
+docker compose up --build
+
+# Access the dashboard at http://localhost:8501
+```
+
+**For GPU acceleration** (NVIDIA CUDA required):
+```bash
+docker-compose -f docker-compose-gpu.yml up
+```
+
+### Manual Setup (Local Installation)
+
+For detailed manual setup instructions, see [Installation](#installation) section below.
 
 ---
 
 ## Prerequisites
-To use this project, you need to configure the following tools:
 
-1. **Docker Setup** *(Recommended)*
-   - If using Docker, you can skip the manual installation steps below.
-2. **Python Libraries** *(Manual Installation Only)*
-3. **Neo4j** *(Manual Installation Only)*
-4. **Ollama** *(Manual Installation Only)*
-5. **NewsGuard Ranking Database** *(Recommended)*
-6. **Groq Cloud**
+Before installation, ensure you have:
 
-## Option 1: Run with Docker *(Recommended)*
+**Required:**
+- **Python 3.13.1** (for manual installation)
+- **Docker & Docker Compose** (for Docker setup - recommended)
+- **Groq Cloud API Key** ([Register here](https://console.groq.com/))
+- **Neo4j Desktop** (for local graph database management)
 
-To simplify the setup process, you can run the application using Docker. There are two options depending on your system:
+---
 
-### Standard Docker Setup
-For systems that do not have a GPU compatible with CUDA, use the following command to start the application:
+## Installation
+
+### Option 1: Docker Setup *(Recommended)*
+
+Docker provides the simplest and most reliable setup:
+
+#### Standard Docker Setup (CPU)
 ```bash
+cd FactCheckerAI
 docker compose up --build
 ```
+Access the dashboard at `http://localhost:8501`
 
-### GPU-Accelerated Setup (NVIDIA GPUs Required)
-If your system has an NVIDIA GPU and supports CUDA, you can use the GPU-accelerated version. Ensure that you have the **NVIDIA Container Toolkit** installed before running the following command:
+#### GPU-Accelerated Setup (NVIDIA CUDA)
 
-- **Installation Guide:** [NVIDIA Container Toolkit Installation](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+**Prerequisites:**
+- NVIDIA GPU with CUDA support
+- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+- Docker Desktop on Windows includes the toolkit automatically
 
-- If you are using **Docker Desktop on Windows**, the NVIDIA Container Toolkit is already included.
-
-Once the toolkit is installed, run:
 ```bash
 docker-compose -f docker-compose-gpu.yml build
 docker-compose -f docker-compose-gpu.yml up
 ```
 
-Note: Neo4j authentication is disabled in the Docker version, so you do not need to provide a username and password.
+**Note:** Neo4j authentication is disabled in Docker, so no credentials needed.
 
-## Option 2: Manual Installation
-If you prefer to install and run the application locally without Docker, follow these steps:
+### Option 2: Manual Installation
 
-### Step 1: Set Up the Environment
+For local development or customization, install dependencies manually:
 
-#### 1. Create and activate a new virtual environment:
+#### Step 1: Environment Setup
+
+**Create and activate a Conda virtual environment:**
 ```bash
-conda create --name myenv python=3.13.1
-conda activate myenv
-```
-
-#### 2. Install the required Python libraries:
-```bash
+conda create --name foxai python=3.13.1
+conda activate foxai
 pip install -r requirements.txt
 ```
 
-### Step 2: Neo4j Setup
+#### Step 2: Neo4j Setup
 
-#### Download Neo4j
-Download the Community Edition of Neo4j Graph Database Self-Managed from the following link: [Neo4j Deployment Center](https://neo4j.com/deployment-center/).
+**Download Neo4j:**
+- Visit [Neo4j Deployment Center](https://neo4j.com/deployment-center/) and download the Community Edition
+- Default credentials: `neo4j` / `neo4j`
 
-Note: In the local version, you need to set the username and password for Neo4j. The default admin credentials are neo4j for both the username and password.
+**Install APOC Plugin (Recommended):**
+1. Open your Neo4j instance
+2. Go to **Plugins** section
+3. Install **APOC** from the available plugins list
+4. Restart the instance
 
-#### Configure APOC
-You can configure APOC in two ways:
+**Manual APOC Setup (Alternative):**
+1. Copy `apoc-5.26.1-core.jar` from labs folder to plugins folder
+2. Rename to `apoc.jar`
+3. Edit `neo4j.conf` and add:
+   ```
+   server.directories.plugins=plugins
+   dbms.security.procedures.unrestricted=apoc.*, algo.*
+   dbms.security.procedures.allowlist=apoc.meta.data,apoc.help
+   ```
 
-1. **Option 1 (Recommended): Install APOC from the instance Plugins menu**
-   - Open your Neo4j instance.
-   - Go to the **Plugins** section.
-   - Install **APOC** directly from the available plugins list.
-   - Restart the instance after installation.
+**Set Neo4j Environment Variables:**
 
-2. **Option 2: Manual setup with JAR + config**
-   1. Copy the `apoc-5.26.1-core.jar` file from the `labs` folder and paste it into the `plugins` folder. Rename the copied file to `apoc.jar`.
-   2. Edit the `neo4j.conf` file in the `conf` folder and add the following lines at the end of the file:
-      ```
-      # Configure the plugin directory
-      server.directories.plugins=plugins
-
-      # Enable APOC procedures
-      dbms.security.procedures.unrestricted=apoc.*, algo.*
-
-      dbms.security.procedures.allowlist=apoc.meta.data,apoc.help
-      ```
-
-#### Set Up Environment Variables
-1. Add the path to the `bin` folder of Neo4j to your system's environment variables:
-
-   - **Windows:**
-     1. Open the Start menu and search for "Environment Variables".
-     2. In the "System Properties" window, click on "Environment Variables".
-     3. Under "System Variables", click "New" and add:
-        - Value: `C:\Path\To\Bin`
-   
-   - **Mac:**
-     1. Open the terminal.
-     2. Edit the `~/.zshrc` or `~/.bash_profile` file (depending on your shell) by adding:
-        ```
-        export NEO4J_BIN=/path/to/bin/folder
-        ```
-     3. Save the file and reload the configuration by running:
-        ```bash
-        source ~/.zshrc
-        ```
-
-### Step 3: Ollama Setup
-
-#### Download Ollama
-1. Visit the official website: [Ollama](https://ollama.com/) and download the software for your platform.
-
-#### Installation on Windows
-Windows users need to use the Linux version of Ollama within WSL (Windows Subsystem for Linux). Follow the official instructions to set up WSL if it's not already installed.
-
-#### Download Models from Ollama
-After installation, download the desired models from the official registry using the following commands, we recommend:
+*Mac/Linux:*
 ```bash
-ollama pull phi3.5
+echo 'export NEO4J_BIN=/path/to/neo4j/bin' >> ~/.zshrc
+source ~/.zshrc
 ```
 
-#### Add Environment Variables for Llama
-- **Windows:**
-  1. Follow the instructions in the "Add Environment Variables" section and the installation path of Ollama.
+*Windows:*
+- Open Environment Variables
+- Add new System Variable with Neo4j bin path
 
-## Required Steps
+#### Step 3: Ollama Setup
 
-### Step 1: NewsGuard Ranking Database *(Recommended)*
-If available, request access to the NewsGuard Ranking Database API by contacting their team. Once you receive the credentials, update the configuration.  
+**Download & Install:**
+1. Visit [Ollama.com](https://ollama.com/) and download for your platform
+2. For Windows: Use WSL (Windows Subsystem for Linux)
 
-If the dataset is accessible, set `NEWSGUARD_RANKING = true` in the `key.env` file; otherwise, set `NEWSGUARD_RANKING = false`.
+**Pull Required Models:**
+```bash
+# LLM for reasoning and response generation
+ollama pull phi3.5
 
-### Step 2: Register on Groq Cloud
-1. Register on [Groq Cloud](https://console.groq.com/).
-2. After registration, generate an API key and store it securely.
+# Embedding model for semantic search
+ollama pull nomic-embed-text
+```
 
-### Step 3: Create the `key.env` File
+#### Step 4: Configure API Keys & Environment
+
+**Register on Groq Cloud:**
+1. Go to [Groq Cloud Console](https://console.groq.com/)
+2. Create an account and generate an API key
+3. Store it securely
+
+**Create `key.env` Configuration File:**
 
 In case of launching with Docker, set `DOCKER=true` and uncomment all variables under the **Docker Version** section. Otherwise, set `DOCKER=false` and uncomment the variables under the **Local Version** section.
 
 ```env
-DOCKER=true
+DOCKER=false
 
 # API URL Docker Version
-OLLAMA_SERVER_URL=http://ollama:11434
-NEO4J_SERVER_URL=http://neo4j:7474
-OLLAMA_API_URL=http://ollama:11434
-NEO4J_API_URL=http://neo4j:7474
-BACKEND_API_URL=http://backend:8001
-CONTROLLER_API_URL=http://controller:8003
-NEO4J_URI=bolt://neo4j:7687
+# OLLAMA_SERVER_URL=http://ollama:11434
+# NEO4J_SERVER_URL=http://neo4j:7474
+# OLLAMA_API_URL=http://ollama:11434
+# NEO4J_API_URL=http://neo4j:7474
+# BACKEND_API_URL=http://backend:8001
+# CONTROLLER_API_URL=http://controller:8003
+# NEO4J_URI=bolt://neo4j:7687
 
 # API URL Local Version
-# OLLAMA_SERVER_URL=http://localhost:11434
-# NEO4J_SERVER_URL=http://localhost:7474
-# OLLAMA_API_URL=http://localhost:8000
-# NEO4J_API_URL=http://localhost:8002
-# BACKEND_API_URL=http://localhost:8001
-# CONTROLLER_API_URL=http://localhost:8003
-# NEO4J_URI=bolt://localhost:7687
+OLLAMA_SERVER_URL=http://localhost:11434
+NEO4J_SERVER_URL=http://localhost:7474
+OLLAMA_API_URL=http://localhost:8000
+NEO4J_API_URL=http://localhost:8002
+BACKEND_API_URL=http://localhost:8001
+CONTROLLER_API_URL=http://localhost:8003
+NEO4J_URI=bolt://localhost:7687
 
 # DASHBOARD CONSTANTS
 LOG_FILE=app.log
 AI_IMAGE_UI=assets/FOX_AI.png
 
-# NEWSGUARD VARIABLES
-CLIENT_API_ID =
-NG_API_KEY = 
-
 # DATABASE VARIABLES
-SQLDB_PATH=data/fact_checker.db
-GRAPHS_PATH=data/graphs
+SQLDB_PATH=Outputs/fact_checker.db
+GRAPHS_PATH=Outputs/graphs
 ASSET_PATH=assets
 
 # GRAPHRAG VARIABLES
-MODEL_LLM_NEO4J = phi3.5:latest
-NEO4J_USERNAME = ''
-NEO4J_PASSWORD = ''
+MODEL_LLM_NEO4J=phi3.5:latest
+NEO4J_USERNAME=
+NEO4J_PASSWORD=
 
 # GROQ VARIABLES
 GROQ_MODEL_NAME=llama-3.3-70b-versatile
 GROQ_LOW_MODEL_NAME=openai/gpt-oss-20b
 GROQ_API_KEY=
+
+# EXPERIMENT VARIABLES
+EXPERIMENTS_EVIDENCES_PATH=Outputs/experiments_evidences
+# Set this for the robustness tests to differentiate them in the tracker e.g., noisy, conflicting or missing otherwise keep it empty.
+EXPERIMENT_NAME= 
+EXPERIMENT_ACTIVE_DATASET=AVERITEC
+
+# FEVER VARIABLES
+FEVER_DATASET_PATH=Datasets/FEVER/fever_dev_dataset.jsonl
+FEVER_WIKIPEDIA_PAGES_PATH=Datasets/FEVER/wiki-pages/wiki-pages
+FEVER_WIKIPEDIA_DB_PATH=Datasets/FEVER/fever_wiki.db
+
+# AVERITEC VARIABLES
+AVERITEC_DATASET_PATH=Datasets/AVERITEC/averitec_dev_dataset.json
+AVERITEC_KNOWLEDGE_STORE_PATH=Datasets/AVERITEC/dev_knowledge_store
+AVERITEC_USE_METADATA=True
+
 ```
 
-### Step 4: Initialize SQLite Schema
+#### Step 5: Initialize Database
 
-For local/manual execution, before starting the backend (or any stage that reads/writes claims/sources/answers), initialize the database tables once:
-
+**Local Execution:**
 ```bash
 python init_db.py
 ```
 
-If running with Docker, no extra command is needed: the `backend` service runs `python init_db.py` automatically before starting `uvicorn`.
+**Docker Execution:**
+Automatically handled by the backend service on startup.
 
 ---
 
-## Project Overview  
+## Running the Project
+
+FOX AI uses a **microservices architecture** and requires simultaneous execution of multiple services.
+
+### Local Setup (5 Terminals)
+
+**Prerequisites:**
+- Complete all [Installation](#installation) steps
+- Set `DOCKER=false` in `key.env`
+- Ensure all prerequisite services are installed
+
+**Open 5 separate terminals** and run these commands:
+
+| Terminal | Service | Command | Port |
+|----------|---------|---------|------|
+| 1 | Ollama Server | `python start_ollama_server.py` | 8000 |
+| 2 | Neo4j Database | `python start_neo4j_server.py` | 8002 |
+| 3 | Controller (API Gateway) | `python start_controller_server.py` | 8003 |
+| 4 | Backend Service | `python start_backend_server.py` | 8001 |
+| 5 | Dashboard (Streamlit) | `streamlit run Dashboard/dashboard.py` | 8501 |
+
+### Verification
+
+✅ **System Check:**
+1. Navigate to [http://localhost:8501](http://localhost:8501) for the Streamlit Dashboard
+2. Submit a test claim to verify all services are communicating
+3. Check logs in each terminal for errors
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Port Already in Use | Modify port numbers in configuration files or start scripts |
+| Service Connection Errors | Verify all 5 services started successfully; check logs |
+| Missing Models | Run `ollama pull phi3.5 && ollama pull nomic-embed-text` |
+| Database Errors | Run `python init_db.py` and verify Neo4j is running |
+| Import Errors | Ensure all packages installed: `pip install -r requirements.txt` |
+
+---
+
+## Usage Examples
+
+### Basic Claim Verification
+
+1. **Access the Dashboard:** Open `http://localhost:8501`
+2. **Submit a Claim:** Enter a claim (e.g., "The Earth is flat")
+3. **Review Results:** See:
+   - Verdict (SUPPORTS / REFUTES / NOT ENOUGH INFO)
+   - Retrieved sources with reliability scores
+   - Knowledge graph visualization
+   - Detailed reasoning chain
+
+### Programmatic Usage (Backend API)
+
+```bash
+# Submit a claim via HTTP
+curl -X POST http://localhost:8001/run_pipeline \
+  -H "Content-Type: application/json" \
+  -d '{"claim": "Your claim here"}'
+```
+
+### Running Evaluation Benchmarks
+
+See [Evaluation Framework](#evaluation) section for running scientific benchmarks.
+
+---
+
+## Evaluation
+
+The evaluation code lives under the `Evaluation/` folder and is split into four parts:
+
+- `Evaluation/Setup/` for dataset preparation and indexing
+- `Evaluation/Runners/Controlled/` for the controlled-dataset experiments
+- `Evaluation/Runners/OpenWeb/` for the open-web experiments
+- `Evaluation/Analysis/` for post-run metrics
+
+Each runner script defines `MAX_CLAIMS_TO_TEST` near the top of the file. The default value is small so you can do a fast sanity check, but you can increase or decrease it before running the script if you want to benchmark more or fewer claims.
+
+All scripts under `Evaluation/` should be launched with `python -m` from the project root.
+
+### 1. Required Dataset Layout
+
+The evaluation scripts read the dataset locations from `key.env`, so keep the files and folders named exactly as configured there.
+
+#### FEVER
+
+Download the following resources from [FEVER](https://fever.ai/dataset/fever.html):
+
+- Shared Task Development Dataset (Labelled)
+- Pre-processed Wikipedia Pages (June 2017 dump)
+
+Place them in these paths:
+
+- `Datasets/FEVER/fever_dev_dataset.jsonl`
+- `Datasets/FEVER/wiki-pages/wiki-pages/`
+
+Then build the local SQLite database and BM25 index:
+
+```bash
+python -m Evaluation.Setup.build_fever_db
+python -m Evaluation.Setup.setup_bm25_index
+```
+
+#### AVeriTeC
+
+Download the following resources from [AVeriTeC](https://fever.ai/dataset/averitec.html):
+
+- Development Dataset
+- Evidence Collection Provided (Google Search API, Fever 7)
+
+Place them in these paths:
+
+- `Datasets/AVERITEC/averitec_dev_dataset.json`
+- `Datasets/AVERITEC/dev_knowledge_store/`
+
+The development dataset is loaded by array index, so the evidence files inside `dev_knowledge_store` must be named with the matching claim id, for example `0.json`, `1.json`, `2.json`, and so on.
+
+If you extract the dataset into a different folder structure, rename or move the files so the final paths still match the values in `key.env`.
+
+### 2. Controlled Environment Experiments
+
+Set `EXPERIMENT_ACTIVE_DATASET` in `key.env` to either `FEVER` or `AVERITEC` before running the scripts.
+
+The controlled experiments are:
+
+- `Evaluation/Runners/Controlled/run_baseline_llm_only.py`
+- `Evaluation/Runners/Controlled/run_baseline_bm25.py`
+- `Evaluation/Runners/Controlled/run_baseline_hybrid.py`
+- `Evaluation/Runners/Controlled/run_foxai.py`
+
+Run them with module syntax from the project root:
+
+```bash
+python -m Evaluation.Runners.Controlled.run_baseline_llm_only
+python -m Evaluation.Runners.Controlled.run_baseline_bm25
+python -m Evaluation.Runners.Controlled.run_baseline_hybrid
+python -m Evaluation.Runners.Controlled.run_foxai
+```
+
+The controlled FoxAI runner uses the local preprocessing and GraphRAG pipeline directly, so no backend HTTP call is required.
+
+### 3. Open-Web Experiments
+
+The open-web experiments are:
+
+- `Evaluation/Runners/OpenWeb/run_baseline_prompt_stuffing.py`
+- `Evaluation/Runners/OpenWeb/run_baseline_bm25.py`
+- `Evaluation/Runners/OpenWeb/run_baseline_hybrid.py`
+- `Evaluation/Runners/OpenWeb/run_foxai.py`
+
+Run them with module syntax from the project root:
+
+```bash
+python -m Evaluation.Runners.OpenWeb.run_baseline_prompt_stuffing
+python -m Evaluation.Runners.OpenWeb.run_baseline_bm25
+python -m Evaluation.Runners.OpenWeb.run_baseline_hybrid
+python -m Evaluation.Runners.OpenWeb.run_foxai
+```
+
+The open-web FoxAI runner sends requests to the backend endpoint defined in `key.env`, so make sure the supporting services are running first.
+
+### 4. Evaluation Reports
+
+After running the experiments, use the analysis scripts to summarize the results stored in the SQLite database:
+
+```bash
+python -m Evaluation.Analysis.calculate_effectiveness
+python -m Evaluation.Analysis.calculate_efficiency
+```
+
+`calculate_effectiveness.py` prints the accuracy and per-label classification report, while `calculate_efficiency.py` prints the average latency, token usage, and call counts per pipeline stage.
+
+## Project Structure
+
+### Overview  
 
 The FOX AI system is designed to deliver robust fact-checking capabilities by leveraging cutting-edge AI and modular architectural principles. Following an **object-oriented programming (OOP)** paradigm, each component adheres to the **Single Responsibility Principle (SRP)**, ensuring high modularity and maintainability. The system employs a **pipeline architecture** to organize the workflow into discrete stages, improving scalability, parallelization, and error handling.  
 
@@ -241,7 +469,7 @@ To enhance functionality, the system integrates dedicated external servers:
 - **Ollama Server**: Executes the Large Language Model (LLM) for analyzing news and generating responses based on retrieved sources.  
 - **Neo4j Console**: Handles the graph database, modeling relationships between sources to verify credibility.  
 
-The system leverages APIs such as **Groq Cloud** and local lightweight models for efficient computation, balancing performance with resource requirements.  
+The system leverages **Groq Cloud APIs** and local lightweight models for efficient computation, balancing performance with resource requirements.  
 
 ---
 
@@ -276,9 +504,9 @@ This pipeline ensures all inputs and sources are accurately structured, creating
 
 The **Web Scraper** is responsible for retrieving and processing online content to verify claims. It is composed of two main modules:  
 
-1. **NewsGuard Client**  
-   - Handles authentication and interacts with the NewsGuard API to obtain credibility ratings for websites.  
-   - Acquires and uses an access token to query site reliability data, filtering out less trustworthy sources to ensure accuracy in claim verification.  
+1. **Local Iffy Dataset**
+   - Uses a local Iffy/MBFC-style dataset located at Datasets/iffy_index.csv to obtain domain reliability labels.
+   - The dataset is loaded and used to filter out domains marked as "Low" or "Very Low" factual reporting, ensuring less-trustworthy domains are excluded.
 
 2. **Scraper**  
    - Retrieves and extracts relevant web content for claim verification.  
@@ -287,13 +515,13 @@ The **Web Scraper** is responsible for retrieving and processing online content 
 
 #### Web Scraping Pipeline 
 
-The **Scraper** is implemented in the `Scraper` class, which uses a DuckDuckGo client and, optionally, the NewsGuard client to assess the reliability of websites.
+The **Scraper** is implemented in the `Scraper` class, which uses a DuckDuckGo client together with the local Iffy dataset to assess the reliability of websites.
 
 - **Main Method: `search_and_extract`**  
    It performs web searches using the **DDGS** DuckDuckGo library and processes the results through three stages:
 
    1. **Initial Filtering**  
-      - Filters the results with `filter_size`, based on the reliability scores of the sites provided by `ng_client.get_rating` (e.g., rank 'T' and score ≥ 70).  
+      - Filters the results with `filter_sites`, based on domain labels from the local Iffy dataset (e.g., exclude domains labeled 'Low' or 'Very Low').  
       - Checks scraping permissions with `can_scrape`, analyzing the site's `robots.txt` file.
 
    2. **Content Extraction**  
@@ -412,25 +640,7 @@ The dashboard retrieves previous conversations via a GET REST API. Users can fet
 - **Logging**: Logs are used to monitor and debug the application.
 - **Input Validation**: Numeric-only claims are flagged as invalid.
 
---- 
-
-## Testing (branch)
-
-Testing is a critical phase in FOX AI to ensure the system's reliability, accuracy, and robustness in information verification. The system undergoes unit, integration, and system tests, simulating real user interactions, assessing performance, and handling edge cases. A methodical approach identifies potential issues, ensuring the system operates with precision and reliability.
-
-### Unit and Integration Testing
-
-- **Unit Testing** focuses on individual components:
-  - **Graph Manager**: Verifies Neo4J graph handling.
-  - **Query Engine**: Tests similarity search and interaction with the Ollama server.
-
-- **Integration Testing** checks the interaction between **QueryEngine** and **GraphManager**, ensuring seamless data retrieval and graph generation.
-
-### User Interface Testing
-
-UI testing uses decision coverage with a decision tree to test all possible outcomes. **Selenium** automates the process, ensuring correct system responses under various conditions, improving the user experience.
-
---- 
+---
 
 ## Authors
 
@@ -443,10 +653,15 @@ UI testing uses decision coverage with a decision tree to test all possible outc
 
 ---
 
-## Credits
-We would like to express our sincere gratitude to the NewsGuard team for granting access to the NewsGuard News Reliability Rating Database. This database has been a crucial resource in enhancing the quality and reliability of the data in our Fact-Checking project. 
+## Credits and Acknowledgments
 
-For more information about NewsGuard and their work, visit their official website: https://www.newsguardtech.com.
+This project was developed as an academic research initiative. We would like to extend our gratitude to our academic advisors and research peers for their guidance and ongoing support throughout the development cycle.
+
+**Data & Fact-Checking Providers:**
+The Open-Web architecture of FOX AI utilizes the open-source **Iffy.news Index**, which is powered by data rigorously curated by **Media Bias/Fact Check (MBFC)**. We thank them for their dedication to tracking domain credibility and combating web disinformation.
+
+**Core Technologies:**
+This architecture was made possible by incredible open-source and developer tools, including **Neo4j** for GraphRAG modeling, **Ollama** for local embeddings, **Groq Cloud** for rapid LLM inference, and **Streamlit** for the frontend dashboard.
 
 ---
 
