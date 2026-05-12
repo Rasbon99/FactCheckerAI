@@ -71,7 +71,7 @@ FOX AI follows a **microservices architecture** with an **object-oriented, pipel
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/FactCheckerAI.git
+git clone https://github.com/Rasbon99/FactCheckerAI
 cd FactCheckerAI
 
 # Run with Docker Compose
