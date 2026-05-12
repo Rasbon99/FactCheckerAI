@@ -23,7 +23,7 @@ dotenv.load_dotenv("key.env", override=True)
 
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
-logger = Logger("Dense-OpenWeb").get_logger()
+logger = Logger("Hybrid-OpenWeb").get_logger()
 
 # --- CONFIGURATION FLAG ---
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
@@ -34,10 +34,10 @@ GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
 client = Groq(api_key=GROQ_API_KEY)
 
 
-def get_dense_rag_verdict(
+def get_hybrid_rag_verdict(
     claim_text, best_evidence_string, prompt_instructions, nei_label
 ):
-    """Asks the LLM to verify the claim using ONLY the top chunks found by Dense Vector Search."""
+    """Asks the LLM to verify the claim using ONLY the top chunks found by Hybrid RAG (BM25 + Dense Embeddings)."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
     If the evidence does not contain enough information to make a definitive decision, answer exactly: {nei_label}.
@@ -62,7 +62,7 @@ def get_dense_rag_verdict(
     return result_text, tokens_used
 
 
-def run_dense_rag_baseline_openweb():
+def run_hybrid_rag_baseline_openweb():
     # Initialize the Smart Dataset Manager
     dataset_manager = DatasetManager()
     active_dataset = dataset_manager.active_dataset
@@ -73,7 +73,7 @@ def run_dense_rag_baseline_openweb():
     )
 
     logger.info(
-        f"Starting Baseline Dense Semantic RAG (Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
+        f"Starting Baseline Hybrid RAG (Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
     )
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Using Metadata Super Query: {USE_METADATA}")
@@ -106,14 +106,14 @@ def run_dense_rag_baseline_openweb():
             tracker = ExperimentTracker(
                 claim_id=claim_id,
                 ground_truth=ground_truth,
-                system_type="Baseline-DenseRAG",
+                system_type="Baseline-Hybrid",
                 dataset_setting=tracker_env_name,
             )
 
             Claim(
                 text=claim_text,
-                title="[Dense] " + claim_text[:30] + "...",
-                summary="Tested by scoring scraped pages using LangChain Dense Embeddings.",
+                title="[Hybrid] " + claim_text[:30] + "...",
+                summary="Tested by scoring scraped pages using LangChain Hybrid RAG (BM25 + Dense Embeddings).",
                 claim_id=claim_id,
             )
 
@@ -171,7 +171,7 @@ def run_dense_rag_baseline_openweb():
             # --- 2. Generation (The LLM Call) ---
             def run_llm():
                 # Strictly pass the unedited claim_text to the generator
-                res_text, toks = get_dense_rag_verdict(
+                res_text, toks = get_hybrid_rag_verdict(
                     claim_text, best_evidence, prompt_instructions, nei_label
                 )
                 return res_text, {"total": toks, "calls": 1}
@@ -194,7 +194,7 @@ def run_dense_rag_baseline_openweb():
             except Exception:
                 predicted_label = "Parsing Error"
 
-            logger.info(f"Dense RAG Verdict: {predicted_label}")
+            logger.info(f"Hybrid RAG Verdict: {predicted_label}")
 
             Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
 
@@ -203,7 +203,7 @@ def run_dense_rag_baseline_openweb():
                 predicted_label,
                 {
                     "claim_text": claim_text,
-                    "dense_evidence": best_evidence,
+                    "hybrid_evidence": best_evidence,
                     "query_result": query_result,
                 },
             )
@@ -216,9 +216,9 @@ def run_dense_rag_baseline_openweb():
         logger.error(f"{e}")
 
     logger.info("=" * 20)
-    logger.info("DENSE RAG (OPEN WEB) COMPLETE!")
+    logger.info("HYBRID RAG (OPEN WEB) COMPLETE!")
     logger.info("=" * 20)
 
 
 if __name__ == "__main__":
-    run_dense_rag_baseline_openweb()
+    run_hybrid_rag_baseline_openweb()

@@ -31,7 +31,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 client = Groq(api_key=GROQ_API_KEY)
-logger = Logger("Dense-Baseline").get_logger()
+logger = Logger("Hybrid-Baseline").get_logger()
 
 
 # ====================================================================
@@ -75,8 +75,8 @@ class SQLiteFTS5Retriever(BaseRetriever):
 # ====================================================================
 
 
-def get_dense_verdict(claim_text, retrieved_evidence, prompt_instructions, nei_label):
-    """Asks the LLM to verify the claim using the Dense retrieved text."""
+def get_hybrid_verdict(claim_text, retrieved_evidence, prompt_instructions, nei_label):
+    """Asks the LLM to verify the claim using the Hybrid RAG retrieved text."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
     If the evidence does not contain enough information to make a definitive decision, answer exactly: {nei_label}.
@@ -100,7 +100,7 @@ def get_dense_verdict(claim_text, retrieved_evidence, prompt_instructions, nei_l
     )
 
 
-def run_dense_baseline():
+def run_hybrid_baseline():
     # Initialize the Smart Dataset Manager
     dataset_manager = DatasetManager()
     active_dataset = dataset_manager.active_dataset
@@ -111,7 +111,7 @@ def run_dense_baseline():
     )
 
     logger.info(
-        f"Starting Baseline 3 (Dense-RAG Re-ranking) with {MAX_CLAIMS_TO_TEST} claims..."
+        f"Starting Baseline 3 (Hybrid-RAG Re-ranking) with {MAX_CLAIMS_TO_TEST} claims..."
     )
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Using Metadata Super Query: {USE_METADATA}")
@@ -123,7 +123,7 @@ def run_dense_baseline():
     embeddings = OllamaEmbeddings(model="nomic-embed-text")
     embeddings_filter = EmbeddingsFilter(embeddings=embeddings, k=2)
 
-    dense_rag_retriever = None
+    hybrid_rag_retriever = None
     averitec_retriever = None
 
     if active_dataset == "FEVER":
@@ -131,7 +131,7 @@ def run_dense_baseline():
             "FEVER_WIKIPEDIA_DB_PATH", "Datasets/FEVER/fever_wiki.db"
         )
         # Snap the SQLite search and the Embedding filter together
-        dense_rag_retriever = ContextualCompressionRetriever(
+        hybrid_rag_retriever = ContextualCompressionRetriever(
             base_compressor=embeddings_filter,
             base_retriever=SQLiteFTS5Retriever(db_path=wiki_db_path),
         )
@@ -162,14 +162,14 @@ def run_dense_baseline():
             tracker = ExperimentTracker(
                 claim_id=claim_id,
                 ground_truth=ground_truth,
-                system_type="Baseline-Dense",
+                system_type="Baseline-Hybrid",
                 dataset_setting=tracker_env_name,
             )
 
             Claim(
                 text=claim_text,
-                title="[Dense] " + claim_text[:30] + "...",
-                summary="Tested with Two-Stage Retrieval (BM25 -> Dense).",
+                title="[Hybrid] " + claim_text[:30] + "...",
+                summary="Tested with Two-Stage Retrieval (BM25 -> Dense Embeddings).",
                 claim_id=claim_id,
             )
 
@@ -178,12 +178,12 @@ def run_dense_baseline():
 
             def run_retrieval():
                 if active_dataset == "FEVER":
-                    if dense_rag_retriever is None:
+                    if hybrid_rag_retriever is None:
                         raise RuntimeError(
                             "FEVER Retriever was not properly initialized."
                         )
                     # Use the search_query (which is identical to claim_text for FEVER)
-                    return dense_rag_retriever.invoke(search_query)
+                    return hybrid_rag_retriever.invoke(search_query)
 
                 elif active_dataset == "AVERITEC":
                     if averitec_retriever is None:
@@ -253,7 +253,7 @@ def run_dense_baseline():
             # --- THE GENERATION STEP ---
             def run_llm():
                 # Strictly pass the original claim_text, not the search_query
-                res_text, toks = get_dense_verdict(
+                res_text, toks = get_hybrid_verdict(
                     claim_text, combined_evidence, prompt_instructions, nei_label
                 )
                 return (res_text, None), {"total": toks, "calls": 1}
@@ -276,7 +276,7 @@ def run_dense_baseline():
             except Exception:
                 predicted_label = "Parsing Error"
 
-            logger.info(f"Dense Verdict: {predicted_label}")
+            logger.info(f"Hybrid Verdict: {predicted_label}")
 
             Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
 
@@ -295,9 +295,9 @@ def run_dense_baseline():
         logger.error(f"{e}")
 
     logger.info("=" * 20)
-    logger.info("DENSE-RAG BASELINE COMPLETE!")
+    logger.info("HYBRID-RAG BASELINE COMPLETE!")
     logger.info("=" * 20)
 
 
 if __name__ == "__main__":
-    run_dense_baseline()
+    run_hybrid_baseline()
