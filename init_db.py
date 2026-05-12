@@ -56,7 +56,7 @@ def initialize_database_schema(db: Database | None = None):
             predicted_label TEXT,   -- What the AI said (Supported/Refuted/Not Enough Information or error message)
             ground_truth TEXT,      -- The actual truth from the dataset for future implementation
 
-            system_type TEXT,       -- Track the model (FoxAI-GraphRAG, LLM-Only, BM25-RAG, Dense-RAG)
+            system_type TEXT,       -- Track the model (e.g. FoxAI-GraphRAG, LLM-Only, BM25-RAG, Hybrid-RAG)
             dataset_setting TEXT,   -- Track the setting (FEVER-Controlled, FEVER-OpenWeb, None for when not using a dataset)
             
             -- Latency Metrics (Seconds)
