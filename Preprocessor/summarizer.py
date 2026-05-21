@@ -6,6 +6,7 @@ from groq import Groq
 
 from log import Logger
 
+
 class Summarizer:
     def __init__(self, env_file="key.env"):
         """
@@ -27,8 +28,12 @@ class Summarizer:
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
         dotenv.load_dotenv(env_file, override=True)
-        self.model = os.getenv("GROQ_MODEL_NAME")
-        self.low_model = os.getenv("GROQ_LOW_MODEL_NAME")
+        self.model = os.getenv(
+            "GROQ_MODEL_NAME", "llama-3.3-70b-versatile"
+        )  # Default to "llama-3.3-70b-versatile" if not set
+        self.low_model = os.getenv(
+            "GROQ_LOW_MODEL_NAME", "openai/gpt-oss-20b"
+        )  # Default to "openai/gpt-oss-20b" if not set
         self.client = Groq()
 
     def claim_title_summarize(self, text, max_tokens=1024, temperature=0.5, stop=None):
@@ -48,31 +53,39 @@ class Summarizer:
             Exception: If there is an error during the summarization process.
         """
         self.logger.info("Starting summarization process.")
-        self.logger.info("Input text: %s...", text[:200]) 
+        self.logger.info("Input text: %s...", text[:200])
 
         try:
             response = self.client.chat.completions.create(
                 messages=[
-                    {"role": "system", "content": """You are an AI designed to rephrase a claim into a concise, specific, and highly searchable query. 
+                    {
+                        "role": "system",
+                        "content": """You are an AI designed to rephrase a claim into a concise, specific, and highly searchable query. 
                                                     Focus on preserving all critical details such as names, dates, locations, or key terms, but avoid unnecessary words. 
-                                                    Provide only the text without any additional formatting only add at the beginning !g"""},
-                    {"role": "user", "content": text}
+                                                    Provide only the text without any additional formatting only add at the beginning !g""",
+                    },
+                    {"role": "user", "content": text},
                 ],
                 model=self.model,
                 temperature=temperature,
                 max_completion_tokens=max_tokens,
-                stop=stop
+                stop=stop,
             )
 
-            summary = response.choices[0].message.content.strip()
+            summary = response.choices[0].message.content
+            if summary is None:
+                return None, 0
+            summary = summary.strip()
+            tokens = response.usage.total_tokens if response.usage else 0
             self.logger.info("Summarization completed successfully.")
             self.logger.info("Generated scraping summary: %s...", summary[:1000])
-            return summary
+
+            return summary, tokens
 
         except Exception as e:
             self.logger.error("Error generating summary: %s", e)
-            return None
-        
+            return None, 0
+
     def generate_summary(self, text, max_tokens=1024, temperature=0.5, stop=None):
         """
         Generates a summary for the given text using the specified model.
@@ -89,19 +102,32 @@ class Summarizer:
         """
         response = self.client.chat.completions.create(
             messages=[
-                {"role": "system", "content": """You are a summarizer, be specific. Don't use lists or bullet points. 
+                {
+                    "role": "system",
+                    "content": """You are a summarizer, be specific. Don't use lists or bullet points. 
                                                 Provide only the string without specifying that it is a summary.
-                                                Translate in English."""},
-                {"role": "user", "content": text}
+                                                Translate in English.""",
+                },
+                {"role": "user", "content": text},
             ],
             model=self.low_model,
             temperature=temperature,
             max_completion_tokens=max_tokens,
-            stop=stop
+            stop=stop,
         )
-        return response.choices[0].message.content.strip()
+        summary = response.choices[0].message.content
+        tokens = response.usage.total_tokens if response.usage else 0
+        return (summary.strip(), tokens) if summary is not None else (None, 0)
 
-    def summarize_texts(self, texts, max_tokens=1024, temperature=0.5, stop=None, token_cut = 20000, sleep_temperature=0.0003):
+    def summarize_texts(
+        self,
+        texts,
+        max_tokens=1024,
+        temperature=0.5,
+        stop=None,
+        token_cut=20000,
+        sleep_temperature=0.0003,
+    ):
         """
         Generates summaries for a list of texts.
 
@@ -117,33 +143,38 @@ class Summarizer:
         Raises:
             Exception: If there is an error during the batch summarization process.
         """
-        self.logger.info("Starting batch summarization process for %d texts.", len(texts))
+        self.logger.info(
+            "Starting batch summarization process for %d texts.", len(texts)
+        )
         summaries = []
+        total_tokens_used = 0
 
         for index, text in enumerate(texts):
             self.logger.info("Summarizing text %d/%d...", index + 1, len(texts))
             self.logger.debug("Text %d content: %s", index + 1, text[:200])
-            
+
             cutted_text = text[:token_cut]
 
             try:
-                summary = self.generate_summary(
-                                text=cutted_text,
-                                max_tokens=max_tokens,
-                                temperature=temperature,
-                                stop=stop
-                            )
+                summary, tokens = self.generate_summary(
+                    text=cutted_text,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    stop=stop,
+                )
                 if summary:
                     summaries.append(summary)
+                    total_tokens_used += tokens
                     self.logger.info("Text %d summarized successfully.", index + 1)
-                    sleep_time = len(cutted_text)*sleep_temperature
+                    sleep_time = len(cutted_text) * sleep_temperature
                     self.logger.info("Sleep of %f seconds", sleep_time)
                     time.sleep(sleep_time)
                 else:
                     self.logger.warning("No summary returned for text %d.", index + 1)
             except Exception as e:
                 self.logger.error("Error summarizing text %d: %s", index + 1, str(e))
-                summaries.append(None) 
+                summaries.append(None)
 
         self.logger.info("Batch summarization process completed.")
+        self.logger.info("Total tokens used: %d", total_tokens_used)
         return summaries

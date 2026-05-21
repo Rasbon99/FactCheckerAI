@@ -7,6 +7,7 @@ from GraphRAG.query_engine import QueryEngine
 
 from log import Logger
 
+
 class RAG_Pipeline:
     def __init__(self, env_file="key.env", config=None):
         """
@@ -15,7 +16,6 @@ class RAG_Pipeline:
         Args:
             env_file (str): Path to the .env file containing configuration settings.
             config (dict, optional): Custom configuration to override default settings (load_data, generate_graphs, query_similarity).
-        
         Raises:
             KeyError: If required environment variables are missing.
         """
@@ -32,16 +32,16 @@ class RAG_Pipeline:
 
         # Customizable configuration
         self.config = {
-            "load_data": True,             # Enables/disables data loading
-            "generate_graphs": True,       # Enables/disables graph generation
-            "query_similarity": True       # Enables/disables similarity queries
+            "load_data": True,
+            "generate_graphs": True,
+            "query_similarity": True,
         }
         if config:
             self.config.update(config)
-        
+
         self.graph_manager.reset_data()
 
-        self.graph_folder = os.getenv("ASSET_PATH")
+        self.graph_folder = os.getenv("GRAPHS_PATH", "data/graphs")
 
         if not os.path.exists(self.graph_folder):
             os.makedirs(self.graph_folder)
@@ -84,59 +84,77 @@ class RAG_Pipeline:
         if not self.config.get("generate_graphs", True):
             self.logger.info("Graph generation disabled by configuration.")
             return
-        
-        path_graph_topics=f"{output_folder}/graph_topics.jpg"
-        path_graph_entities=f"{output_folder}/graph_entities.jpg"
-        path_graph_sites=f"{output_folder}/graph_sites.jpg"
+
+        path_graph_topics = f"{output_folder}/graph_topics.jpg"
+        path_graph_entities = f"{output_folder}/graph_entities.jpg"
+        path_graph_sites = f"{output_folder}/graph_sites.jpg"
 
         self.logger.info("Starting graph generation...")
         try:
-            self.graph_manager.extract_and_save_graph(path_graph_topics, path_graph_entities, path_graph_sites)
+            self.graph_manager.extract_and_save_graph(
+                path_graph_topics, path_graph_entities, path_graph_sites
+            )
         except Exception as e:
             self.logger.error(f"Error during graph generation: {e}")
 
     def query_similarity(self, query):
         """
-        Executes a similarity query using the QueryEngine.
+        Executes a similarity query using the QueryEngine and tracks LLM usage metrics.
 
         Args:
-            query (str): The query string to be executed for similarity-based retrieval.
-        
-        Raises:
-            Exception: If there is an error during the similarity query execution.
-        
+            query (str): The query string containing the claim and verification instructions.
+
         Returns:
-            str: The result of the similarity query, or None if the query is disabled or an error occurs.
+            tuple: A tuple containing:
+                - str: The final verdict (e.g., Supported, Refuted, or Not Enough Info).
+                - dict: A dictionary with 'total' (total tokens) and 'calls' (number of LLM requests).
+
+        Raises:
+            None: Internal exceptions are caught and logged, returning (None, 0-metrics) instead.
         """
         if not self.config.get("query_similarity", True):
             self.logger.info("Similarity query disabled by configuration.")
-            return None
+            return None, {"total": 0, "calls": 0}
 
         self.logger.info("Starting similarity query...")
         try:
-            result = self.query_engine.query_similarity(query)
+            result, token_data = self.query_engine.query_similarity(query)
             self.logger.info("Similarity query completed.")
-            return result
+            return result, token_data
         except Exception as e:
             self.logger.error(f"Error during similarity query execution: {e}")
-            return None
+            return None, {"total": 0, "calls": 0}
 
-    def run_pipeline(self, data, claim, claim_id):
+    # --- Added nei_label parameter to match the backend payload ---
+    def run_pipeline(
+        self,
+        data,
+        claim,
+        claim_id,
+        prompt_instructions=None,
+        nei_label="NOT ENOUGH INFO",
+    ):
         """
-        Executes the entire pipeline: load data, generate graphs, and respond to the query.
+        Executes the entire RAG pipeline: data loading, graph generation, and fact-checking.
 
         Args:
-            data (any): The data to be loaded into the graph.
-            question (str): The question to be asked in the similarity query.
-    
-        Raises:
-            Exception: If there is an error during any step of the pipeline.
-        
+            data (list): List of dictionaries containing the scraped article data.
+            claim (str): The specific claim text to be verified.
+            claim_id (str): The unique ID of the claim, used to organize graph assets.
+            prompt_instructions (str, optional): Custom instructions for the LLM prompt.
+            nei_label (str, optional): The specific string to output if evidence is lacking.
+
         Returns:
-            str: The result of the similarity query, or None if an error occurs.
+            tuple: A tuple containing:
+                - str: The AI's final verdict and reasoning (Supported/Refuted/NEI).
+                - str: The file path to the folder containing the generated graph images.
+                - dict: Token usage and call count metrics for efficiency evaluation.
+
+        Raises:
+            None: Internal exceptions are caught, logged, and return (None, None, 0-metrics).
         """
         self.logger.info("Starting the entire pipeline...")
-        start_time = time.time()  # Start time measurement
+        start_time = time.time()
         try:
             # Step 1: Load the data
             self.load_data(data)
@@ -149,30 +167,42 @@ class RAG_Pipeline:
 
             # Step 2: Generate and save graphs
             self.generate_and_save_graphs(claim_graphs_folder)
-            
-            # Fixed query for the pipeline
-            query = """Based on the information provided in the articles, determine if the claim is confirmed or refuted. 
-                        - If the articles confirm the claim, validate it.
-                        - If the articles completely contradict the claim or present completely different information, consider it false.
-                        - If there is confusion because some articles confirm the claim while others deny it, refrain from giving an answer.
-                        Additional guidelines:
-                        - Keep in mind that some information may not be available in all articles, and some articles may cover only part of the claim. In such cases, evaluate the available information in each article to decide whether the claim should be accepted or not.
-                        - Do not provide a "partially confirmed" or "partially refuted" response. The decision must be either to confirm or refute the claim, or to refrain from answering if the evidence is conflicting.
-                        
-                        Make sure to cite the titles of the articles that support your conclusions. 
-                        Only use the information available in the articles, and do not include any external knowledge.
-                    """
-            question = "Claim: \"" + claim + "\" " + query
-            
-            # Step 3: Execute the similarity query
-            result = self.query_similarity(question)
 
-            # Calculate total execution time
+            # Fallback specifically tailored to FEVER if no dynamic instructions are provided
+            fallback_instructions = """
+            You must format your response EXACTLY like this:
+            VERDICT: [SUPPORTS or REFUTES or NOT ENOUGH INFO]
+            REASONING: [Your detailed explanation citing the provided evidence]
+            """
+
+            active_instructions = (
+                prompt_instructions if prompt_instructions else fallback_instructions
+            )
+
+            # --- THE UNIVERSAL PROMPT ---
+            # Perfectly synchronized with all of other baseline scripts!
+            question = f"""You are a strict fact-checking AI.
+            Verify the following claim using ONLY the provided evidence. 
+            If the evidence does not contain enough information to make a definitive decision, answer exactly: {nei_label}.
+
+            {active_instructions}
+
+            CLAIM: {claim}
+            """
+
+            # Step 3: Execute the similarity query and catch token data
+            result, token_data = self.query_similarity(question)
+
             total_time = time.time() - start_time
-            self.logger.info(f"Pipeline completed successfully in {total_time:.2f} seconds.")
+            self.logger.info(
+                f"Pipeline completed successfully in {total_time:.2f} seconds."
+            )
 
-            return result, claim_graphs_folder
+            return result, claim_graphs_folder, token_data
+
         except Exception as e:
             total_time = time.time() - start_time
-            self.logger.error(f"Error during pipeline execution (total time: {total_time:.2f} seconds): {e}")
-            return None, None
+            self.logger.error(
+                f"Error during pipeline execution (total time: {total_time:.2f} seconds): {e}"
+            )
+            return None, None, {"total": 0, "calls": 0}

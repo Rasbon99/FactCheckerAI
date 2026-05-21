@@ -1,9 +1,15 @@
 .DS_Store
 *.env
 *.log
+*.log.*
 *.pyc
-*.jpg
 *.csv
 __pycache__/
-*.db
+/Outputs
 /ollama_data
+.vscode/
+.vs/
+.venv/
+/Datasets/FEVER/
+/Datasets/AVERITEC/
+/Datasets/RobustnessTests/

@@ -7,6 +7,7 @@ import shutil
 
 from log import Logger
 
+
 class Database:
     def __init__(self, env_file="key.env"):
         """
@@ -14,7 +15,6 @@ class Database:
 
         Args:
             env_file (str): The env file containing the API keys or database file paths. Default: "key.env".
-        
         Raises:
             KeyError: If the environment variable for the database file path is not set.
         """
@@ -23,11 +23,12 @@ class Database:
             dotenv.load_dotenv(env_file, override=True)
             self.db_file = os.environ["SQLDB_PATH"]
             self.assets_dir = os.environ["ASSET_PATH"]
+            self.experiments_dir = os.environ["EXPERIMENTS_EVIDENCES_PATH"]
         except KeyError as e:
             self.logger.error("Environment variable SQLDB_PATH not found.")
             raise e
 
-        db_dir = os.path.dirname(self.db_file)  
+        db_dir = os.path.dirname(self.db_file)
         if db_dir and not os.path.exists(db_dir):
             os.makedirs(db_dir)
             self.logger.info("Created directory for the database file: %s", db_dir)
@@ -38,7 +39,6 @@ class Database:
 
         Returns:
             sqlite3.Connection: A connection object to interact with the database.
-        
         Raises:
             sqlite3.DatabaseError: If the connection to the database fails.
         """
@@ -60,7 +60,6 @@ class Database:
             exc_type (type): The exception type, if any.
             exc_val (Exception): The exception value, if any.
             exc_tb (traceback): The traceback object, if any.
-        
         Raises:
             Exception: If there is an error during the exit process of the database connection.
         """
@@ -78,7 +77,6 @@ class Database:
 
         Args:
             create_table_sql (str): The SQL statement used to create the table.
-        
         Raises:
             sqlite3.DatabaseError: If there is an error while creating the table.
         """
@@ -100,11 +98,14 @@ class Database:
         Args:
             query (str): The SQL query to execute.
             params (tuple): The parameters to pass with the query. Default is an empty tuple.
-        
+
         Raises:
             sqlite3.DatabaseError: If there is an error during query execution.
         """
-        masked_params = [param if not isinstance(param, (bytes, bytearray)) else "BLOB" for param in params]
+        masked_params = [
+            param if not isinstance(param, (bytes, bytearray)) else "BLOB"
+            for param in params
+        ]
         self.logger.info("Executing query: %s", query)
 
         try:
@@ -127,11 +128,13 @@ class Database:
 
         Returns:
             list: A list of rows returned by the query.
-        
+
         Raises:
             sqlite3.DatabaseError: If there is an error during the fetch operation.
         """
-        self.logger.info("Fetching all records for query: %s with params: %s", query, params)
+        self.logger.info(
+            "Fetching all records for query: %s with params: %s", query, params
+        )
         try:
             with self as conn:
                 cursor = conn.cursor()
@@ -142,7 +145,7 @@ class Database:
         except sqlite3.DatabaseError as e:
             self.logger.error("Error fetching records.")
             raise e
-    
+
     def fetch_one(self, query, params=()):
         """
         Fetches the first record that matches the provided SQL query.
@@ -153,11 +156,13 @@ class Database:
 
         Returns:
             sqlite3.Row: The first row returned by the query.
-        
+
         Raises:
             sqlite3.DatabaseError: If there is an error during the fetch operation.
         """
-        self.logger.info("Fetching one record for query: %s with params: %s", query, params)
+        self.logger.info(
+            "Fetching one record for query: %s with params: %s", query, params
+        )
         try:
             with self as conn:
                 cursor = conn.cursor()
@@ -183,7 +188,9 @@ class Database:
         Returns:
             None
         """
-        self.logger.info("Deleting all conversations and cleaning up subdirectories in assets.")
+        self.logger.info(
+            "Deleting all conversations and cleaning up subdirectories in assets."
+        )
         try:
             # Deleting conversations from the database
             with self as conn:
@@ -191,35 +198,56 @@ class Database:
                 cursor.execute("DELETE FROM claims;")
                 cursor.execute("DELETE FROM answers;")
                 cursor.execute("DELETE FROM sources;")
+                cursor.execute("DELETE FROM experiments;")
                 conn.commit()
             self.logger.info("All conversations deleted successfully.")
 
-            # Clean up subdirectories in the assets folder
+            # 2. Clean up graphs in the data folder
             if os.path.isdir(self.assets_dir):
                 for root, dirs, _ in os.walk(self.assets_dir, topdown=False):
-                    # Remove all subdirectories
                     for name in dirs:
                         dir_path = os.path.join(root, name)
                         try:
-                            shutil.rmtree(dir_path)  # Recursively delete the directory and its contents
-                            self.logger.info(f"Deleted directory and its contents: {dir_path}")
+                            shutil.rmtree(dir_path)
+                            self.logger.info(
+                                f"Deleted directory and its contents: {dir_path}"
+                            )
                         except OSError as e:
-                            self.logger.error(f"Error deleting directory {dir_path}: {e}")
+                            self.logger.error(
+                                f"Error deleting directory {dir_path}: {e}"
+                            )
             else:
                 self.logger.warning(f"Assets folder does not exist: {self.assets_dir}")
-                
+
+            # 3. Clean up JSON files in the experiments folder
+            if os.path.isdir(self.experiments_dir):
+                for filename in os.listdir(self.experiments_dir):
+                    file_path = os.path.join(self.experiments_dir, filename)
+                    try:
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                    except OSError as e:
+                        self.logger.error(f"Error deleting file {file_path}: {e}")
+                self.logger.info(
+                    f"Cleared all experiment logs in: {self.experiments_dir}"
+                )
+            else:
+                self.logger.warning(
+                    f"Experiments folder does not exist: {self.experiments_dir}"
+                )
+
         except sqlite3.DatabaseError as e:
-            self.logger.error("Error deleting conversations.")
+            self.logger.error("Error deleting database rows.")
             raise e
         except OSError as e:
-            self.logger.error("Error cleaning up assets.")
+            self.logger.error("Error cleaning up files.")
             raise e
-        
+
     def get_history(self):
         """
         Retrieves the conversations from the database, including their associated sources and any related images.
 
-        This method queries the database to fetch claims, their associated answers, and any related sources. 
+        This method queries the database to fetch claims, their associated answers, and any related sources.
         If a folder containing graph images is specified for a claim, the images are included as well.
 
         Returns:
@@ -253,7 +281,6 @@ class Database:
 
         for row in rows:
             claim_id = row[0]
-            
             # Query to fetch sources associated with the claim
             sources_query = """
             SELECT title, url, body 
@@ -268,18 +295,20 @@ class Database:
             images = []
             graphs_folder = row[4]
             if graphs_folder and os.path.isdir(graphs_folder):
-                jpg_files = glob.glob(os.path.join(graphs_folder, "*.jpg"))
+                images = glob.glob(os.path.join(graphs_folder, "*.jpg"))
             else:
-                self.logger.warning("La cartella dei grafici non esiste o non è stata specificata.")
+                self.logger.warning("Graph folder does not exist or was not specified.")
 
             # Append the conversation data to the list
-            conversations.append({
-                "id": claim_id,
-                "claim": row[1],
-                "title": row[2],
-                "answer": row[3],
-                "images": jpg_files,
-                "sources": sources 
-            })
+            conversations.append(
+                {
+                    "id": claim_id,
+                    "claim": row[1],
+                    "title": row[2],
+                    "answer": row[3],
+                    "images": images,
+                    "sources": sources,
+                }
+            )
 
         return conversations

@@ -20,11 +20,11 @@ services:
       - key.env
     volumes:
       - ollama_data:/root/.ollama
-    entrypoint: ["/bin/bash", "-c", "/bin/ollama serve & SERVE_PID=$! && sleep 5 && ollama pull phi3.5:latest && wait $SERVE_PID"]
+    entrypoint: ["/bin/bash", "-c", "/bin/ollama serve & SERVE_PID=$$! && sleep 5 && ollama pull phi3.5:latest && wait $$SERVE_PID"]
 
   backend:
     build: .
-    command: uvicorn backend:backend_app --host 0.0.0.0 --port 8001
+    command: /bin/sh -c "python init_db.py && uvicorn backend:backend_app --host 0.0.0.0 --port 8001"
     ports:
       - "8001:8001"
     env_file:

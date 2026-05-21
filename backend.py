@@ -1,44 +1,153 @@
+import uuid
 from fastapi import FastAPI
 from pydantic import BaseModel
+from typing import Optional
 
 from WebScraper.scraper import Scraper
 from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from Database.data_entities import Claim, Answer
 from Database.sqldb import Database
 from GraphRAG.rag_pipeline import RAG_Pipeline
+from Evaluation.Utils.experiment_tracker import ExperimentTracker
 
 backend_app = FastAPI()
-
 db = Database()
 
+
+# --- UPGRADED MODEL ---
+# Now accepts the enriched metadata and prompt instructions from the Open-Web Client
 class InputText(BaseModel):
     text: str
+    ground_truth: Optional[str] = "Not Provided"
+    dataset_setting: Optional[str] = "FoxAI-OpenWeb"
+    search_query: Optional[str] = None
+    active_dataset: Optional[str] = "FEVER"
+    prompt_instructions: Optional[str] = None
+    nei_label: Optional[str] = "NOT ENOUGH INFO"
+
 
 @backend_app.post("/run_pipeline")
 def process_text(input_text: InputText):
     text = input_text.text
-    
-    preprocessor = Preprocessing_Pipeline()
-    claim_title, claim_summary = preprocessor.run_claim_pipe(text)
-    claim = Claim(text, claim_title, claim_summary)
-    
-    scraper = Scraper()
-    sources = scraper.search_and_extract(claim_title, num_results=10)
-    preprocessed_sources = preprocessor.run_sources_pipe(sources)
-    claim.add_sources(preprocessed_sources)
-    
-    rag = RAG_Pipeline()
-    query_result, graphs_folder = rag.run_pipeline(preprocessed_sources, claim.summary, claim.id)
 
-    answer = Answer(claim.id, query_result, graphs_folder)
-    
-    return {"claim_title": claim_title, "claim_summary": claim_summary, "sources": preprocessed_sources, "query_result": query_result, "graphs_folder": graphs_folder}
+    # Generate a claim ID upfront so the tracker and the Claim entity match perfectly
+    claim_id = str(uuid.uuid4())
+
+    # --- Initialize Components & Tracker ---
+    tracker = ExperimentTracker(
+        claim_id=claim_id,
+        ground_truth=input_text.ground_truth or "Not Provided",
+        system_type="FoxAI-GraphRAG",
+        dataset_setting=input_text.dataset_setting or "FoxAI-OpenWeb",
+    )
+
+    preprocessor = Preprocessing_Pipeline()
+    scraper = Scraper()
+    rag = RAG_Pipeline()
+
+    # --- 1. Preprocessing ---
+    def run_prep():
+        return preprocessor.run_claim_pipe(text)
+
+    claim_title, claim_summary = tracker.run_stage("preprocessor", run_prep)
+
+    claim = Claim(text, claim_title, claim_summary, claim_id=claim_id)
+
+    # Determine the best query for DuckDuckGo
+    # (Uses enriched search_query from eval scripts, or falls back to AI-generated claim_title for normal UI usage)
+    target_search_query = (
+        input_text.search_query if input_text.search_query else claim_title
+    )
+
+    # --- 2. Retrieval (Scraper + Preprocessor) ---
+    def run_retrieval():
+        # Pass the TARGET search query to DuckDuckGo!
+        srcs, scraper_metrics = scraper.search_and_extract(
+            target_search_query, num_results=10
+        )
+
+        prep_srcs, prep_metrics = preprocessor.run_sources_pipe(srcs)
+
+        # Combine the dictionaries mathematically
+        total_retrieval_tokens = scraper_metrics["total"] + prep_metrics["total"]
+        total_retrieval_calls = scraper_metrics["calls"] + prep_metrics["calls"]
+
+        # Pass the unified dictionary to the tracker!
+        return (prep_srcs, srcs), {
+            "total": total_retrieval_tokens,
+            "calls": total_retrieval_calls,
+        }
+
+    preprocessed_sources, sources = tracker.run_stage("retrieval", run_retrieval)
+
+    # --- 3. GraphRAG ---
+    def run_rag():
+        # Pass the dynamic prompt instructions and NEI label down to the RAG pipeline
+        q_res, g_folder, t_usage = rag.run_pipeline(
+            preprocessed_sources,
+            claim.text,
+            claim.id,
+            prompt_instructions=input_text.prompt_instructions,
+            nei_label=input_text.nei_label or "NOT ENOUGH INFO",
+        )
+        # We group the first two outputs so the tracker sees exactly (result, tokens)
+        return (q_res, g_folder), t_usage
+
+    query_result, graphs_folder = tracker.run_stage("generation", run_rag)
+
+    # --- 4. Verdict Parsing for RQ1 ---
+    # Extract the "Supported/Refuted/NEI" label from the structured response
+    try:
+        if query_result and "VERDICT:" in query_result:
+            # Takes the text between VERDICT: and REASONING:
+            predicted_label = (
+                query_result.split("REASONING:")[0].replace("VERDICT:", "").strip()
+            )
+        else:
+            # Fallback if the LLM didn't follow the format or if query_result is None
+            predicted_label = "Error: Unstructured Response"
+    except Exception:
+        predicted_label = "Parsing Error"
+
+    # --- 5. Answer Entity (For UI) ---
+    try:
+        if query_result:
+            if "REASONING:" in query_result:
+                reasoning = query_result.split("REASONING:")[1].strip()
+            else:
+                reasoning = query_result.replace("VERDICT:", "").strip()
+        else:
+            reasoning = "No results found."
+    except Exception:
+        reasoning = query_result
+
+    answer = Answer(claim.id, reasoning, graphs_folder)
+
+    # --- 6. Log Experiment Metrics & Evidence ---
+    evidence_data = {
+        "claim_text": text,
+        "raw_sources": sources,
+        "query_result": reasoning,
+    }
+
+    tracker.finalize(predicted_label, evidence_data)
+
+    return {
+        "claim_title": claim_title,
+        "claim_summary": claim_summary,
+        "sources": preprocessed_sources,
+        "query_result": reasoning,
+        "graphs_folder": graphs_folder,
+        "answer": answer.answer,
+    }
+
 
 @backend_app.post("/delete_db")
 def delete_database():
     db.delete_all_conversations()
 
+
 @backend_app.get("/get_history")
-def delete_database():
+def get_database():
     history = db.get_history()
     return history
