@@ -137,18 +137,19 @@ class Scraper:
         robot_url = f"{parsed_url.scheme}://{parsed_url.netloc}/robots.txt"
 
         try:
-            rp = urllib.robotparser.RobotFileParser()
-            rp.set_url(robot_url)
-            rp.read()
+            # 1. Fetch the robots.txt with a strict 5-second timeout
+            response = requests.get(robot_url, timeout=5)
 
-            # Check if the robots.txt allows scraping for all user-agents ('*')
-            if rp.can_fetch("*", url):
-                return True
+            # 2. Only parse it if we successfully retrieved it
+            if response.status_code == 200:
+                rp = urllib.robotparser.RobotFileParser()
+                # Parse the text lines manually instead of using .read()
+                rp.parse(response.text.splitlines())
+                return rp.can_fetch("*", url)
             else:
-                return False
+                return True  # Assume allowed if robots.txt is missing/inaccessible
         except Exception as e:
-            # If there is an error accessing the robots.txt, assume scraping is allowed.
-            # You could also choose to log this error if necessary.
+            # If the timeout hits or connection fails, assume allowed (or log it)
             return True
 
     def search_and_extract(
