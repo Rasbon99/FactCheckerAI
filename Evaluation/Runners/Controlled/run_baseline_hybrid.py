@@ -12,8 +12,8 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
 from langchain.retrievers.document_compressors import EmbeddingsFilter
 from langchain.retrievers import ContextualCompressionRetriever
-from langchain_ollama import OllamaEmbeddings
 from langchain_community.retrievers import BM25Retriever
+from langchain_huggingface import HuggingFaceEmbeddings
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.experiment_tracker import ExperimentTracker
@@ -119,8 +119,16 @@ def run_hybrid_baseline():
     # ---------------------------------------------------------
     # 2. CONFIGURE THE RETRIEVAL PIPELINE BASED ON DATASET
     # ---------------------------------------------------------
-    logger.info("Loading Ollama Embeddings (This takes a few seconds)...")
-    embeddings = OllamaEmbeddings(model="nomic-embed-text")
+    logger.info(
+        "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
+    )
+    embedding_model_name = os.getenv(
+        "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
+    )
+    embeddings = HuggingFaceEmbeddings(
+        model_name=embedding_model_name,
+        encode_kwargs={"normalize_embeddings": True},
+    )
     embeddings_filter = EmbeddingsFilter(embeddings=embeddings, k=2)
 
     hybrid_rag_retriever = None

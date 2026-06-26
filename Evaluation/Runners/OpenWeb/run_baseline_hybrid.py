@@ -10,7 +10,7 @@ from log import Logger
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.vectorstores import InMemoryVectorStore
-from langchain_ollama import OllamaEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.experiment_tracker import ExperimentTracker
@@ -78,8 +78,16 @@ def run_hybrid_rag_baseline_openweb():
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Using Metadata Super Query: {USE_METADATA}")
 
-    logger.info("Loading Ollama Embeddings (This takes a few seconds)...")
-    embeddings = OllamaEmbeddings(model="nomic-embed-text")
+    logger.info(
+        "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
+    )
+    embedding_model_name = os.getenv(
+        "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
+    )
+    embeddings = HuggingFaceEmbeddings(
+        model_name=embedding_model_name,
+        encode_kwargs={"normalize_embeddings": True},
+    )
 
     successful_runs = 0
 

@@ -1,5 +1,4 @@
 import os
-import requests
 import time
 import platform
 
@@ -7,7 +6,7 @@ import dotenv
 from langchain.chains import RetrievalQA
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain_community.vectorstores import Neo4jVector
-from langchain_ollama import OllamaEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 
 from log import Logger
@@ -49,18 +48,19 @@ class QueryEngine:
         self.neo4j_username = os.environ["NEO4J_USERNAME"]
         self.neo4j_password = os.environ["NEO4J_PASSWORD"]
 
-        if not self._is_ollama_running():
-            raise ConnectionError("Ollama server is not running. Please start it.")
-
-        # Model configuration
-        self.model_name = os.environ["MODEL_LLM_NEO4J"]
+        # Model configuration names from environment
+        self.embedding_model_name = os.getenv(
+            "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
+        )
         self.modelGroq_name = os.environ["GROQ_MODEL_NAME"]
 
-        self.embedding_model = OllamaEmbeddings(
-            model=self.model_name,
-            base_url=os.getenv("OLLAMA_SERVER_URL"),
-            client_kwargs={"timeout": 120.0},
+        # Initialize Hugging Face embeddings natively in Python memory
+        self.logger.info(f"Loading local embedding model: {self.embedding_model_name}")
+        self.embedding_model = HuggingFaceEmbeddings(
+            model_name=self.embedding_model_name,
+            encode_kwargs={"normalize_embeddings": True},
         )
+
         self.llm_model = ChatGroq(model=self.modelGroq_name)
         self.index_name = index_name
 
@@ -133,24 +133,3 @@ class QueryEngine:
                     self.logger.info("Neo4j vector store connection closed safely.")
                 except Exception as e:
                     self.logger.warning(f"Could not close Neo4j connection: {e}")
-
-    def _is_ollama_running(self):
-        """
-        Checks if the Ollama server is active by sending a GET request to the FastAPI API.
-
-        This method attempts to connect to the Ollama server URL (defined as an environment variable)
-        and checks if the server responds with an HTTP 200 status code, indicating it is running.
-
-        Returns:
-            bool: True if the Ollama server is active and returns status code 200; False otherwise.
-
-        Raises:
-            requests.exceptions.RequestException: If there is an error during the request (e.g., timeout, connection error).
-        """
-        try:
-            response = requests.get(
-                os.getenv("OLLAMA_SERVER_URL", "http://localhost:11434"), timeout=2
-            )
-            return response.status_code == 200
-        except requests.exceptions.RequestException:
-            return False
