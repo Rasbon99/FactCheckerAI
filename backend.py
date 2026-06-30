@@ -1,7 +1,11 @@
+import os
 import uuid
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import Optional
+
+import dotenv
+from llamacpp_client import set_alias_map, load_models
 
 from WebScraper.scraper import Scraper
 from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
@@ -10,12 +14,19 @@ from Database.sqldb import Database
 from GraphRAG.rag_pipeline import RAG_Pipeline
 from Evaluation.Utils.experiment_tracker import ExperimentTracker
 
+dotenv.load_dotenv("key.env", override=True)
+
+model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
+model_port = int(os.getenv("LLM_MODEL_PORT", "8080"))
+
+print(f"[Backend] Connecting to local llama.cpp server on port {model_port}...")
+set_alias_map({model_alias: model_port})
+load_models([model_alias])
+
 backend_app = FastAPI()
 db = Database()
 
 
-# --- UPGRADED MODEL ---
-# Now accepts the enriched metadata and prompt instructions from the Open-Web Client
 class InputText(BaseModel):
     text: str
     ground_truth: Optional[str] = "Not Provided"
