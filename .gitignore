@@ -12,3 +12,4 @@ __pycache__/
 /Datasets/FEVER/
 /Datasets/AVERITEC/
 /Datasets/RobustnessTests/
+/models
