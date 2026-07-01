@@ -7,7 +7,7 @@ from langchain.chains import RetrievalQA
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain_community.vectorstores import Neo4jVector
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_groq import ChatGroq
+from llamacpp_client import ChatLlamaCppServer
 
 from log import Logger
 
@@ -21,11 +21,19 @@ class TokenTrackerCallback(BaseCallbackHandler):
 
     def on_llm_end(self, response, **kwargs):
         self.llm_calls += 1
-        # ChatGroq populates token usage inside the llm_output dictionary
+        # Safely extract token usage whether it's stored in llm_output or message metadata
         if response.llm_output and "token_usage" in response.llm_output:
             self.total_tokens += response.llm_output["token_usage"].get(
                 "total_tokens", 0
             )
+        elif response.generations and len(response.generations) > 0:
+            first_gen = response.generations[0][0]
+            if hasattr(first_gen, "message") and hasattr(
+                first_gen.message, "response_metadata"
+            ):
+                self.total_tokens += first_gen.message.response_metadata.get(
+                    "token_usage", {}
+                ).get("total_tokens", 0)
 
 
 class QueryEngine:
@@ -52,7 +60,7 @@ class QueryEngine:
         self.embedding_model_name = os.getenv(
             "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
         )
-        self.modelGroq_name = os.environ["GROQ_MODEL_NAME"]
+        self.model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
 
         # Initialize Hugging Face embeddings natively in Python memory
         self.logger.info(f"Loading local embedding model: {self.embedding_model_name}")
@@ -61,7 +69,11 @@ class QueryEngine:
             encode_kwargs={"normalize_embeddings": True},
         )
 
-        self.llm_model = ChatGroq(model=self.modelGroq_name)
+        self.llm_model = ChatLlamaCppServer(
+            model=self.model_alias,
+            temperature=0.1,
+            max_tokens=2048,
+        )
         self.index_name = index_name
 
     def query_similarity(self, query):
