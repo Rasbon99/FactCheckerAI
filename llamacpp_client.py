@@ -98,8 +98,25 @@ class ChatLlamaCppServer(BaseChatModel):
         )
         resp.raise_for_status()
 
-        text: str = resp.json()["choices"][0]["message"]["content"]
-        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=text))])
+        data = resp.json()
+        text: str = data["choices"][0]["message"]["content"]
+
+        usage = data.get("usage", {})
+        token_usage = {
+            "prompt_tokens": usage.get("prompt_tokens", 0),
+            "completion_tokens": usage.get("completion_tokens", 0),
+            "total_tokens": usage.get("total_tokens", 0),
+        }
+
+        # Embed the metrics into the standard LangChain message structures
+        message = AIMessage(
+            content=text, response_metadata={"token_usage": token_usage}
+        )
+
+        return ChatResult(
+            generations=[ChatGeneration(message=message)],
+            llm_output={"token_usage": token_usage},
+        )
 
     @property
     def _llm_type(self) -> str:
