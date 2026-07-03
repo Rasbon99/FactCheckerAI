@@ -1,7 +1,8 @@
 import json
 import os
 import dotenv
-from groq import Groq
+from llamacpp_client import ChatLlamaCppServer
+from langchain_core.messages import SystemMessage, HumanMessage
 from collections import defaultdict
 
 from log import Logger
@@ -10,23 +11,20 @@ from log import Logger
 class NER:
     def __init__(self, env_file="key.env"):
         """
-        Initializes the NER class with a specific model and configures the Groq API client.
+        Initializes the NER class with a specific model and configures the llama.cpp client.
 
         Args:
-            env_file (str, optional): The path to the environment file containing API keys. Default is "key.env".
+            env_file (str, optional): The path to the environment file containing configuration. Default is "key.env".
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
         dotenv.load_dotenv(env_file, override=True)
-        self.model = os.getenv(
-            "GROQ_MODEL_NAME", "llama-3.3-70b-versatile"
-        )  # Default to "llama-3.3-70b-versatile" if not set
-        self.client = Groq()
+        self.model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
 
     def extract_entities_and_topic(
         self, text, max_tokens=1024, temperature=0.5, stop=None
     ):
         """
-        Extracts entities and the main topic from the given text using the Groq API.
+        Extracts entities and the main topic from the given text using the llama.cpp server.
 
         Args:
             text (str): The text from which entities and the topic will be extracted.
@@ -42,30 +40,39 @@ class NER:
         """
         self.logger.info("Starting entity and topic extraction process.")
         try:
-            response = self.client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """you are an NER model that extracts entities and the topic from a text.\n 
-                    The output must be strictly formatted as: {\"topic\": \"Technology\", \"entities\": [\"Elon Musk\", \"SpaceX\", \"Tesla\", \"Paris\"]}""",
-                    },
-                    {"role": "user", "content": text},
-                ],
-                model=self.model,
-                temperature=temperature,
-                max_completion_tokens=max_tokens,
-                stop=stop,
+            client = ChatLlamaCppServer(
+                model=self.model_alias, temperature=temperature, max_tokens=max_tokens
             )
 
-            self.logger.info("Groq API call successful.")
-            content = response.choices[0].message.content
+            messages = [
+                SystemMessage(
+                    content="""you are an NER model that extracts entities and the topic from a text.\n 
+                    The output must be strictly formatted as: {\"topic\": \"Technology\", \"entities\": [\"Elon Musk\", \"SpaceX\", \"Tesla\", \"Paris\"]}. No prose, no markdown formatting."""
+                ),
+                HumanMessage(content=text),
+            ]
+
+            response = client.invoke(messages, stop=stop)
+
+            self.logger.info("llama.cpp API call successful.")
+            content = response.content
             if content is None:
                 self.logger.error("API response content is None")
                 return None, 0
-            result = content.strip()
+            result = content if isinstance(content, str) else json.dumps(content)
+            result = result.strip()
+
+            # Sanitize raw markdown block wrapper if injected by the model
+            if result.startswith("```"):
+                result = result.strip("```json").strip("```").strip()
+
             self.logger.debug("Raw API response: %s", result)
 
-            tokens = response.usage.total_tokens if response.usage else 0
+            tokens = (
+                response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
+                if hasattr(response, "response_metadata")
+                else 0
+            )
 
             return json.loads(result), tokens
         except (json.JSONDecodeError, Exception) as e:
@@ -76,7 +83,7 @@ class NER:
         self, entities, max_tokens=1024, temperature=0.0, stop=None
     ):
         """
-        Finds unified versions of entities by analyzing them in context using GroqCloud LLM.
+        Finds unified versions of entities by analyzing them in context using llama.cpp server.
 
         Args:
             entities (list): A list of entities to find unified versions for.
@@ -90,29 +97,33 @@ class NER:
 
         try:
             input_entities = ", ".join(entities)
-            response = self.client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": f"""Please normalize or unify the following entities: {input_entities}. 
-                                        For each entity, return a single unified version. 
-                                        If an entity has multiple valid representations, variations, synonyms, or acronyms, select the most common or widely recognized form. 
-                                        Ensure the unified versions are returned in the same order as the input, separated by commas, and the total number of unified entities matches the number of input entities. 
-                                        If any entity is already unified or does not require normalization, return it as is. 
-                                        Do not include any extra information, notes, or context.
-                                        Example: 
-                                            Input: ['United States', 'USA', 'US', 'U.S.'] Output: ['United States', 'United States', 'United States', 'United States']""",
-                    }
-                ],
-                model=self.model,
-                temperature=temperature,
-                max_completion_tokens=max_tokens,
-                stop=stop,
+
+            client = ChatLlamaCppServer(
+                model=self.model_alias, temperature=temperature, max_tokens=max_tokens
             )
 
+            messages = [
+                SystemMessage(
+                    content=f"""Please normalize or unify the following entities: {input_entities}. 
+                                    For each entity, return a single unified version. 
+                                    If an entity has multiple valid representations, variations, synonyms, or acronyms, select the most common or widely recognized form. 
+                                    Ensure the unified versions are returned in the same order as the input, separated by commas, and the total number of unified entities matches the number of input entities. 
+                                    If any entity is already unified or does not require normalization, return it as is. 
+                                    Do not include any extra information, notes, or context.
+                                    Example: 
+                                        Input: ['United States', 'USA', 'US', 'U.S.'] Output: United States, United States, United States, United States"""
+                )
+            ]
+
+            response = client.invoke(messages, stop=stop)
+
             # Extraction from response
-            response_content = response.choices[0].message.content
-            tokens = response.usage.total_tokens if response.usage else 0
+            response_content = response.content
+            tokens = (
+                response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
+                if hasattr(response, "response_metadata")
+                else 0
+            )
             self.logger.debug(f"Response content: {response_content}")
 
             # Handling the response carefully
@@ -120,7 +131,22 @@ class NER:
                 self.logger.error("API response content is None")
                 return {entity: [entity] for entity in entities}, 0
 
-            unified_entities_list = [ue.strip() for ue in response_content.split(",")]
+            # Convert to string if needed
+            response_str = (
+                response_content
+                if isinstance(response_content, str)
+                else json.dumps(response_content)
+            )
+
+            # Strip out accidental list bracket formatting if model adds them
+            clean_content = (
+                response_str.strip()
+                .strip("[")
+                .strip("]")
+                .replace("'", "")
+                .replace('"', "")
+            )
+            unified_entities_list = [ue.strip() for ue in clean_content.split(",")]
 
             # Ensure the number of unified entities matches the input entities count
             if len(unified_entities_list) != len(entities):

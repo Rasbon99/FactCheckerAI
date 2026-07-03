@@ -1,16 +1,16 @@
 import os
-import json
 import time
 import uuid
 import dotenv
-from groq import Groq
+from llamacpp_client import ChatLlamaCppServer, load_models, set_alias_map
+from langchain_core.messages import HumanMessage
 from log import Logger
 
 # --- LangChain Imports ---
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.vectorstores import InMemoryVectorStore
-from langchain_ollama import OllamaEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.experiment_tracker import ExperimentTracker
@@ -21,6 +21,13 @@ from Database.data_entities import Claim, Answer
 # Load environment variables
 dotenv.load_dotenv("key.env", override=True)
 
+model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
+model_port = int(os.getenv("LLM_MODEL_PORT", "8080"))
+
+print(f"[Backend] Connecting to local llama.cpp server on port {model_port}...")
+set_alias_map({model_alias: model_port})
+load_models([model_alias])
+
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
 logger = Logger("Hybrid-OpenWeb").get_logger()
@@ -28,10 +35,8 @@ logger = Logger("Hybrid-OpenWeb").get_logger()
 # --- CONFIGURATION FLAG ---
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 
-# Initialize Groq Client
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
-client = Groq(api_key=GROQ_API_KEY)
+# Initialize llama.cpp configuration
+model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
 
 
 def get_hybrid_rag_verdict(
@@ -49,15 +54,22 @@ def get_hybrid_rag_verdict(
 
     CLAIM: {claim_text}
     """
-    response = client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        model=GROQ_MODEL,
+
+    client = ChatLlamaCppServer(
+        model=model_alias,
         temperature=0.0,
         max_tokens=200,
     )
 
-    result_text = response.choices[0].message.content
-    tokens_used = response.usage.total_tokens if response.usage else 0
+    messages = [HumanMessage(content=prompt)]
+    response = client.invoke(messages)
+
+    result_text = response.content
+    tokens_used = (
+        response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
+        if hasattr(response, "response_metadata")
+        else 0
+    )
 
     return result_text, tokens_used
 
@@ -78,8 +90,16 @@ def run_hybrid_rag_baseline_openweb():
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Using Metadata Super Query: {USE_METADATA}")
 
-    logger.info("Loading Ollama Embeddings (This takes a few seconds)...")
-    embeddings = OllamaEmbeddings(model="nomic-embed-text")
+    logger.info(
+        "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
+    )
+    embedding_model_name = os.getenv(
+        "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
+    )
+    embeddings = HuggingFaceEmbeddings(
+        model_name=embedding_model_name,
+        encode_kwargs={"normalize_embeddings": True},
+    )
 
     successful_runs = 0
 
@@ -140,7 +160,7 @@ def run_hybrid_rag_baseline_openweb():
                         )
 
                 logger.info(
-                    f"Scraped {len(docs)} pages. Chunking and embedding with Ollama..."
+                    f"Scraped {len(docs)} pages. Chunking and embedding locally..."
                 )
 
                 # Step B: Split the massive pages into clean, overlapping paragraphs

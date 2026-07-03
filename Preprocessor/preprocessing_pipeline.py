@@ -1,5 +1,4 @@
 import dotenv
-from groq import Groq
 
 from Preprocessor.ner import NER
 from Preprocessor.summarizer import Summarizer
@@ -32,8 +31,6 @@ class Preprocessing_Pipeline:
         self.config = {"summarize": True, "NER": True}
         if config:
             self.config.update(config)
-
-        self.client = Groq()
 
     def run_claim_pipe(self, claim, max_lenght=150):
         """

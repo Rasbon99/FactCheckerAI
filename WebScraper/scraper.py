@@ -7,7 +7,8 @@ import csv
 
 from bs4 import BeautifulSoup
 from ddgs import DDGS
-from groq import Groq
+from llamacpp_client import ChatLlamaCppServer
+from langchain_core.messages import SystemMessage, HumanMessage
 import requests
 
 from log import Logger
@@ -24,8 +25,7 @@ class Scraper:
         # Load the Iffy.news domains into a fast-lookup set for instant filtering
         self.iffy_domains = self._load_iffy_index(iffy_csv_path)
 
-        self.model = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
-        self.client = Groq()
+        self.model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
 
     def _load_iffy_index(self, filepath):
         """Loads domains from the Iffy.news CSV into a set ONLY if they have Low/Very Low factuality."""
@@ -331,6 +331,11 @@ class Scraper:
         correlated_sources = []
         token_data = {"total": 0, "calls": 0}
 
+        # Initialize the local LLM client outside the loop to avoid recreating it
+        client = ChatLlamaCppServer(
+            model=self.model_alias, temperature=0.0, max_tokens=128
+        )
+
         for source in sources:
             try:
                 # Extract the content from the "body" field
@@ -343,9 +348,7 @@ class Scraper:
 
                 # Create the prompt for the model
                 prompt = [
-                    {
-                        "role": "system",
-                        "content": f"""
+                    SystemMessage(content=f"""
                         You are an expert validator tasked with determining whether a source found online is directly related to the provided claim ('{claim}'). 
                         Your goal is to check if the source discusses the same topic or provides relevant information about the claim. 
                         Focus on the core subject of the claim and the source. Ignore unrelated or vaguely related content.
@@ -354,24 +357,31 @@ class Scraper:
                         - 'Correlated' if the source is about the same topic as the claim.
                         - 'Not Correlated' if the source is unrelated or only tangentially related.
                         Be concise and accurate in your evaluation.
-                        Use only 'Correlated' or 'Not Correlated' in your response.""",
-                    },
-                    {"role": "user", "content": source_body},
+                        Use only 'Correlated' or 'Not Correlated' in your response."""),
+                    HumanMessage(content=source_body),
                 ]
 
                 # Call the model
-                response = self.client.chat.completions.create(
-                    messages=prompt,
-                    model=self.model,
-                )
+                response = client.invoke(prompt)
 
                 # Extract the result
-                content = response.choices[0].message.content
-                result = content.strip() if content else ""
+                content = response.content
+                if isinstance(content, str):
+                    result = content.strip()
+                elif isinstance(content, list):
+                    result = " ".join(
+                        str(part) for part in content if isinstance(part, (str, dict))
+                    ).strip()
+                else:
+                    result = ""
 
                 token_data["calls"] += 1
                 token_data["total"] += (
-                    response.usage.total_tokens if response.usage else 0
+                    response.response_metadata.get("token_usage", {}).get(
+                        "total_tokens", 0
+                    )
+                    if hasattr(response, "response_metadata")
+                    else 0
                 )
 
                 # Add the source to the list of correlated sources if it is related

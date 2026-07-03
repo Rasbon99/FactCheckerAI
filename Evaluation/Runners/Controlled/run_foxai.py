@@ -1,9 +1,9 @@
 import os
-import json
 import sqlite3
 import time
 import uuid
 import dotenv
+from llamacpp_client import load_models, set_alias_map
 from log import Logger
 
 # --- Import Pipeline Components ---
@@ -16,6 +16,13 @@ from Database.data_entities import Claim, Answer
 
 # Load environment variables
 dotenv.load_dotenv("key.env", override=True)
+
+model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
+model_port = int(os.getenv("LLM_MODEL_PORT", "8080"))
+
+print(f"[Backend] Connecting to local llama.cpp server on port {model_port}...")
+set_alias_map({model_alias: model_port})
+load_models([model_alias])
 
 MAX_CLAIMS_TO_TEST = 5
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
@@ -224,7 +231,7 @@ def run_controlled_experiment():
             claim.add_sources(preprocessed_sources)
 
             # =========================================================
-            # 🛡️ SAFETY CHECK: Did Groq find any entities?
+            # 🛡️ SAFETY CHECK: Did LLM find any entities?
             # =========================================================
             has_entities = False
             for src in preprocessed_sources:
@@ -238,7 +245,7 @@ def run_controlled_experiment():
 
             if not has_entities:
                 logger.info(
-                    "NER extracted 0 entities. Short-circuiting to prevent Neo4j/Ollama crash."
+                    "NER extracted 0 entities. Short-circuiting to prevent Neo4j crash."
                 )
                 predicted_label = "Error: No Entities"
                 query_result = f"VERDICT: {nei_label}\nREASONING: Evidence was provided, but the NER model failed to extract any entities to build a graph."

@@ -6,10 +6,10 @@
 *.csv
 __pycache__/
 /Outputs
-/ollama_data
 .vscode/
 .vs/
 .venv/
 /Datasets/FEVER/
 /Datasets/AVERITEC/
 /Datasets/RobustnessTests/
+/models

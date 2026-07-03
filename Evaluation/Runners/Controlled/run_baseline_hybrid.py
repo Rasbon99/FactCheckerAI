@@ -4,7 +4,8 @@ import uuid
 import re
 import dotenv
 from typing import List
-from groq import Groq
+from llamacpp_client import ChatLlamaCppServer, load_models, set_alias_map
+from langchain_core.messages import HumanMessage
 from log import Logger
 
 # --- LangChain Imports ---
@@ -12,8 +13,8 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
 from langchain.retrievers.document_compressors import EmbeddingsFilter
 from langchain.retrievers import ContextualCompressionRetriever
-from langchain_ollama import OllamaEmbeddings
 from langchain_community.retrievers import BM25Retriever
+from langchain_huggingface import HuggingFaceEmbeddings
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.experiment_tracker import ExperimentTracker
@@ -23,14 +24,19 @@ from Database.data_entities import Claim, Answer
 
 dotenv.load_dotenv("key.env", override=True)
 
+model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
+model_port = int(os.getenv("LLM_MODEL_PORT", "8080"))
+
+print(f"[Backend] Connecting to local llama.cpp server on port {model_port}...")
+set_alias_map({model_alias: model_port})
+load_models([model_alias])
+
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
 
-# Initialize Groq Client
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
+# Initialize llama.cpp configuration
+model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
-client = Groq(api_key=GROQ_API_KEY)
 logger = Logger("Hybrid-Baseline").get_logger()
 
 
@@ -88,16 +94,24 @@ def get_hybrid_verdict(claim_text, retrieved_evidence, prompt_instructions, nei_
 
     CLAIM: {claim_text}
     """
-    response = client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        model=GROQ_MODEL,
+
+    client = ChatLlamaCppServer(
+        model=model_alias,
         temperature=0.0,
         max_tokens=200,
     )
 
-    return response.choices[0].message.content, (
-        response.usage.total_tokens if response.usage else 0
+    messages = [HumanMessage(content=prompt)]
+    response = client.invoke(messages)
+
+    content = response.content
+    tokens = (
+        response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
+        if hasattr(response, "response_metadata")
+        else 0
     )
+
+    return content, tokens
 
 
 def run_hybrid_baseline():
@@ -119,8 +133,16 @@ def run_hybrid_baseline():
     # ---------------------------------------------------------
     # 2. CONFIGURE THE RETRIEVAL PIPELINE BASED ON DATASET
     # ---------------------------------------------------------
-    logger.info("Loading Ollama Embeddings (This takes a few seconds)...")
-    embeddings = OllamaEmbeddings(model="nomic-embed-text")
+    logger.info(
+        "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
+    )
+    embedding_model_name = os.getenv(
+        "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
+    )
+    embeddings = HuggingFaceEmbeddings(
+        model_name=embedding_model_name,
+        encode_kwargs={"normalize_embeddings": True},
+    )
     embeddings_filter = EmbeddingsFilter(embeddings=embeddings, k=2)
 
     hybrid_rag_retriever = None
@@ -174,7 +196,7 @@ def run_hybrid_baseline():
             )
 
             # --- THE RETRIEVAL STEP ---
-            logger.info("Extracting and Re-ranking with Ollama...")
+            logger.info("Extracting and Re-ranking with llama.cpp...")
 
             def run_retrieval():
                 if active_dataset == "FEVER":
@@ -223,7 +245,7 @@ def run_hybrid_baseline():
                     bm25_retriever = BM25Retriever.from_documents(docs)
                     bm25_retriever.k = 50
 
-                    # 3. STAGE 2: Heavy Semantic Re-ranking (Filter 50 down to 2 using Ollama)
+                    # 3. STAGE 2: Heavy Semantic Re-ranking (Filter 50 down to 2 using Embeddings Filter)
                     compression_retriever = ContextualCompressionRetriever(
                         base_compressor=embeddings_filter, base_retriever=bm25_retriever
                     )

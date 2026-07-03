@@ -2,7 +2,8 @@ import os
 import time
 
 import dotenv
-from groq import Groq
+from llamacpp_client import ChatLlamaCppServer
+from langchain_core.messages import SystemMessage, HumanMessage
 
 from log import Logger
 
@@ -10,35 +11,28 @@ from log import Logger
 class Summarizer:
     def __init__(self, env_file="key.env"):
         """
-        Initializes the Summarizer class with a specific model and configures the Groq API client.
+        Initializes the Summarizer class with a specific model and configures the llama.cpp client.
 
         Args:
-            env_file (str, optional): The environment file containing the API keys. Default is "key.env".
+            env_file (str, optional): The environment file containing the configuration. Default is "key.env".
             model (str, optional): The model to use for summarization. If not provided, defaults to the model set in the environment.
 
         Attributes:
-            model (str): The specified model for Groq.
-            client (Groq): Instance of the Groq client for API requests.
+            model_alias (str): The specified model alias for llama.cpp.
 
         Returns:
             None
 
         Raises:
-            KeyError: If the environment variables for the API keys cannot be found.
+            KeyError: If the environment variables cannot be found.
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
         dotenv.load_dotenv(env_file, override=True)
-        self.model = os.getenv(
-            "GROQ_MODEL_NAME", "llama-3.3-70b-versatile"
-        )  # Default to "llama-3.3-70b-versatile" if not set
-        self.low_model = os.getenv(
-            "GROQ_LOW_MODEL_NAME", "openai/gpt-oss-20b"
-        )  # Default to "openai/gpt-oss-20b" if not set
-        self.client = Groq()
+        self.model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
 
     def claim_title_summarize(self, text, max_tokens=1024, temperature=0.5, stop=None):
         """
-        Generates a summary for the given claim using the Groq API.
+        Generates a summary for the given claim using the llama.cpp server.
 
         Args:
             text (str): The text to summarize.
@@ -56,27 +50,49 @@ class Summarizer:
         self.logger.info("Input text: %s...", text[:200])
 
         try:
-            response = self.client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """You are an AI designed to rephrase a claim into a concise, specific, and highly searchable query. 
-                                                    Focus on preserving all critical details such as names, dates, locations, or key terms, but avoid unnecessary words. 
-                                                    Provide only the text without any additional formatting only add at the beginning !g""",
-                    },
-                    {"role": "user", "content": text},
-                ],
-                model=self.model,
-                temperature=temperature,
-                max_completion_tokens=max_tokens,
-                stop=stop,
+            client = ChatLlamaCppServer(
+                model=self.model_alias, temperature=temperature, max_tokens=max_tokens
             )
 
-            summary = response.choices[0].message.content
+            messages = [
+                SystemMessage(
+                    content="""You are an AI designed to rephrase a claim into a concise, specific, and highly searchable query. 
+                                                    Focus on preserving all critical details such as names, dates, locations, or key terms, but avoid unnecessary words. 
+                                                    Provide only the text without any additional formatting"""
+                ),
+                HumanMessage(content=text),
+            ]
+
+            response = client.invoke(messages, stop=stop)
+            summary = response.content
+
             if summary is None:
                 return None, 0
+
+            # Normalize possible list/dict responses into a single string
+            if isinstance(summary, list):
+                summary = " ".join(
+                    item if isinstance(item, str) else str(item) for item in summary
+                )
+            elif isinstance(summary, dict):
+                summary = str(summary)
+                # Normalize possible list/dict responses into a single string
+            if isinstance(summary, list):
+                summary = " ".join(
+                    item if isinstance(item, str) else str(item) for item in summary
+                )
+            elif isinstance(summary, dict):
+                summary = str(summary)
+
             summary = summary.strip()
-            tokens = response.usage.total_tokens if response.usage else 0
+
+            # Extract tokens if available in the response metadata
+            tokens = (
+                response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
+                if hasattr(response, "response_metadata")
+                else 0
+            )
+
             self.logger.info("Summarization completed successfully.")
             self.logger.info("Generated scraping summary: %s...", summary[:1000])
 
@@ -92,7 +108,6 @@ class Summarizer:
 
         Args:
             text (str): The text to be summarized.
-            model (str): The model to be used for generating the summary.
             temperature (float): Sampling temperature (default: 0.7).
             max_tokens (int): Maximum number of tokens for the summary (default: 100).
             stop (str or list): Stop sequence(s) for the model (default: None).
@@ -100,24 +115,36 @@ class Summarizer:
         Returns:
             str: The generated summary.
         """
-        response = self.client.chat.completions.create(
-            messages=[
-                {
-                    "role": "system",
-                    "content": """You are a summarizer, be specific. Don't use lists or bullet points. 
-                                                Provide only the string without specifying that it is a summary.
-                                                Translate in English.""",
-                },
-                {"role": "user", "content": text},
-            ],
-            model=self.low_model,
-            temperature=temperature,
-            max_completion_tokens=max_tokens,
-            stop=stop,
+        client = ChatLlamaCppServer(
+            model=self.model_alias, temperature=temperature, max_tokens=max_tokens
         )
-        summary = response.choices[0].message.content
-        tokens = response.usage.total_tokens if response.usage else 0
-        return (summary.strip(), tokens) if summary is not None else (None, 0)
+
+        messages = [
+            SystemMessage(
+                content="""You are a summarizer, be specific. Don't use lists or bullet points. 
+                                                Provide only the string without specifying that it is a summary.
+                                                Translate in English."""
+            ),
+            HumanMessage(content=text),
+        ]
+
+        response = client.invoke(messages, stop=stop)
+        summary = response.content
+        tokens = (
+            response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
+            if hasattr(response, "response_metadata")
+            else 0
+        )
+
+        if summary is None:
+            return None, 0
+
+        if isinstance(summary, list):
+            summary = " ".join(
+                item if isinstance(item, str) else str(item) for item in summary
+            )
+
+        return summary.strip(), tokens
 
     def summarize_texts(
         self,
