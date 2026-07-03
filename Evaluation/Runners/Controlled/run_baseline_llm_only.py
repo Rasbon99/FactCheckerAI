@@ -1,9 +1,9 @@
 import os
-import json
 import time
 import uuid
 import dotenv
-from groq import Groq
+from llamacpp_client import ChatLlamaCppServer, load_models, set_alias_map
+from langchain_core.messages import HumanMessage
 from log import Logger
 
 # --- Import Pipeline Components ---
@@ -14,15 +14,20 @@ from Database.data_entities import Claim, Answer
 # Load environment variables
 dotenv.load_dotenv("key.env", override=True)
 
+model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
+model_port = int(os.getenv("LLM_MODEL_PORT", "8080"))
+
+print(f"[Backend] Connecting to local llama.cpp server on port {model_port}...")
+set_alias_map({model_alias: model_port})
+load_models([model_alias])
+
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
 
-# Initialize Groq Client
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
+# Initialize llama.cpp configuration
+model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 
-client = Groq(api_key=GROQ_API_KEY)
 logger = Logger("LLM-Only-Baseline").get_logger()
 
 
@@ -39,15 +44,22 @@ def get_llm_only_verdict(
     CLAIM: {claim_text}
     {metadata_context}
     """
-    response = client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        model=GROQ_MODEL,
+
+    client = ChatLlamaCppServer(
+        model=model_alias,
         temperature=0.0,  # Zero temperature for maximum factual consistency
         max_tokens=200,
     )
 
-    result_text = response.choices[0].message.content
-    tokens_used = response.usage.total_tokens if response.usage else 0
+    messages = [HumanMessage(content=prompt)]
+    response = client.invoke(messages)
+
+    result_text = response.content
+    tokens_used = (
+        response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
+        if hasattr(response, "response_metadata")
+        else 0
+    )
 
     return result_text, tokens_used
 
@@ -56,7 +68,7 @@ def run_llm_baseline():
     # Initialize the Smart Dataset Manager
     dataset_manager = DatasetManager()
     active_dataset = dataset_manager.active_dataset
-    tracker_env_name = dataset_manager.get_tracker_dataset_name("ZeroShot")
+    tracker_env_name = dataset_manager.get_tracker_dataset_name("Controlled")
 
     # Define the exact NEI label to prevent LLM hallucination
     nei_label = (
@@ -72,7 +84,7 @@ def run_llm_baseline():
     logger.info(f"Starting Baseline 1 (LLM-Only) with {MAX_CLAIMS_TO_TEST} claims...")
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Using Metadata Context: {USE_METADATA}")
-    logger.info(f"Using Model: {GROQ_MODEL}")
+    logger.info(f"Using Model Alias: {model_alias}")
 
     successful_runs = 0
 
@@ -169,7 +181,7 @@ def run_llm_baseline():
 
             successful_runs += 1
 
-            # Sleep for 2 seconds to avoid hitting Groq API rate limits
+            # Sleep for 2 seconds to avoid overwhelming the local server
             time.sleep(2)
 
     except Exception as e:

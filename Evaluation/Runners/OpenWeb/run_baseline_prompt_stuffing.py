@@ -1,9 +1,9 @@
 import os
-import json
 import time
 import uuid
 import dotenv
-from groq import Groq
+from llamacpp_client import ChatLlamaCppServer, load_models, set_alias_map
+from langchain_core.messages import HumanMessage
 from log import Logger
 
 # --- Import Pipeline Components ---
@@ -15,17 +15,19 @@ from Database.data_entities import Claim, Answer
 # Load environment variables
 dotenv.load_dotenv("key.env", override=True)
 
+model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
+model_port = int(os.getenv("LLM_MODEL_PORT", "8080"))
+
+print(f"[Backend] Connecting to local llama.cpp server on port {model_port}...")
+set_alias_map({model_alias: model_port})
+load_models([model_alias])
+
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
 logger = Logger("PromptStuffing-OpenWeb").get_logger()
 
 # --- CONFIGURATION FLAG ---
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
-
-# Initialize Groq Client
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
-client = Groq(api_key=GROQ_API_KEY)
 
 
 def get_prompt_stuffing_verdict(
@@ -43,15 +45,22 @@ def get_prompt_stuffing_verdict(
 
     CLAIM: {claim_text}
     """
-    response = client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        model=GROQ_MODEL,
+
+    client = ChatLlamaCppServer(
+        model=model_alias,
         temperature=0.0,
         max_tokens=200,
     )
 
-    result_text = response.choices[0].message.content
-    tokens_used = response.usage.total_tokens if response.usage else 0
+    messages = [HumanMessage(content=prompt)]
+    response = client.invoke(messages)
+
+    result_text = response.content
+    tokens_used = (
+        response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
+        if hasattr(response, "response_metadata")
+        else 0
+    )
 
     return result_text, tokens_used
 
@@ -125,12 +134,12 @@ def run_prompt_stuffing_baseline_openweb():
                     return "No relevant articles could be scraped.", scraper_metrics
 
                 # --- API SAFETY VALVE FOR PROMPT STUFFING ---
-                # Groq limit is 12k tokens (~48,000 characters).
-                # We cap it safely at 35,000 characters so the prompt never crashes.
-                MAX_CHARS = 35000
+                # Local LLM context limit is typically 8k tokens (~32,000 characters).
+                # We cap it safely at 25,000 characters so the prompt never crashes.
+                MAX_CHARS = 25000
                 if len(combined_evidence) > MAX_CHARS:
                     logger.warning(
-                        f"Evidence massive ({len(combined_evidence)} chars). Truncating to {MAX_CHARS} to survive API limits."
+                        f"Evidence massive ({len(combined_evidence)} chars). Truncating to {MAX_CHARS} to survive context limits."
                     )
                     combined_evidence = (
                         combined_evidence[:MAX_CHARS]

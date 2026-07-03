@@ -2,7 +2,8 @@ import os
 import time
 import uuid
 import dotenv
-from groq import Groq
+from llamacpp_client import ChatLlamaCppServer, load_models, set_alias_map
+from langchain_core.messages import HumanMessage
 from rank_bm25 import BM25Okapi
 from log import Logger
 
@@ -15,6 +16,13 @@ from Database.data_entities import Claim, Answer
 # Load environment variables
 dotenv.load_dotenv("key.env", override=True)
 
+model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
+model_port = int(os.getenv("LLM_MODEL_PORT", "8080"))
+
+print(f"[Backend] Connecting to local llama.cpp server on port {model_port}...")
+set_alias_map({model_alias: model_port})
+load_models([model_alias])
+
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
 logger = Logger("BM25-OpenWeb").get_logger()
@@ -22,10 +30,8 @@ logger = Logger("BM25-OpenWeb").get_logger()
 # --- CONFIGURATION FLAG ---
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 
-# Initialize Groq Client
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
-client = Groq(api_key=GROQ_API_KEY)
+# Initialize llama.cpp configuration
+model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
 
 
 def simple_chunker(text, chunk_word_size=150):
@@ -51,15 +57,22 @@ def get_bm25_verdict(claim_text, best_evidence_string, prompt_instructions, nei_
 
     CLAIM: {claim_text}
     """
-    response = client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        model=GROQ_MODEL,
+
+    client = ChatLlamaCppServer(
+        model=model_alias,
         temperature=0.0,
         max_tokens=200,
     )
 
-    result_text = response.choices[0].message.content
-    tokens_used = response.usage.total_tokens if response.usage else 0
+    messages = [HumanMessage(content=prompt)]
+    response = client.invoke(messages)
+
+    result_text = response.content
+    tokens_used = (
+        response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
+        if hasattr(response, "response_metadata")
+        else 0
+    )
 
     return result_text, tokens_used
 

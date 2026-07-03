@@ -1,11 +1,11 @@
 import os
-import json
 import sqlite3
 import time
 import uuid
 import re
 import dotenv
-from groq import Groq
+from llamacpp_client import ChatLlamaCppServer, load_models, set_alias_map
+from langchain_core.messages import HumanMessage
 from log import Logger
 
 from Evaluation.Utils.experiment_tracker import ExperimentTracker
@@ -16,16 +16,21 @@ from rank_bm25 import BM25Okapi
 
 dotenv.load_dotenv("key.env", override=True)
 
+model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
+model_port = int(os.getenv("LLM_MODEL_PORT", "8080"))
+
+print(f"[Backend] Connecting to local llama.cpp server on port {model_port}...")
+set_alias_map({model_alias: model_port})
+load_models([model_alias])
+
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
 
 # --- CONFIGURATION FLAG ---
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 
-# Initialize Groq Client
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
-client = Groq(api_key=GROQ_API_KEY)
+# Initialize llama.cpp configuration
+model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
 logger = Logger("BM25-Baseline").get_logger()
 
 
@@ -47,17 +52,24 @@ def get_bm25_verdict(claim_text, retrieved_evidence, prompt_instructions, nei_la
 
     CLAIM: {claim_text}
     """
-    response = client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        model=GROQ_MODEL,
+
+    client = ChatLlamaCppServer(
+        model=model_alias,
         temperature=0.0,
         max_tokens=200,
     )
 
-    return (
-        response.choices[0].message.content,
-        response.usage.total_tokens if response.usage else 0,
+    messages = [HumanMessage(content=prompt)]
+    response = client.invoke(messages)
+
+    content = response.content
+    tokens = (
+        response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
+        if hasattr(response, "response_metadata")
+        else 0
     )
+
+    return content, tokens
 
 
 def run_bm25_baseline():
