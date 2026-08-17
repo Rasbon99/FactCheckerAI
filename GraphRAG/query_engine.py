@@ -29,7 +29,8 @@ class TokenTrackerCallback(BaseCallbackHandler):
 
 
 class QueryEngine:
-    def __init__(self, env_file="key.env", index_name="articles"):
+
+    def __init__(self, env_file="key.env", index_name="articles_nomic"):
         """
         Initializes the QueryEngine by setting up the environment variables, models, and Neo4j connection.
 
