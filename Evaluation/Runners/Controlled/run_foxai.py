@@ -238,7 +238,7 @@ def run_controlled_experiment():
 
             if not has_entities:
                 logger.info(
-                    "NER extracted 0 entities. Short-circuiting to prevent Neo4j/Ollama crash."
+                    "NER extracted 0 entities. Short-circuiting to prevent Neo4j crash."
                 )
                 predicted_label = "Error: No Entities"
                 query_result = f"VERDICT: {nei_label}\nREASONING: Evidence was provided, but the NER model failed to extract any entities to build a graph."

@@ -52,13 +52,12 @@ FOX AI follows a **microservices architecture** with an **object-oriented, pipel
 - **Backend**: Orchestrates the fact-checking pipeline and manages data persistence
 - **Dashboard**: Streamlit-based user interface for claim submission and result visualization
 - **Controller**: API Gateway managing inter-service communication and request routing
-- **Ollama Server**: Hosts local LLM and embedding models for fast inference
 - **Neo4j Database**: Stores and retrieves knowledge graphs for RAG operations
 
 ### Key Technologies
 
 - **Dashboard**: Built using **Streamlit** for intuitive user interfaces
-- **Large Language Models (LLMs)**: **Groq Cloud** (for high-speed inference) and **Ollama** (for local embeddings)
+- **Large Language Models (LLMs)**: **Groq Cloud** (for high-speed inference) and **Hugging Face** with the **Nomic** embedding model for local semantic retrieval
 - **GraphRAG Framework**: **Neo4j** for constructing and analyzing relational knowledge graphs
 - **Web Scraping**: **DuckDuckGo** + **BeautifulSoup** for reliable source retrieval
 - **Credibility Filtering**: **Iffy/MBFC** dataset for domain reliability assessment
@@ -177,19 +176,14 @@ source ~/.zshrc
 - Open Environment Variables
 - Add new System Variable with Neo4j bin path
 
-#### Step 3: Ollama Setup
+#### Step 3: Hugging Face Embedding Model Setup
 
-**Download & Install:**
-1. Visit [Ollama.com](https://ollama.com/) and download for your platform
-2. For Windows: Use WSL (Windows Subsystem for Linux)
+FOX AI uses the Hugging Face embedding model `nomic-ai/nomic-embed-text-v1.5` through `langchain_huggingface` for semantic retrieval.
 
-**Pull Required Models:**
-```bash
-# LLM for reasoning and response generation
-ollama pull phi3.5
+If you want to override the default model, set:
 
-# Embedding model for semantic search
-ollama pull nomic-embed-text
+```env
+EMBEDDING_MODEL_NAME=nomic-ai/nomic-embed-text-v1.5
 ```
 
 #### Step 4: Configure API Keys & Environment
@@ -207,18 +201,14 @@ In case of launching with Docker, set `DOCKER=true` and uncomment all variables 
 DOCKER=false
 
 # API URL Docker Version
-# OLLAMA_SERVER_URL=http://ollama:11434
 # NEO4J_SERVER_URL=http://neo4j:7474
-# OLLAMA_API_URL=http://ollama:11434
 # NEO4J_API_URL=http://neo4j:7474
 # BACKEND_API_URL=http://backend:8001
 # CONTROLLER_API_URL=http://controller:8003
 # NEO4J_URI=bolt://neo4j:7687
 
 # API URL Local Version
-OLLAMA_SERVER_URL=http://localhost:11434
 NEO4J_SERVER_URL=http://localhost:7474
-OLLAMA_API_URL=http://localhost:8000
 NEO4J_API_URL=http://localhost:8002
 BACKEND_API_URL=http://localhost:8001
 CONTROLLER_API_URL=http://localhost:8003
@@ -234,7 +224,6 @@ GRAPHS_PATH=Outputs/graphs
 ASSET_PATH=assets
 
 # GRAPHRAG VARIABLES
-MODEL_LLM_NEO4J=phi3.5:latest
 NEO4J_USERNAME=
 NEO4J_PASSWORD=
 
@@ -242,6 +231,9 @@ NEO4J_PASSWORD=
 GROQ_MODEL_NAME=llama-3.3-70b-versatile
 GROQ_LOW_MODEL_NAME=openai/gpt-oss-20b
 GROQ_API_KEY=
+
+# EMBEDDING VARIABLES
+EMBEDDING_MODEL_NAME=nomic-ai/nomic-embed-text-v1.5
 
 # EXPERIMENT VARIABLES
 EXPERIMENTS_EVIDENCES_PATH=Outputs/experiments_evidences
@@ -277,22 +269,21 @@ Automatically handled by the backend service on startup.
 
 FOX AI uses a **microservices architecture** and requires simultaneous execution of multiple services.
 
-### Local Setup (5 Terminals)
+### Local Setup (4 Terminals)
 
 **Prerequisites:**
 - Complete all [Installation](#installation) steps
 - Set `DOCKER=false` in `key.env`
 - Ensure all prerequisite services are installed
 
-**Open 5 separate terminals** and run these commands:
+**Open 4 separate terminals** and run these commands:
 
 | Terminal | Service | Command | Port |
 |----------|---------|---------|------|
-| 1 | Ollama Server | `python start_ollama_server.py` | 8000 |
-| 2 | Neo4j Database | `python start_neo4j_server.py` | 8002 |
-| 3 | Controller (API Gateway) | `python start_controller_server.py` | 8003 |
-| 4 | Backend Service | `python start_backend_server.py` | 8001 |
-| 5 | Dashboard (Streamlit) | `streamlit run Dashboard/dashboard.py` | 8501 |
+| 1 | Neo4j Database | `python start_neo4j_server.py` | 8002 |
+| 2 | Controller (API Gateway) | `python start_controller_server.py` | 8003 |
+| 3 | Backend Service | `python start_backend_server.py` | 8001 |
+| 4 | Dashboard (Streamlit) | `streamlit run Dashboard/dashboard.py` | 8501 |
 
 ### Verification
 
@@ -306,8 +297,8 @@ FOX AI uses a **microservices architecture** and requires simultaneous execution
 | Issue | Solution |
 |-------|----------|
 | Port Already in Use | Modify port numbers in configuration files or start scripts |
-| Service Connection Errors | Verify all 5 services started successfully; check logs |
-| Missing Models | Run `ollama pull phi3.5 && ollama pull nomic-embed-text` |
+| Service Connection Errors | Verify all 4 services started successfully; check logs |
+| Embedding Model Issues | Verify `EMBEDDING_MODEL_NAME=nomic-ai/nomic-embed-text-v1.5` and ensure the model can be downloaded from Hugging Face |
 | Database Errors | Run `python init_db.py` and verify Neo4j is running |
 | Import Errors | Ensure all packages installed: `pip install -r requirements.txt` |
 
@@ -464,9 +455,9 @@ The architecture follows a **microservices model** and consists of the following
 
 ### Supporting Components  
 
-To enhance functionality, the system integrates dedicated external servers:  
+To enhance functionality, the system integrates dedicated external services:  
 
-- **Ollama Server**: Executes the Large Language Model (LLM) for analyzing news and generating responses based on retrieved sources.  
+- **Hugging Face Nomic Embeddings**: Provide local semantic embeddings through `nomic-ai/nomic-embed-text-v1.5` for retrieval and similarity search.  
 - **Neo4j Console**: Handles the graph database, modeling relationships between sources to verify credibility.  
 
 The system leverages **Groq Cloud APIs** and local lightweight models for efficient computation, balancing performance with resource requirements.  
@@ -544,7 +535,7 @@ Once the data is ingested, the **Query Engine** manages the key steps of the RAG
 - **Encoding**: The retrieved data is encoded into a format that the LLM can process effectively.
 - **Generating**: A response is generated by the LLM based on the encoded data, producing a coherent and contextually relevant output.
 
-The encoding step is performed locally using a lighter embedding model, such as `phi3.5:latest`, available through the Ollama platform. The **retriever** utilizes Neo4j alongside the embedding model to search for and retrieve relevant information that matches the user's query. For response generation, the `llama-3.3-70b-versatile` model is used, accessed via the Groq Cloud platform. At the beginning of each execution, a cleanup of the GraphDB is performed to ensure that old information does not interfere with the new context of the response.
+The encoding step is performed locally using the Hugging Face `nomic-ai/nomic-embed-text-v1.5` embedding model through `langchain_huggingface`. The **retriever** utilizes Neo4j alongside the embedding model to search for and retrieve relevant information that matches the user's query. For response generation, the `llama-3.3-70b-versatile` model is used, accessed via the Groq Cloud platform. At the beginning of each execution, a cleanup of the GraphDB is performed to ensure that old information does not interfere with the new context of the response.
 
 #### RAG Pipeline
 
@@ -661,7 +652,7 @@ This project was developed as an academic research initiative. We would like to 
 The Open-Web architecture of FOX AI utilizes the open-source **Iffy.news Index**, which is powered by data rigorously curated by **Media Bias/Fact Check (MBFC)**. We thank them for their dedication to tracking domain credibility and combating web disinformation.
 
 **Core Technologies:**
-This architecture was made possible by incredible open-source and developer tools, including **Neo4j** for GraphRAG modeling, **Ollama** for local embeddings, **Groq Cloud** for rapid LLM inference, and **Streamlit** for the frontend dashboard.
+This architecture was made possible by incredible open-source and developer tools, including **Neo4j** for GraphRAG modeling, **Hugging Face** with the **Nomic** embedding model for local semantic retrieval, **Groq Cloud** for rapid LLM inference, and **Streamlit** for the frontend dashboard.
 
 ---
 

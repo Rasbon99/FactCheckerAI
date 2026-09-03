@@ -1,5 +1,4 @@
 import os
-import json
 import time
 import uuid
 import dotenv
@@ -10,13 +9,14 @@ from log import Logger
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.vectorstores import InMemoryVectorStore
-from langchain_ollama import OllamaEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.experiment_tracker import ExperimentTracker
 from Evaluation.Utils.dataset_manager import DatasetManager
 from WebScraper.scraper import Scraper
 from Database.data_entities import Claim, Answer
+from Utils.nomic_embedding import get_embedding_model
 
 # Load environment variables
 dotenv.load_dotenv("key.env", override=True)
@@ -78,8 +78,13 @@ def run_hybrid_rag_baseline_openweb():
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Using Metadata Super Query: {USE_METADATA}")
 
-    logger.info("Loading Ollama Embeddings (This takes a few seconds)...")
-    embeddings = OllamaEmbeddings(model="nomic-embed-text")
+    logger.info(
+        "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
+    )
+    embedding_model_name = os.getenv(
+        "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
+    )
+    embeddings = get_embedding_model(embedding_model_name)
 
     successful_runs = 0
 
@@ -139,9 +144,7 @@ def run_hybrid_rag_baseline_openweb():
                             )
                         )
 
-                logger.info(
-                    f"Scraped {len(docs)} pages. Chunking and embedding with Ollama..."
-                )
+                logger.info(f"Scraped {len(docs)} pages. Chunking and embedding...")
 
                 # Step B: Split the massive pages into clean, overlapping paragraphs
                 text_splitter = RecursiveCharacterTextSplitter(

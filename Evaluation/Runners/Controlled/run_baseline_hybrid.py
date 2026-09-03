@@ -12,14 +12,15 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
 from langchain.retrievers.document_compressors import EmbeddingsFilter
 from langchain.retrievers import ContextualCompressionRetriever
-from langchain_ollama import OllamaEmbeddings
 from langchain_community.retrievers import BM25Retriever
+from langchain_huggingface import HuggingFaceEmbeddings
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.experiment_tracker import ExperimentTracker
 from Evaluation.Utils.dataset_manager import DatasetManager
 from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
 from Database.data_entities import Claim, Answer
+from Utils.nomic_embedding import get_embedding_model
 
 dotenv.load_dotenv("key.env", override=True)
 
@@ -119,8 +120,13 @@ def run_hybrid_baseline():
     # ---------------------------------------------------------
     # 2. CONFIGURE THE RETRIEVAL PIPELINE BASED ON DATASET
     # ---------------------------------------------------------
-    logger.info("Loading Ollama Embeddings (This takes a few seconds)...")
-    embeddings = OllamaEmbeddings(model="nomic-embed-text")
+    logger.info(
+        "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
+    )
+    embedding_model_name = os.getenv(
+        "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
+    )
+    embeddings = get_embedding_model(embedding_model_name)
     embeddings_filter = EmbeddingsFilter(embeddings=embeddings, k=2)
 
     hybrid_rag_retriever = None
@@ -174,7 +180,7 @@ def run_hybrid_baseline():
             )
 
             # --- THE RETRIEVAL STEP ---
-            logger.info("Extracting and Re-ranking with Ollama...")
+            logger.info("Extracting and Re-ranking...")
 
             def run_retrieval():
                 if active_dataset == "FEVER":
@@ -223,7 +229,7 @@ def run_hybrid_baseline():
                     bm25_retriever = BM25Retriever.from_documents(docs)
                     bm25_retriever.k = 50
 
-                    # 3. STAGE 2: Heavy Semantic Re-ranking (Filter 50 down to 2 using Ollama)
+                    # 3. STAGE 2: Heavy Semantic Re-ranking (Filter 50 down to 2)
                     compression_retriever = ContextualCompressionRetriever(
                         base_compressor=embeddings_filter, base_retriever=bm25_retriever
                     )
