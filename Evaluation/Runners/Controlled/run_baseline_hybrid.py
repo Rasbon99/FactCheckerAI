@@ -182,7 +182,7 @@ def run_hybrid_baseline():
             )
 
             # --- THE RETRIEVAL STEP ---
-            logger.info("Extracting and Re-ranking with Ollama...")
+            logger.info("Extracting and Re-ranking...")
 
             def run_retrieval():
                 if active_dataset == "FEVER":
@@ -231,7 +231,7 @@ def run_hybrid_baseline():
                     bm25_retriever = BM25Retriever.from_documents(docs)
                     bm25_retriever.k = 50
 
-                    # 3. STAGE 2: Heavy Semantic Re-ranking (Filter 50 down to 2 using Ollama)
+                    # 3. STAGE 2: Heavy Semantic Re-ranking (Filter 50 down to 2)
                     compression_retriever = ContextualCompressionRetriever(
                         base_compressor=embeddings_filter, base_retriever=bm25_retriever
                     )

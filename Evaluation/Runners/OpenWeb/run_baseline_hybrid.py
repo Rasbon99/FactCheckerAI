@@ -147,9 +147,7 @@ def run_hybrid_rag_baseline_openweb():
                             )
                         )
 
-                logger.info(
-                    f"Scraped {len(docs)} pages. Chunking and embedding with Ollama..."
-                )
+                logger.info(f"Scraped {len(docs)} pages. Chunking and embedding...")
 
                 # Step B: Split the massive pages into clean, overlapping paragraphs
                 text_splitter = RecursiveCharacterTextSplitter(
