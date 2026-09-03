@@ -13,7 +13,9 @@ services:
       - neo4j_data:/data
 
   backend:
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile.gpu
     command: /bin/sh -c "python init_db.py && uvicorn backend:backend_app --host 0.0.0.0 --port 8001"
     ports:
       - "8001:8001"
@@ -27,9 +29,18 @@ services:
       - ./data:/app/data
       - ./assets:/app/assets
       - hf_cache:/app/hf_cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   controller:
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile.gpu
     command: uvicorn controller:app --host 0.0.0.0 --port 8003
     ports:
       - "8003:8003"
