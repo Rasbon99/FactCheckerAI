@@ -1,5 +1,4 @@
 import os
-import json
 import time
 import uuid
 import dotenv
@@ -17,6 +16,7 @@ from Evaluation.Utils.experiment_tracker import ExperimentTracker
 from Evaluation.Utils.dataset_manager import DatasetManager
 from WebScraper.scraper import Scraper
 from Database.data_entities import Claim, Answer
+from Utils.nomic_embedding import get_embedding_model
 
 # Load environment variables
 dotenv.load_dotenv("key.env", override=True)
@@ -84,10 +84,7 @@ def run_hybrid_rag_baseline_openweb():
     embedding_model_name = os.getenv(
         "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
     )
-    embeddings = HuggingFaceEmbeddings(
-        model_name=embedding_model_name,
-        encode_kwargs={"normalize_embeddings": True},
-    )
+    embeddings = get_embedding_model(embedding_model_name)
 
     successful_runs = 0
 

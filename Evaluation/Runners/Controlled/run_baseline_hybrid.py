@@ -20,6 +20,7 @@ from Evaluation.Utils.experiment_tracker import ExperimentTracker
 from Evaluation.Utils.dataset_manager import DatasetManager
 from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
 from Database.data_entities import Claim, Answer
+from Utils.nomic_embedding import get_embedding_model
 
 dotenv.load_dotenv("key.env", override=True)
 
@@ -125,10 +126,7 @@ def run_hybrid_baseline():
     embedding_model_name = os.getenv(
         "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
     )
-    embeddings = HuggingFaceEmbeddings(
-        model_name=embedding_model_name,
-        encode_kwargs={"normalize_embeddings": True},
-    )
+    embeddings = get_embedding_model(embedding_model_name)
     embeddings_filter = EmbeddingsFilter(embeddings=embeddings, k=2)
 
     hybrid_rag_retriever = None
