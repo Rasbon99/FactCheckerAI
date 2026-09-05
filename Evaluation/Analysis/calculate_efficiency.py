@@ -3,7 +3,7 @@ import pandas as pd
 from Database.sqldb import Database
 from log import Logger
 
-logger = Logger("calculate_efficiency").get_logger()
+logger = Logger("efficiency").get_logger()
 
 
 def calculate_efficiency():
@@ -11,12 +11,14 @@ def calculate_efficiency():
 
     db = Database()
 
-    # 1. Pull all the efficiency metrics from the database
+    # Pull all the efficiency metrics AND the grouping columns from the database
+    # (Note: I updated graph_rag to generation here based on your database logs!)
     query = """
         SELECT 
-            latency_preprocessor, latency_retrieval, latency_graph_rag,
-            tokens_preprocessor, tokens_retrieval, tokens_graph_rag,
-            calls_preprocessor, calls_retrieval, calls_graph_rag
+            system_type, dataset_setting,
+            latency_preprocessor, latency_retrieval, latency_generation,
+            tokens_preprocessor, tokens_retrieval, tokens_generation,
+            calls_preprocessor, calls_retrieval, calls_generation
         FROM experiments
     """
 
@@ -28,71 +30,75 @@ def calculate_efficiency():
 
     if not rows:
         logger.warning(
-            "No valid experiment data found! Have you run the open web evaluation yet?"
+            "No valid experiment data found! Have you run any evaluations yet?"
         )
         return
 
     logger.info(f"Successfully loaded {len(rows)} fact-checking trials.")
 
-    # 2. Convert to Pandas DataFrame
+    # Convert to Pandas DataFrame
     df = pd.DataFrame([dict(row) for row in rows])
 
-    # 3. Calculate the 'Total Pipeline' metrics for each claim
+    # Calculate the 'Total Pipeline' metrics for each claim
     df["total_latency"] = (
-        df["latency_preprocessor"] + df["latency_retrieval"] + df["latency_graph_rag"]
+        df["latency_preprocessor"] + df["latency_retrieval"] + df["latency_generation"]
     )
     df["total_tokens"] = (
-        df["tokens_preprocessor"] + df["tokens_retrieval"] + df["tokens_graph_rag"]
+        df["tokens_preprocessor"] + df["tokens_retrieval"] + df["tokens_generation"]
     )
     df["total_calls"] = (
-        df["calls_preprocessor"] + df["calls_retrieval"] + df["calls_graph_rag"]
+        df["calls_preprocessor"] + df["calls_retrieval"] + df["calls_generation"]
     )
 
-    # 4. Print the beautifully formatted Academic Table
-    logger.info("=" * 75)
-    logger.info("RQ2: EFFICIENCY METRICS (Averages per Claim)")
-    logger.info("=" * 75)
+    # =========================================================
+    # MULTI-SYSTEM EFFICIENCY REPORT
+    # =========================================================
 
-    # Helper function to print a row nicely
-    def print_stage_metrics(stage_name, latency_col, token_col, call_col):
-        avg_lat = df[latency_col].mean()
-        avg_tok = df[token_col].mean()
-        avg_cal = df[call_col].mean()
-        logger.info(
-            f"{stage_name:<25} | {avg_lat:>9.2f} sec | {avg_tok:>10.1f} tokens | {avg_cal:>6.1f} calls"
+    # Group the dataframe by the specific system and dataset
+    grouped_experiments = df.groupby(["system_type", "dataset_setting"])
+
+    for (sys_type, ds_setting), group in grouped_experiments:
+        logger.info(f"SYSTEM: {sys_type}")
+        logger.info(f"DATASET: {ds_setting}")
+        logger.info(f"SAMPLE SIZE: {len(group)} claims")
+
+        # Build the table as a single formatted string (just like classification_report)
+        table = "\n"
+        table += f"{'STAGE':<28} {'LATENCY':>12} {'TOKENS':>12} {'CALLS':>8}\n"
+        table += "-" * 63 + "\n"
+
+        def get_row(stage_name, lat_col, tok_col, call_col):
+            avg_lat = group[lat_col].mean()
+            avg_tok = group[tok_col].mean()
+            avg_cal = group[call_col].mean()
+            return f"{stage_name:<28} {avg_lat:>8.2f} sec {avg_tok:>12.1f} {avg_cal:>8.1f}\n"
+
+        # Stage Rows
+        table += get_row(
+            "1. Preprocessor",
+            "latency_preprocessor",
+            "tokens_preprocessor",
+            "calls_preprocessor",
+        )
+        table += get_row(
+            "2. Retrieval", "latency_retrieval", "tokens_retrieval", "calls_retrieval"
+        )
+        table += get_row(
+            "3. Generation/Verification",
+            "latency_generation",
+            "tokens_generation",
+            "calls_generation",
+        )
+        table += "-" * 63 + "\n"
+
+        # Total Row
+        table += get_row(
+            "TOTAL END-TO-END", "total_latency", "total_tokens", "total_calls"
         )
 
-    # Table Header
-    logger.info(f"{'STAGE':<25} | {'LATENCY':>13} | {'TOKENS':>17} | {'CALLS':>12}")
-    logger.info("-" * 75)
-
-    # Stage Rows
-    print_stage_metrics(
-        "1. Preprocessor",
-        "latency_preprocessor",
-        "tokens_preprocessor",
-        "calls_preprocessor",
-    )
-    print_stage_metrics(
-        "2. Retrieval (Web Scraping)",
-        "latency_retrieval",
-        "tokens_retrieval",
-        "calls_retrieval",
-    )
-    print_stage_metrics(
-        "3. GraphRAG Verification",
-        "latency_graph_rag",
-        "tokens_graph_rag",
-        "calls_graph_rag",
-    )
-    logger.info("-" * 75)
-
-    # Total Row
-    print_stage_metrics(
-        "TOTAL END-TO-END", "total_latency", "total_tokens", "total_calls"
-    )
-
-    logger.info("=" * 75)
+        # Log the entire table at once
+        logger.info(table)
+        logger.info("=" * 30)
 
 
 if __name__ == "__main__":
