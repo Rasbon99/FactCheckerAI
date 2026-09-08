@@ -16,7 +16,7 @@ def calculate_effectiveness():
     query = """
         SELECT system_type, dataset_setting, ground_truth, predicted_label 
         FROM experiments 
-        WHERE ground_truth IS NOT NULL AND ground_truth != ''
+        WHERE ground_truth IS NOT NULL AND ground_truth NOT IN ('', 'Not Provided')
     """
 
     try:
