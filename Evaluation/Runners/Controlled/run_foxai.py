@@ -15,7 +15,7 @@ from GraphRAG.rag_pipeline import RAG_Pipeline
 from Database.data_entities import Claim, Answer
 
 # Load environment variables
-dotenv.load_dotenv("key.env", override=True)
+dotenv.load_dotenv("key.env", override=False)
 
 MAX_CLAIMS_TO_TEST = 5
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"

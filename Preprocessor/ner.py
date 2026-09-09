@@ -16,7 +16,7 @@ class NER:
             env_file (str, optional): The path to the environment file containing API keys. Default is "key.env".
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
-        dotenv.load_dotenv(env_file, override=True)
+        dotenv.load_dotenv(env_file, override=False)
         self.model = os.getenv(
             "GROQ_MODEL_NAME", "llama-3.3-70b-versatile"
         )  # Default to "llama-3.3-70b-versatile" if not set

@@ -20,7 +20,7 @@ class Database:
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
         try:
-            dotenv.load_dotenv(env_file, override=True)
+            dotenv.load_dotenv(env_file, override=False)
             self.db_file = os.environ["SQLDB_PATH"]
             self.assets_dir = os.environ["ASSET_PATH"]
             self.experiments_dir = os.environ["EXPERIMENTS_EVIDENCES_PATH"]

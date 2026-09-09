@@ -23,7 +23,7 @@ class Preprocessing_Pipeline:
         Raises:
             KeyError: If the environment variables for the API keys cannot be found.
         """
-        dotenv.load_dotenv(env_file, override=True)
+        dotenv.load_dotenv(env_file, override=False)
 
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.ner = NER()
