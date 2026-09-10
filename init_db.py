@@ -60,7 +60,7 @@ def initialize_database_schema(db: Database | None = None):
             system_type TEXT,       -- e.g., "GraphRAG", "HybridRAG", "SparseRAG", "LLM-Only"
             environment TEXT,       -- e.g., "openweb", "controlled"
             dataset_name TEXT,      -- e.g., "FEVER", "AVERITEC"
-            experiment_name TEXT,   -- e.g., "standard", "missing", "noisy", "conflicting"
+            experiment_type TEXT,   -- e.g., "standard", "missing", "noisy", "conflicting"
             
             -- Latency Metrics (Seconds)
             latency_preprocessor REAL,

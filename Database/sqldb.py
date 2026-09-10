@@ -102,10 +102,6 @@ class Database:
         Raises:
             sqlite3.DatabaseError: If there is an error during query execution.
         """
-        masked_params = [
-            param if not isinstance(param, (bytes, bytearray)) else "BLOB"
-            for param in params
-        ]
         self.logger.info("Executing query: %s", query)
 
         try:
