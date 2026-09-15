@@ -19,10 +19,10 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
 
 client = Groq(api_key=GROQ_API_KEY)
-logger = Logger("LLM-Only-Baseline").get_logger()
+logger = Logger("ClosedBook-Baseline").get_logger()
 
 
-def get_llm_only_verdict(
+def get_closed_book_verdict(
     claim_text, prompt_instructions, nei_label, metadata_context=""
 ):
     """Asks the LLM to verify the claim using ONLY its internal weights, providing context if available."""
@@ -48,11 +48,10 @@ def get_llm_only_verdict(
     return result_text, tokens_used
 
 
-def run_llm_baseline():
+def run_closed_book_baseline():
     dataset_manager = DatasetManager()
 
-    # Extract the new 4-column metadata
-    metadata = dataset_manager.get_experiment_metadata(environment="controlled")
+    metadata = dataset_manager.get_experiment_metadata(environment="closed_book")
     active_dataset = metadata["dataset_name"]
 
     nei_label = (
@@ -65,7 +64,9 @@ def run_llm_baseline():
         "citing the provided evidence", "based on your internal knowledge"
     )
 
-    logger.info(f"Starting Baseline (LLM-Only) with {MAX_CLAIMS_TO_TEST} claims...")
+    logger.info(
+        f"Starting Baseline (Closed-Book / LLM-Only) with {MAX_CLAIMS_TO_TEST} claims..."
+    )
     logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Experiment Type: {metadata['experiment_type']}")
@@ -111,14 +112,14 @@ def run_llm_baseline():
 
             Claim(
                 text=claim_text,
-                title="[LLM-Only] " + claim_text[:30] + "...",
+                title="[ClosedBook] " + claim_text[:30] + "...",
                 summary="Tested without any external evidence.",
                 claim_id=claim_id,
             )
 
             # --- GENERATION STEP ---
             t0 = time.time()
-            query_result, tokens_used = get_llm_only_verdict(
+            query_result, tokens_used = get_closed_book_verdict(
                 claim_text, prompt_instructions, nei_label, metadata_context
             )
             latency_generation = time.time() - t0
@@ -136,7 +137,7 @@ def run_llm_baseline():
             except Exception:
                 predicted_label = "Parsing Error"
 
-            logger.info(f"LLM Verdict: {predicted_label}")
+            logger.info(f"Closed-Book Verdict: {predicted_label}")
 
             Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
 
@@ -157,7 +158,7 @@ def run_llm_baseline():
                     "raw_sources": [],
                     "query_result": query_result,
                 },
-                system_type="LLM-Only",
+                system_type="ClosedBook",
                 environment=metadata["environment"],
                 dataset_name=metadata["dataset_name"],
                 experiment_type=metadata["experiment_type"],
@@ -171,10 +172,10 @@ def run_llm_baseline():
         logger.error(f"Error during execution: {e}")
 
     logger.info("=" * 20)
-    logger.info("LLM-ONLY BASELINE COMPLETE!")
+    logger.info("CLOSED-BOOK BASELINE COMPLETE!")
     logger.info(f"Successfully processed: {successful_runs}")
     logger.info("=" * 20)
 
 
 if __name__ == "__main__":
-    run_llm_baseline()
+    run_closed_book_baseline()
