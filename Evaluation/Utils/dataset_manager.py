@@ -101,7 +101,7 @@ class DatasetManager:
         """
         dataset_name = self.active_dataset
 
-        experiment_type = os.getenv("experiment_type", "").strip().lower()
+        experiment_type = os.getenv("EXPERIMENT_TYPE", "").strip().lower()
         if not experiment_type:
             experiment_type = "standard"
 
