@@ -14,7 +14,7 @@ def calculate_effectiveness():
     db = Database()
 
     query = """
-        SELECT system_type, dataset_setting, ground_truth, predicted_label 
+        SELECT system_type, environment, dataset_name, experiment_type, ground_truth, predicted_label 
         FROM experiments 
         WHERE ground_truth IS NOT NULL AND ground_truth NOT IN ('', 'Not Provided')
     """
@@ -37,7 +37,7 @@ def calculate_effectiveness():
     # 3. Convert the SQLite rows into a Pandas DataFrame
     df = pd.DataFrame([dict(row) for row in rows])
 
-    # Standardize BOTH columns to uppercase
+    # Standardize BOTH columns to uppercase to avoid case-mismatch errors
     df["ground_truth"] = df["ground_truth"].apply(lambda x: str(x).strip().upper())
     df["predicted_label"] = df["predicted_label"].apply(
         lambda x: str(x).strip().upper()
@@ -47,12 +47,13 @@ def calculate_effectiveness():
     # MULTI-SYSTEM COMPARISON REPORT
     # =========================================================
 
-    # Group the dataframe by the specific system and dataset
-    grouped_experiments = df.groupby(["system_type", "dataset_setting"])
+    grouped_experiments = df.groupby(
+        ["system_type", "dataset_name", "environment", "experiment_type"]
+    )
 
-    for (sys_type, ds_setting), group in grouped_experiments:
+    for (sys_type, ds_name, env, exp_type), group in grouped_experiments:
         logger.info(f"SYSTEM: {sys_type}")
-        logger.info(f"DATASET: {ds_setting}")
+        logger.info(f"DATASET: {ds_name} | ENV: {env} | EXP TYPE: {exp_type}")
         logger.info(f"SAMPLE SIZE: {len(group)} claims")
 
         y_true = group["ground_truth"].tolist()
@@ -62,33 +63,49 @@ def calculate_effectiveness():
         acc = accuracy_score(y_true, y_pred)
         logger.info(f"Overall Accuracy: {acc:.4f} ({acc*100:.2f}%)")
 
-        if "AVERITEC" in str(ds_setting).upper():
+        dataset_upper = str(ds_name).upper()
+        if "AVERITEC" in dataset_upper:
             expected_labels = [
                 "SUPPORTED",
                 "REFUTED",
                 "NOT ENOUGH EVIDENCE",
                 "CONFLICTING EVIDENCE/CHERRY-PICKING",
             ]
-        elif "FEVER" in str(ds_setting).upper():
+        elif "FEVER" in dataset_upper:
             expected_labels = ["SUPPORTS", "REFUTES", "NOT ENOUGH INFO"]
         else:
             expected_labels = sorted(list(set(y_true + y_pred)))
 
-        for pred in set(y_pred):
-            if pred not in expected_labels:
-                expected_labels.append(pred)
+        # Clean the predictions and track hallucinations
+        cleaned_y_pred = []
+        hallucinated_labels = set()
+
+        for pred in y_pred:
+            if pred in expected_labels:
+                cleaned_y_pred.append(pred)
+            else:
+                cleaned_y_pred.append("INVALID_PREDICTION")
+                hallucinated_labels.add(pred)
 
         # Generate the detailed per-label report
         report = classification_report(
             y_true,
-            y_pred,
+            cleaned_y_pred,
             labels=expected_labels,
             zero_division=0,
         )
 
         logger.info("Per-Label Breakdown:")
         logger.info("\n%s", report)
-        logger.info("=" * 30)
+
+        if hallucinated_labels:
+            invalid_count = cleaned_y_pred.count("INVALID_PREDICTION")
+            logger.warning(
+                f"⚠️ This system produced {invalid_count} invalid/unstructured responses."
+            )
+            logger.warning(f"Raw Invalid Labels Caught: {hallucinated_labels}")
+
+        logger.info("=" * 20)
 
 
 if __name__ == "__main__":
