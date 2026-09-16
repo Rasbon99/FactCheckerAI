@@ -23,11 +23,6 @@ def run_experiment():
     metadata = dataset_manager.get_experiment_metadata()
 
     prompt_instructions = dataset_manager.get_prompt_instructions()
-    nei_label = (
-        "NOT ENOUGH INFO"
-        if metadata["dataset_name"] == "FEVER"
-        else "Not Enough Evidence"
-    )
 
     logger.info(
         f"Starting FoxAI GraphRAG (Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
@@ -61,7 +56,6 @@ def run_experiment():
                 "text": claim_text,
                 "search_query": search_query,
                 "prompt_instructions": prompt_instructions,
-                "nei_label": nei_label,
             }
 
             try:

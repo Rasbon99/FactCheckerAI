@@ -197,6 +197,13 @@ def run_controlled_experiment():
             t0 = time.time()
             prep_data, prep_claim_metrics = preprocessor.run_claim_pipe(claim_text)
             claim_title, claim_summary = prep_data
+
+            # SAFETY FALLBACK: If LLM fails to summarize, use the raw claim text
+            if not claim_title:
+                claim_title = f"!g {claim_text[:50]}..."
+            if not claim_summary:
+                claim_summary = claim_text
+
             latencies["preprocessor"] = time.time() - t0
             tokens["preprocessor"] = prep_claim_metrics.get("total", 0)
             calls["preprocessor"] = prep_claim_metrics.get("calls", 0)

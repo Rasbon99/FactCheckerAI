@@ -30,11 +30,10 @@ def clean_query_for_fts(text):
     return re.sub(r"[^a-zA-Z0-9\s]", "", text).strip()
 
 
-def get_bm25_verdict(claim_text, retrieved_evidence, prompt_instructions, nei_label):
+def get_bm25_verdict(claim_text, retrieved_evidence, prompt_instructions):
     """Asks the LLM to verify the claim using the BM25 retrieved text."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
-    If the evidence does not contain enough information to make a definitive decision, answer exactly: {nei_label}.
 
     {prompt_instructions}
 
@@ -64,9 +63,6 @@ def run_sparse_baseline():
     active_dataset = metadata["dataset_name"]
 
     prompt_instructions = dataset_manager.get_prompt_instructions()
-    nei_label = (
-        "NOT ENOUGH INFO" if active_dataset == "FEVER" else "Not Enough Evidence"
-    )
 
     logger.info(f"Starting Baseline (Sparse/BM25) with {MAX_CLAIMS_TO_TEST} claims...")
     logger.info(f"Environment: {metadata['environment']}")
@@ -191,12 +187,15 @@ def run_sparse_baseline():
             # --- THE GENERATION STEP ---
             t0 = time.time()
             query_result, toks = get_bm25_verdict(
-                claim_text, combined_evidence, prompt_instructions, nei_label
+                claim_text, combined_evidence, prompt_instructions
             )
             latency_generation = time.time() - t0
 
             try:
-                if query_result and "VERDICT:" in query_result:
+                if not query_result or not query_result.strip():
+                    predicted_label = "Error: Empty LLM Response"
+                    query_result = "The LLM failed to generate a response."
+                elif "VERDICT:" in query_result:
                     predicted_label = (
                         query_result.split("REASONING:")[0]
                         .replace("VERDICT:", "")

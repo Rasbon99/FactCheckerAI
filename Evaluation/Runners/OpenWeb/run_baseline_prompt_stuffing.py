@@ -26,12 +26,11 @@ client = Groq(api_key=GROQ_API_KEY)
 
 
 def get_prompt_stuffing_verdict(
-    claim_text, massive_evidence_string, prompt_instructions, nei_label
+    claim_text, massive_evidence_string, prompt_instructions
 ):
     """Asks the LLM to verify the claim using the massive wall of scraped text."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
-    If the evidence does not contain enough information to make a definitive decision, answer exactly: {nei_label}.
 
     {prompt_instructions}
 
@@ -59,9 +58,6 @@ def run_prompt_stuffing_baseline_openweb():
     active_dataset = metadata["dataset_name"]
 
     prompt_instructions = dataset_manager.get_prompt_instructions()
-    nei_label = (
-        "NOT ENOUGH INFO" if active_dataset == "FEVER" else "Not Enough Evidence"
-    )
 
     logger.info(
         f"Starting Baseline (Prompt Stuffing - Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
@@ -134,13 +130,16 @@ def run_prompt_stuffing_baseline_openweb():
             # --- 2. Generation (The LLM Call) ---
             t0 = time.time()
             query_result, tokens_used = get_prompt_stuffing_verdict(
-                claim_text, best_evidence, prompt_instructions, nei_label
+                claim_text, best_evidence, prompt_instructions
             )
             latency_generation = time.time() - t0
 
             # --- 3. Verdict Parsing ---
             try:
-                if query_result and "VERDICT:" in query_result:
+                if not query_result or not query_result.strip():
+                    predicted_label = "Error: Empty LLM Response"
+                    query_result = "The LLM failed to generate a response."
+                elif "VERDICT:" in query_result:
                     predicted_label = (
                         query_result.split("REASONING:")[0]
                         .replace("VERDICT:", "")

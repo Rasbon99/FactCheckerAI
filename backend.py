@@ -18,7 +18,6 @@ class InputText(BaseModel):
     text: str
     search_query: Optional[str] = None
     prompt_instructions: Optional[str] = None
-    nei_label: Optional[str] = "NOT ENOUGH INFO"
 
 
 @backend_app.post("/run_pipeline")
@@ -39,6 +38,13 @@ def process_text(input_text: InputText):
 
     prep_data, prep_claim_metrics = preprocessor.run_claim_pipe(text)
     claim_title, claim_summary = prep_data
+
+    # SAFETY FALLBACK: If LLM fails to summarize, use the raw claim text
+    if not claim_title:
+        claim_title = f"!g {text[:50]}..."
+    if not claim_summary:
+        claim_summary = text
+
     latencies["preprocessor"] = time.time() - t0
 
     tokens["preprocessor"] = prep_claim_metrics.get("total", 0)
@@ -71,7 +77,6 @@ def process_text(input_text: InputText):
         claim.text,
         claim.id,
         prompt_instructions=input_text.prompt_instructions,
-        nei_label=input_text.nei_label or "NOT ENOUGH INFO",
     )
     latencies["generation"] = time.time() - t0
 
