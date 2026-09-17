@@ -17,8 +17,9 @@ class NER:
             env_file (str, optional): The path to the environment file containing configuration. Default is "key.env".
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
-        dotenv.load_dotenv(env_file, override=True)
         self.model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
+
+        dotenv.load_dotenv(env_file, override=False)
 
     def extract_entities_and_topic(
         self, text, max_tokens=1024, temperature=0.5, stop=None
@@ -33,12 +34,11 @@ class NER:
             stop (list, optional): A list of stop sequences for the model to terminate at. Default is None.
 
         Returns:
-            dict: A dictionary containing the topic and a list of entities extracted from the text.
-        Raises:
-            json.JSONDecodeError: If the API response cannot be parsed as JSON.
-            Exception: If an error occurs during the API call or entity extraction.
+            tuple: (dict containing topic/entities or None, tokens_used)
         """
         self.logger.info("Starting entity and topic extraction process.")
+        tokens = 0  # Initialize early so it isn't lost during an exception
+
         try:
             client = ChatLlamaCppServer(
                 model=self.model_alias, temperature=temperature, max_tokens=max_tokens
@@ -75,9 +75,11 @@ class NER:
             )
 
             return json.loads(result), tokens
+
         except (json.JSONDecodeError, Exception) as e:
             self.logger.error("Error extracting topic and entities: %s", e)
-            return None, 0
+            # Return the tokens even if JSON parsing failed!
+            return None, tokens
 
     def find_similar_entities_globally(
         self, entities, max_tokens=1024, temperature=0.0, stop=None
@@ -89,11 +91,10 @@ class NER:
             entities (list): A list of entities to find unified versions for.
 
         Returns:
-            dict: A dictionary mapping unified entity names to their original variants.
-        Raises:
-            Exception: If there is an error during entity normalization.
+            tuple: (dict mapping unified names to originals, tokens_used)
         """
-        self.logger.debug(f"Finding similar entities globally...")
+        self.logger.debug("Finding similar entities globally...")
+        tokens = 0
 
         try:
             input_entities = ", ".join(entities)
@@ -126,52 +127,46 @@ class NER:
             )
             self.logger.debug(f"Response content: {response_content}")
 
-            # Handling the response carefully
-            if response_content is None:
+            if not response_content:
                 self.logger.error("API response content is None")
-                return {entity: [entity] for entity in entities}, 0
+                return {entity: [entity] for entity in entities}, tokens
 
-            # Convert to string if needed
-            response_str = (
+            # Normalize structured responses before cleaning list-like output.
+            content_text = (
                 response_content
                 if isinstance(response_content, str)
                 else json.dumps(response_content)
             )
 
-            # Strip out accidental list bracket formatting if model adds them
-            clean_content = (
-                response_str.strip()
-                .strip("[")
-                .strip("]")
+            # Clean brackets and quotes to prevent Python list hallucination from breaking the split
+            cleaned_content = (
+                content_text.replace("[", "")
+                .replace("]", "")
                 .replace("'", "")
                 .replace('"', "")
             )
-            unified_entities_list = [ue.strip() for ue in clean_content.split(",")]
+            unified_entities_list = [ue.strip() for ue in cleaned_content.split(",")]
 
-            # Ensure the number of unified entities matches the input entities count
             if len(unified_entities_list) != len(entities):
                 raise ValueError(
                     "The number of unified entities does not match the number of input entities."
                 )
 
-            # Map original entities to their unified versions
             unified_mapping = {
                 entities[i]: unified_entities_list[i] for i in range(len(entities))
             }
 
-            # Group entities by their unified version
             entity_groups = defaultdict(list)
             for entity, unified in unified_mapping.items():
                 entity_groups[unified].append(entity)
 
             self.logger.debug(f"Grouped entities globally: {dict(entity_groups)}")
-
             return entity_groups, tokens
 
         except Exception as e:
             self.logger.error(f"Error in global entity similarity analysis: {e}")
-            # Fallback: return each entity as its own group
-            return {entity: [entity] for entity in entities}, 0
+            # Fallback: return each entity as its own group, but SAVE THE TOKENS!
+            return {entity: [entity] for entity in entities}, tokens
 
     def merge_entities(self, sources):
         """
@@ -181,9 +176,7 @@ class NER:
             sources (list): A list of source dictionaries containing entities to be merged.
 
         Returns:
-            list: A list of sources with unified entities.
-        Raises:
-            Exception: If there is an error during the merging process.
+            tuple: (list of sources with unified entities, tokens_used)
         """
         self.logger.info("Starting to merge entities from sources.")
 
@@ -200,7 +193,6 @@ class NER:
                 unified_mapping[original] = unified
         self.logger.info(f"Unified mapping of entities: {unified_mapping}")
 
-        # Merge the entities across the sources
         for source in sources:
             updated_entities = []
             for entity in source.get("entities", []):
@@ -211,7 +203,7 @@ class NER:
                     )
                 else:
                     updated_entities.append(entity)
-            source["entities"] = list(set(updated_entities))  # Remove duplicates
+            source["entities"] = list(set(updated_entities))
 
         self.logger.info("Entities merged and sources updated successfully.")
         return sources, tokens

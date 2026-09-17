@@ -1,5 +1,6 @@
 import os
 import uuid
+import time
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import Optional
@@ -12,7 +13,6 @@ from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from Database.data_entities import Claim, Answer
 from Database.sqldb import Database
 from GraphRAG.rag_pipeline import RAG_Pipeline
-from Evaluation.Utils.experiment_tracker import ExperimentTracker
 
 dotenv.load_dotenv("key.env", override=True)
 
@@ -29,98 +29,85 @@ db = Database()
 
 class InputText(BaseModel):
     text: str
-    ground_truth: Optional[str] = "Not Provided"
-    dataset_setting: Optional[str] = "FoxAI-OpenWeb"
     search_query: Optional[str] = None
-    active_dataset: Optional[str] = "FEVER"
     prompt_instructions: Optional[str] = None
-    nei_label: Optional[str] = "NOT ENOUGH INFO"
 
 
 @backend_app.post("/run_pipeline")
 def process_text(input_text: InputText):
     text = input_text.text
-
-    # Generate a claim ID upfront so the tracker and the Claim entity match perfectly
     claim_id = str(uuid.uuid4())
-
-    # --- Initialize Components & Tracker ---
-    tracker = ExperimentTracker(
-        claim_id=claim_id,
-        ground_truth=input_text.ground_truth or "Not Provided",
-        system_type="FoxAI-GraphRAG",
-        dataset_setting=input_text.dataset_setting or "FoxAI-OpenWeb",
-    )
 
     preprocessor = Preprocessing_Pipeline()
     scraper = Scraper()
     rag = RAG_Pipeline()
 
-    # --- 1. Preprocessing ---
-    def run_prep():
-        return preprocessor.run_claim_pipe(text)
+    latencies = {}
+    tokens = {}
+    calls = {}
 
-    claim_title, claim_summary = tracker.run_stage("preprocessor", run_prep)
+    # --- 1. Preprocessing ---
+    t0 = time.time()
+
+    prep_data, prep_claim_metrics = preprocessor.run_claim_pipe(text)
+    claim_title, claim_summary = prep_data
+
+    # SAFETY FALLBACK: If LLM fails to summarize, use the raw claim text
+    if not claim_title:
+        claim_title = f"!g {text[:50]}..."
+    if not claim_summary:
+        claim_summary = text
+
+    latencies["preprocessor"] = time.time() - t0
+
+    tokens["preprocessor"] = prep_claim_metrics.get("total", 0)
+    calls["preprocessor"] = prep_claim_metrics.get("calls", 0)
 
     claim = Claim(text, claim_title, claim_summary, claim_id=claim_id)
 
-    # Determine the best query for DuckDuckGo
-    # (Uses enriched search_query from eval scripts, or falls back to AI-generated claim_title for normal UI usage)
     target_search_query = (
         input_text.search_query if input_text.search_query else claim_title
     )
 
     # --- 2. Retrieval (Scraper + Preprocessor) ---
-    def run_retrieval():
-        # Pass the TARGET search query to DuckDuckGo!
-        srcs, scraper_metrics = scraper.search_and_extract(
-            target_search_query, num_results=10
-        )
+    t0 = time.time()
+    sources, scraper_metrics = scraper.search_and_extract(
+        target_search_query, num_results=10
+    )
+    preprocessed_sources, prep_metrics = preprocessor.run_sources_pipe(sources)
 
-        prep_srcs, prep_metrics = preprocessor.run_sources_pipe(srcs)
+    claim.add_sources(preprocessed_sources)
 
-        # Combine the dictionaries mathematically
-        total_retrieval_tokens = scraper_metrics["total"] + prep_metrics["total"]
-        total_retrieval_calls = scraper_metrics["calls"] + prep_metrics["calls"]
+    latencies["retrieval"] = time.time() - t0
 
-        # Pass the unified dictionary to the tracker!
-        return (prep_srcs, srcs), {
-            "total": total_retrieval_tokens,
-            "calls": total_retrieval_calls,
-        }
-
-    preprocessed_sources, sources = tracker.run_stage("retrieval", run_retrieval)
+    tokens["retrieval"] = scraper_metrics.get("total", 0) + prep_metrics.get("total", 0)
+    calls["retrieval"] = scraper_metrics.get("calls", 0) + prep_metrics.get("calls", 0)
 
     # --- 3. GraphRAG ---
-    def run_rag():
-        # Pass the dynamic prompt instructions and NEI label down to the RAG pipeline
-        q_res, g_folder, t_usage = rag.run_pipeline(
-            preprocessed_sources,
-            claim.text,
-            claim.id,
-            prompt_instructions=input_text.prompt_instructions,
-            nei_label=input_text.nei_label or "NOT ENOUGH INFO",
-        )
-        # We group the first two outputs so the tracker sees exactly (result, tokens)
-        return (q_res, g_folder), t_usage
+    t0 = time.time()
+    query_result, graphs_folder, t_usage = rag.run_pipeline(
+        preprocessed_sources,
+        claim.text,
+        claim.id,
+        prompt_instructions=input_text.prompt_instructions,
+    )
+    latencies["generation"] = time.time() - t0
 
-    query_result, graphs_folder = tracker.run_stage("generation", run_rag)
+    tokens["generation"] = t_usage.get("llm_total", t_usage.get("total", 0))
+    calls["generation"] = t_usage.get("llm_calls", t_usage.get("calls", 0))
 
-    # --- 4. Verdict Parsing for RQ1 ---
-    # Extract the "Supported/Refuted/NEI" label from the structured response
+    # --- 4. Verdict Parsing ---
     try:
         if query_result and "VERDICT:" in query_result:
-            # Takes the text between VERDICT: and REASONING:
             predicted_label = (
                 query_result.split("REASONING:")[0].replace("VERDICT:", "").strip()
             )
         else:
-            # Fallback if the LLM didn't follow the format or if query_result is None
             predicted_label = "Error: Unstructured Response"
     except Exception:
         predicted_label = "Parsing Error"
 
-    # --- 5. Answer Entity (For UI) ---
+    # --- 5. Answer Entity ---
     try:
         if query_result:
             if "REASONING:" in query_result:
@@ -134,22 +121,23 @@ def process_text(input_text: InputText):
 
     answer = Answer(claim.id, reasoning, graphs_folder)
 
-    # --- 6. Log Experiment Metrics & Evidence ---
     evidence_data = {
         "claim_text": text,
         "raw_sources": sources,
         "query_result": reasoning,
     }
 
-    tracker.finalize(predicted_label, evidence_data)
-
     return {
+        "claim_id": claim_id,
         "claim_title": claim_title,
         "claim_summary": claim_summary,
         "sources": preprocessed_sources,
         "query_result": reasoning,
+        "predicted_label": predicted_label,
         "graphs_folder": graphs_folder,
         "answer": answer.answer,
+        "metrics": {"latencies": latencies, "tokens": tokens, "calls": calls},
+        "evidence_data": evidence_data,
     }
 
 
