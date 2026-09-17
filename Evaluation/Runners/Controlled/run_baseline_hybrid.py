@@ -15,7 +15,6 @@ from langchain_core.documents import Document
 from langchain.retrievers.document_compressors import EmbeddingsFilter
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain_community.retrievers import BM25Retriever
-from langchain_huggingface import HuggingFaceEmbeddings
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.dataset_manager import DatasetManager

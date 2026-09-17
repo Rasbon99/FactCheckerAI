@@ -20,13 +20,14 @@ USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 
 def run_experiment():
     dataset_manager = DatasetManager()
-    metadata = dataset_manager.get_experiment_metadata()
+    metadata = dataset_manager.get_experiment_metadata(environment="open_web")
 
     prompt_instructions = dataset_manager.get_prompt_instructions()
 
     logger.info(
         f"Starting FoxAI GraphRAG (Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
     )
+    logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {metadata['dataset_name']}")
     logger.info(f"Experiment Type: {metadata['experiment_type']}")
     logger.info(f"Using Metadata Super Query: {USE_METADATA}")
@@ -73,7 +74,7 @@ def run_experiment():
                         calls=res_data.get("metrics", {}).get("calls", {}),
                         evidence_data=res_data.get("evidence_data", {}),
                         system_type="FoxAI-GraphRAG",
-                        environment="open_web",
+                        environment=metadata["environment"],
                         dataset_name=metadata["dataset_name"],
                         experiment_type=metadata["experiment_type"],
                     )

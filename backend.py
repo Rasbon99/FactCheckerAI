@@ -98,26 +98,46 @@ def process_text(input_text: InputText):
 
     # --- 4. Verdict Parsing ---
     try:
-        if query_result and "VERDICT:" in query_result:
+        # Ensure query_result is a string for the parser
+        if isinstance(query_result, list):
+            query_result = "\n".join(
+                item if isinstance(item, str) else str(item) for item in query_result
+            )
+        elif query_result is not None and not isinstance(query_result, str):
+            query_result = str(query_result)
+
+        if not query_result or not query_result.strip():
+            predicted_label = "Error: Empty LLM Response"
+            query_result = "The LLM failed to generate a response."
+        elif "VERDICT:" in query_result:
             predicted_label = (
                 query_result.split("REASONING:")[0].replace("VERDICT:", "").strip()
             )
         else:
             predicted_label = "Error: Unstructured Response"
+
     except Exception:
         predicted_label = "Parsing Error"
 
     # --- 5. Answer Entity ---
     try:
-        if query_result:
-            if "REASONING:" in query_result:
-                reasoning = query_result.split("REASONING:")[1].strip()
+        result_text = (
+            "\n".join(
+                item if isinstance(item, str) else str(item) for item in query_result
+            )
+            if isinstance(query_result, list)
+            else str(query_result) if query_result is not None else ""
+        )
+
+        if result_text:
+            if "REASONING:" in result_text:
+                reasoning = result_text.split("REASONING:", 1)[1].strip()
             else:
-                reasoning = query_result.replace("VERDICT:", "").strip()
+                reasoning = result_text.replace("VERDICT:", "").strip()
         else:
             reasoning = "No results found."
     except Exception:
-        reasoning = query_result
+        reasoning = str(query_result)
 
     answer = Answer(claim.id, reasoning, graphs_folder)
 

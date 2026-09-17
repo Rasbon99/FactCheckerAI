@@ -35,9 +35,6 @@ logger = Logger("HybridRAG-OpenWeb").get_logger()
 # --- CONFIGURATION FLAG ---
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 
-# Initialize llama.cpp configuration
-model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
-
 
 def get_hybrid_rag_verdict(claim_text, best_evidence_string, prompt_instructions):
     """Asks the LLM to verify the claim using ONLY the top chunks found by Hybrid RAG (BM25 + Dense Embeddings)."""
@@ -173,7 +170,16 @@ def run_hybrid_rag_baseline_openweb():
 
             # --- 3. Verdict Parsing ---
             try:
-                if not isinstance(query_result, str) or not query_result.strip():
+                # Ensure query_result is a string for the parser
+                if isinstance(query_result, list):
+                    query_result = "\n".join(
+                        item if isinstance(item, str) else str(item)
+                        for item in query_result
+                    )
+                elif query_result is not None and not isinstance(query_result, str):
+                    query_result = str(query_result)
+
+                if not query_result or not query_result.strip():
                     predicted_label = "Error: Empty LLM Response"
                     query_result = "The LLM failed to generate a response."
                 elif "VERDICT:" in query_result:

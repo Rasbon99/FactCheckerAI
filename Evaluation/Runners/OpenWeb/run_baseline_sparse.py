@@ -28,9 +28,6 @@ logger = Logger("SparseRAG-OpenWeb").get_logger()
 # --- CONFIGURATION FLAG ---
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 
-# Initialize llama.cpp configuration
-model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
-
 
 def simple_chunker(text, chunk_word_size=150):
     """Breaks massive web pages into smaller paragraph-sized chunks for BM25 to analyze."""
@@ -156,6 +153,15 @@ def run_sparse_baseline_openweb():
 
             # --- 3. Verdict Parsing ---
             try:
+                # Ensure query_result is a string for the parser
+                if isinstance(query_result, list):
+                    query_result = "\n".join(
+                        item if isinstance(item, str) else str(item)
+                        for item in query_result
+                    )
+                elif query_result is not None and not isinstance(query_result, str):
+                    query_result = str(query_result)
+
                 if not query_result or not query_result.strip():
                     predicted_label = "Error: Empty LLM Response"
                     query_result = "The LLM failed to generate a response."

@@ -3,7 +3,8 @@ import sqlite3
 import time
 import uuid
 import dotenv
-from groq import Groq
+from llamacpp_client import ChatLlamaCppServer, load_models, set_alias_map
+from langchain_core.messages import HumanMessage
 from log import Logger
 
 from Evaluation.Utils.dataset_manager import DatasetManager
@@ -13,17 +14,17 @@ from Database.data_entities import Claim, Answer, Experiment
 # Load environment variables
 dotenv.load_dotenv("key.env", override=False)
 
+model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
+model_port = int(os.getenv("LLM_MODEL_PORT", "8080"))
+
+print(f"[Backend] Connecting to local llama.cpp server on port {model_port}...")
+set_alias_map({model_alias: model_port})
+load_models([model_alias])
+
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
-logger = Logger("PromptStuffing-Controlled").get_logger()
-
-# --- CONFIGURATION FLAG ---
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
-
-# Initialize Groq Client
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
-client = Groq(api_key=GROQ_API_KEY)
+logger = Logger("PromptStuffing-Controlled").get_logger()
 
 
 def extract_perfect_evidence(evidence_data, wiki_cursor):
@@ -71,17 +72,24 @@ def get_prompt_stuffing_verdict(
 
     CLAIM: {claim_text}
     """
-    response = client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        model=GROQ_MODEL,
+
+    client = ChatLlamaCppServer(
+        model=model_alias,
         temperature=0.0,
         max_tokens=200,
     )
 
-    result_text = response.choices[0].message.content
-    tokens_used = response.usage.total_tokens if response.usage else 0
+    messages = [HumanMessage(content=prompt)]
+    response = client.invoke(messages)
 
-    return result_text, tokens_used
+    content = response.content
+    tokens = (
+        response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
+        if hasattr(response, "response_metadata")
+        else 0
+    )
+
+    return content, tokens
 
 
 def run_prompt_stuffing_baseline_controlled():
@@ -192,6 +200,15 @@ def run_prompt_stuffing_baseline_controlled():
 
             # --- 3. Verdict Parsing ---
             try:
+                # Ensure query_result is a string for the parser
+                if isinstance(query_result, list):
+                    query_result = "\n".join(
+                        item if isinstance(item, str) else str(item)
+                        for item in query_result
+                    )
+                elif query_result is not None and not isinstance(query_result, str):
+                    query_result = str(query_result)
+
                 if not query_result or not query_result.strip():
                     predicted_label = "Error: Empty LLM Response"
                     query_result = "The LLM failed to generate a response."

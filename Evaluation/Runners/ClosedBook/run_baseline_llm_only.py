@@ -20,11 +20,6 @@ load_models([model_alias])
 
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
-
-# Initialize llama.cpp configuration
-model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
-USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
-
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 logger = Logger("ClosedBook-Baseline").get_logger()
 
@@ -70,10 +65,6 @@ def run_closed_book_baseline():
 
     metadata = dataset_manager.get_experiment_metadata(environment="closed_book")
     active_dataset = metadata["dataset_name"]
-
-    nei_label = (
-        "NOT ENOUGH INFO" if active_dataset == "FEVER" else "Not Enough Evidence"
-    )
 
     # Tweak the instructions slightly since this baseline has no "provided evidence"
     base_instructions = dataset_manager.get_prompt_instructions()
@@ -143,7 +134,10 @@ def run_closed_book_baseline():
 
             # Verdict Parsing
             try:
-                if query_result and "VERDICT:" in query_result:
+                if not query_result or not query_result.strip():
+                    predicted_label = "Error: Empty LLM Response"
+                    query_result = "The LLM failed to generate a response."
+                elif "VERDICT:" in query_result:
                     predicted_label = (
                         query_result.split("REASONING:")[0]
                         .replace("VERDICT:", "")
