@@ -94,11 +94,6 @@ class QueryEngine:
 
         try:
             start_time_similarity = time.time()
-
-            # --- TRUE GRAPHRAG IMPLEMENTATION ---
-            # This Cypher query executes AFTER the vector search finds the most similar 'node'.
-            # It traverses the graph edges to grab the associated Topic, Site, and Entities,
-            # and returns them as a single, context-rich 'text' block for the LLM.
             graph_retrieval_query = """
             OPTIONAL MATCH (node)-[:HAS_TOPIC]->(t:Topic)
             OPTIONAL MATCH (node)-[:PUBLISHED_ON]->(s:Site)
@@ -129,9 +124,9 @@ class QueryEngine:
                 text_node_properties=[
                     "title",
                     "body",
-                ],  # 'topic' is now fetched via the graph!
+                ],
                 embedding_node_property="embedding",
-                retrieval_query=graph_retrieval_query,  # Injecting the graph traversal here!
+                retrieval_query=graph_retrieval_query,
             )
 
             retriever = vector_store.as_retriever()
