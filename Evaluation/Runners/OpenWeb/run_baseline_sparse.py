@@ -4,19 +4,12 @@ import uuid
 import dotenv
 from llamacpp_client import ChatLlamaCppServer, load_models, set_alias_map
 from langchain_core.messages import HumanMessage
+from rank_bm25 import BM25Okapi
 from log import Logger
 
-# --- LangChain Imports ---
-from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.vectorstores import InMemoryVectorStore
-from langchain_huggingface import HuggingFaceEmbeddings
-
-# --- Import Pipeline Components ---
 from Evaluation.Utils.dataset_manager import DatasetManager
 from WebScraper.scraper import Scraper
 from Database.data_entities import Claim, Answer, Experiment
-from Utils.nomic_embedding import get_embedding_model
 
 # Load environment variables
 dotenv.load_dotenv("key.env", override=False)
@@ -30,14 +23,24 @@ load_models([model_alias])
 
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
-logger = Logger("HybridRAG-OpenWeb").get_logger()
+logger = Logger("SparseRAG-OpenWeb").get_logger()
 
 # --- CONFIGURATION FLAG ---
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 
 
-def get_hybrid_rag_verdict(claim_text, best_evidence_string, prompt_instructions):
-    """Asks the LLM to verify the claim using ONLY the top chunks found by Hybrid RAG (BM25 + Dense Embeddings)."""
+def simple_chunker(text, chunk_word_size=150):
+    """Breaks massive web pages into smaller paragraph-sized chunks for BM25 to analyze."""
+    words = text.split()
+    chunks = []
+    for i in range(0, len(words), chunk_word_size):
+        chunk = " ".join(words[i : i + chunk_word_size])
+        chunks.append(chunk)
+    return chunks
+
+
+def get_bm25_verdict(claim_text, best_evidence_string, prompt_instructions):
+    """Asks the LLM to verify the claim using ONLY the top chunks found by BM25."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
 
@@ -68,7 +71,7 @@ def get_hybrid_rag_verdict(claim_text, best_evidence_string, prompt_instructions
     return result_text, tokens_used
 
 
-def run_hybrid_rag_baseline_openweb():
+def run_sparse_baseline_openweb():
     dataset_manager = DatasetManager()
     metadata = dataset_manager.get_experiment_metadata(environment="open_web")
     active_dataset = metadata["dataset_name"]
@@ -76,20 +79,12 @@ def run_hybrid_rag_baseline_openweb():
     prompt_instructions = dataset_manager.get_prompt_instructions()
 
     logger.info(
-        f"Starting Baseline (HybridRAG - Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
+        f"Starting Baseline (SparseRAG - Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
     )
     logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Experiment Type: {metadata['experiment_type']}")
     logger.info(f"Using Metadata Super Query: {USE_METADATA}")
-
-    logger.info(
-        "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
-    )
-    embedding_model_name = os.getenv(
-        "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
-    )
-    embeddings = get_embedding_model(embedding_model_name)
 
     successful_runs = 0
 
@@ -114,48 +109,36 @@ def run_hybrid_rag_baseline_openweb():
 
             Claim(
                 text=claim_text,
-                title="[Hybrid] " + claim_text[:30] + "...",
-                summary="Tested by scoring scraped pages using LangChain Dense Embeddings.",
+                title="[Sparse] " + claim_text[:30] + "...",
+                summary="Tested by scoring scraped pages using the BM25 algorithm.",
                 claim_id=claim_id,
             )
 
-            # --- 1. Retrieval & Filtering (Scraper + LangChain Dense RAG) ---
+            # --- 1. Retrieval & Filtering (Scraper + BM25) ---
             t0 = time.time()
-
             raw_scraped_sources, scraper_metrics = scraper.search_and_extract(
                 search_query, num_results=10
             )
 
-            if not raw_scraped_sources:
+            logger.info(
+                f"Scraped {len(raw_scraped_sources)} pages. Running BM25 math..."
+            )
+
+            all_text = ""
+            for src in raw_scraped_sources:
+                all_text += src.get("body", "") + " "
+
+            chunks = simple_chunker(all_text)
+
+            if not chunks:
                 best_evidence = "No relevant articles could be scraped."
             else:
-                docs = []
-                for src in raw_scraped_sources:
-                    body_text = src.get("body", "")
-                    if body_text.strip():
-                        docs.append(
-                            Document(
-                                page_content=body_text,
-                                metadata={"source": src.get("url", "Unknown URL")},
-                            )
-                        )
+                tokenized_corpus = [chunk.lower().split() for chunk in chunks]
+                bm25 = BM25Okapi(tokenized_corpus)
+                tokenized_query = search_query.lower().split()
 
-                logger.info(
-                    f"Scraped {len(docs)} pages. Chunking and embedding natively..."
-                )
-
-                text_splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=1000, chunk_overlap=100
-                )
-                splits = text_splitter.split_documents(docs)
-
-                vectorstore = InMemoryVectorStore.from_documents(splits, embeddings)
-                retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-                top_docs = retriever.invoke(search_query)
-
-                best_evidence = ""
-                for i, doc in enumerate(top_docs):
-                    best_evidence += f"\n--- MATCH {i+1} (Source: {doc.metadata['source']}) ---\n{doc.page_content}\n"
+                top_3_chunks = bm25.get_top_n(tokenized_query, chunks, n=3)
+                best_evidence = "\n--- BM25 TOP MATCH ---\n".join(top_3_chunks)
 
             latency_retrieval = time.time() - t0
             tokens_retrieval = scraper_metrics.get("total", 0)
@@ -163,7 +146,7 @@ def run_hybrid_rag_baseline_openweb():
 
             # --- 2. Generation (The LLM Call) ---
             t0 = time.time()
-            query_result, tokens_used = get_hybrid_rag_verdict(
+            query_result, tokens_used = get_bm25_verdict(
                 claim_text, best_evidence, prompt_instructions
             )
             latency_generation = time.time() - t0
@@ -193,7 +176,7 @@ def run_hybrid_rag_baseline_openweb():
             except Exception:
                 predicted_label = "Parsing Error"
 
-            logger.info(f"Hybrid RAG Verdict: {predicted_label}")
+            logger.info(f"Sparse Verdict: {predicted_label}")
 
             Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
 
@@ -220,10 +203,10 @@ def run_hybrid_rag_baseline_openweb():
                 evidence_data={
                     "claim_text": claim_text,
                     "raw_sources": raw_scraped_sources,
-                    "hybrid_evidence": best_evidence,
+                    "bm25_evidence": best_evidence,
                     "query_result": query_result,
                 },
-                system_type="HybridRAG",
+                system_type="SparseRAG",
                 environment=metadata["environment"],
                 dataset_name=metadata["dataset_name"],
                 experiment_type=metadata["experiment_type"],
@@ -237,9 +220,9 @@ def run_hybrid_rag_baseline_openweb():
         logger.error(f"{e}")
 
     logger.info("=" * 20)
-    logger.info("HYBRID RAG (OPEN WEB) COMPLETE!")
+    logger.info("SPARSE (OPEN WEB) COMPLETE!")
     logger.info("=" * 20)
 
 
 if __name__ == "__main__":
-    run_hybrid_rag_baseline_openweb()
+    run_sparse_baseline_openweb()

@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import time
 import uuid
 import dotenv
@@ -6,17 +7,9 @@ from llamacpp_client import ChatLlamaCppServer, load_models, set_alias_map
 from langchain_core.messages import HumanMessage
 from log import Logger
 
-# --- LangChain Imports ---
-from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.vectorstores import InMemoryVectorStore
-from langchain_huggingface import HuggingFaceEmbeddings
-
-# --- Import Pipeline Components ---
 from Evaluation.Utils.dataset_manager import DatasetManager
-from WebScraper.scraper import Scraper
+from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
 from Database.data_entities import Claim, Answer, Experiment
-from Utils.nomic_embedding import get_embedding_model
 
 # Load environment variables
 dotenv.load_dotenv("key.env", override=False)
@@ -30,21 +23,52 @@ load_models([model_alias])
 
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
-logger = Logger("HybridRAG-OpenWeb").get_logger()
-
-# --- CONFIGURATION FLAG ---
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
+logger = Logger("PromptStuffing-Controlled").get_logger()
 
 
-def get_hybrid_rag_verdict(claim_text, best_evidence_string, prompt_instructions):
-    """Asks the LLM to verify the claim using ONLY the top chunks found by Hybrid RAG (BM25 + Dense Embeddings)."""
+def extract_perfect_evidence(evidence_data, wiki_cursor):
+    """
+    Parses the FEVER evidence JSON, queries the SQLite DB, and extracts the exact text.
+    """
+    extracted_text = ""
+
+    for evidence_set in evidence_data:
+        for ev in evidence_set:
+            page_id = ev[2]
+            sentence_num = str(ev[3])
+
+            if page_id is None:
+                continue
+
+            wiki_cursor.execute(
+                "SELECT lines FROM wiki_articles WHERE page_id = ?", (page_id,)
+            )
+            result = wiki_cursor.fetchone()
+
+            if result:
+                raw_lines = result[0]
+                sentences = raw_lines.split("\n")
+                for sentence in sentences:
+                    parts = sentence.split("\t")
+                    if parts[0] == sentence_num and len(parts) > 1:
+                        extracted_text += parts[1] + " "
+                        break
+
+    return extracted_text.strip()
+
+
+def get_prompt_stuffing_verdict(
+    claim_text, massive_evidence_string, prompt_instructions
+):
+    """Asks the LLM to verify the claim using the massive wall of retrieved text."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
 
     {prompt_instructions}
 
     EVIDENCE:
-    {best_evidence_string}
+    {massive_evidence_string}
 
     CLAIM: {claim_text}
     """
@@ -58,38 +82,43 @@ def get_hybrid_rag_verdict(claim_text, best_evidence_string, prompt_instructions
     messages = [HumanMessage(content=prompt)]
     response = client.invoke(messages)
 
-    result_text = response.content
-    tokens_used = (
+    content = response.content
+    tokens = (
         response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
         if hasattr(response, "response_metadata")
         else 0
     )
 
-    return result_text, tokens_used
+    return content, tokens
 
 
-def run_hybrid_rag_baseline_openweb():
+def run_prompt_stuffing_baseline_controlled():
     dataset_manager = DatasetManager()
-    metadata = dataset_manager.get_experiment_metadata(environment="open_web")
+    metadata = dataset_manager.get_experiment_metadata(environment="controlled")
     active_dataset = metadata["dataset_name"]
 
     prompt_instructions = dataset_manager.get_prompt_instructions()
 
     logger.info(
-        f"Starting Baseline (HybridRAG - Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
+        f"Starting Baseline (Prompt Stuffing - Controlled) with {MAX_CLAIMS_TO_TEST} claims..."
     )
     logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Experiment Type: {metadata['experiment_type']}")
     logger.info(f"Using Metadata Super Query: {USE_METADATA}")
 
-    logger.info(
-        "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
-    )
-    embedding_model_name = os.getenv(
-        "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
-    )
-    embeddings = get_embedding_model(embedding_model_name)
+    wiki_conn = None
+    wiki_cursor = None
+    averitec_retriever = None
+
+    if active_dataset == "FEVER":
+        wiki_db_path = os.getenv(
+            "FEVER_WIKIPEDIA_DB_PATH", "Datasets/FEVER/fever_wiki.db"
+        )
+        wiki_conn = sqlite3.connect(wiki_db_path)
+        wiki_cursor = wiki_conn.cursor()
+    elif active_dataset == "AVERITEC":
+        averitec_retriever = AVeriTeCKnowledgeRetriever()
 
     successful_runs = 0
 
@@ -97,8 +126,6 @@ def run_hybrid_rag_baseline_openweb():
         claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
 
         for line_number, data in enumerate(claims_data):
-            scraper = Scraper()
-
             claim_text = data.get("claim", "")
             ground_truth = data.get("label", "")
 
@@ -109,61 +136,64 @@ def run_hybrid_rag_baseline_openweb():
             logger.info(f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
             if search_query != claim_text:
                 logger.info(f"Enriched Search Query: {search_query}")
+            logger.info(f"Ground Truth: {ground_truth}")
 
             claim_id = str(uuid.uuid4())
 
             Claim(
                 text=claim_text,
-                title="[Hybrid] " + claim_text[:30] + "...",
-                summary="Tested by scoring scraped pages using LangChain Dense Embeddings.",
+                title="[PromptStuff] " + claim_text[:30] + "...",
+                summary="Tested by stuffing all database evidence directly into the prompt.",
                 claim_id=claim_id,
             )
 
-            # --- 1. Retrieval & Filtering (Scraper + LangChain Dense RAG) ---
+            # --- 1. Retrieval (Database Extract) ---
             t0 = time.time()
+            combined_evidence = ""
 
-            raw_scraped_sources, scraper_metrics = scraper.search_and_extract(
-                search_query, num_results=10
-            )
+            if active_dataset == "FEVER":
+                evidence_data = data.get("evidence", [])
+                combined_evidence = extract_perfect_evidence(evidence_data, wiki_cursor)
 
-            if not raw_scraped_sources:
-                best_evidence = "No relevant articles could be scraped."
-            else:
-                docs = []
-                for src in raw_scraped_sources:
-                    body_text = src.get("body", "")
-                    if body_text.strip():
-                        docs.append(
-                            Document(
-                                page_content=body_text,
-                                metadata={"source": src.get("url", "Unknown URL")},
-                            )
+            elif active_dataset == "AVERITEC" and averitec_retriever is not None:
+                claim_id_internal = data.get("internal_id")
+                all_sentences = averitec_retriever.get_evidence_for_claim(
+                    claim_id_internal
+                )
+
+                if "noisy_ids" in data and all_sentences is not None:
+                    for n_id in data["noisy_ids"]:
+                        noisy_sentences = averitec_retriever.get_evidence_for_claim(
+                            n_id
                         )
+                        if noisy_sentences:
+                            all_sentences.extend(noisy_sentences)
 
-                logger.info(
-                    f"Scraped {len(docs)} pages. Chunking and embedding natively..."
-                )
+                if all_sentences:
+                    # In prompt stuffing, we just dump EVERYTHING into the prompt
+                    combined_evidence = "\n".join(all_sentences)
 
-                text_splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=1000, chunk_overlap=100
-                )
-                splits = text_splitter.split_documents(docs)
-
-                vectorstore = InMemoryVectorStore.from_documents(splits, embeddings)
-                retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-                top_docs = retriever.invoke(search_query)
-
-                best_evidence = ""
-                for i, doc in enumerate(top_docs):
-                    best_evidence += f"\n--- MATCH {i+1} (Source: {doc.metadata['source']}) ---\n{doc.page_content}\n"
+            if not combined_evidence.strip():
+                best_evidence = "No relevant evidence could be found in the dataset."
+            else:
+                # --- API SAFETY VALVE FOR PROMPT STUFFING ---
+                MAX_CHARS = 20000
+                if len(combined_evidence) > MAX_CHARS:
+                    logger.warning(
+                        f"Evidence massive ({len(combined_evidence)} chars). Truncating to {MAX_CHARS} to survive API limits."
+                    )
+                    best_evidence = (
+                        combined_evidence[:MAX_CHARS]
+                        + "\n...[EVIDENCE TRUNCATED DUE TO CONTEXT LIMITS]..."
+                    )
+                else:
+                    best_evidence = combined_evidence
 
             latency_retrieval = time.time() - t0
-            tokens_retrieval = scraper_metrics.get("total", 0)
-            calls_retrieval = scraper_metrics.get("calls", 0)
 
             # --- 2. Generation (The LLM Call) ---
             t0 = time.time()
-            query_result, tokens_used = get_hybrid_rag_verdict(
+            query_result, tokens_used = get_prompt_stuffing_verdict(
                 claim_text, best_evidence, prompt_instructions
             )
             latency_generation = time.time() - t0
@@ -193,7 +223,7 @@ def run_hybrid_rag_baseline_openweb():
             except Exception:
                 predicted_label = "Parsing Error"
 
-            logger.info(f"Hybrid RAG Verdict: {predicted_label}")
+            logger.info(f"Prompt Stuffing Verdict: {predicted_label}")
 
             Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
 
@@ -209,37 +239,40 @@ def run_hybrid_rag_baseline_openweb():
                 },
                 tokens={
                     "preprocessor": 0,
-                    "retrieval": tokens_retrieval,
+                    "retrieval": 0,
                     "generation": tokens_used,
                 },
                 calls={
                     "preprocessor": 0,
-                    "retrieval": calls_retrieval,
+                    "retrieval": 0,
                     "generation": 1,
                 },
                 evidence_data={
                     "claim_text": claim_text,
-                    "raw_sources": raw_scraped_sources,
-                    "hybrid_evidence": best_evidence,
+                    "raw_sources": [],
+                    "best_evidence": best_evidence,
                     "query_result": query_result,
                 },
-                system_type="HybridRAG",
+                system_type="PromptStuffing",
                 environment=metadata["environment"],
                 dataset_name=metadata["dataset_name"],
                 experiment_type=metadata["experiment_type"],
             )
 
             successful_runs += 1
-            logger.info("Sleeping for 15 seconds to respect DuckDuckGo rate limits...")
-            time.sleep(15)
+            time.sleep(2)
 
     except Exception as e:
         logger.error(f"{e}")
+    finally:
+        if wiki_conn:
+            wiki_conn.close()
 
     logger.info("=" * 20)
-    logger.info("HYBRID RAG (OPEN WEB) COMPLETE!")
+    logger.info("PROMPT STUFFING (CONTROLLED) COMPLETE!")
+    logger.info(f"Successfully processed: {successful_runs}")
     logger.info("=" * 20)
 
 
 if __name__ == "__main__":
-    run_hybrid_rag_baseline_openweb()
+    run_prompt_stuffing_baseline_controlled()
