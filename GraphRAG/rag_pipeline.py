@@ -19,7 +19,7 @@ class RAG_Pipeline:
         Raises:
             KeyError: If required environment variables are missing.
         """
-        dotenv.load_dotenv(env_file, override=True)
+        dotenv.load_dotenv(env_file, override=False)
 
         # Logger
         self.logger = Logger(self.__class__.__name__).get_logger()

@@ -23,11 +23,28 @@ class TokenTrackerCallback(BaseCallbackHandler):
 
     def on_llm_end(self, response, **kwargs):
         self.llm_calls += 1
-        # ChatGroq populates token usage inside the llm_output dictionary
+
+        # Fallback 1: Standard llm_output location (Older LangChain versions)
         if response.llm_output and "token_usage" in response.llm_output:
             self.total_tokens += response.llm_output["token_usage"].get(
                 "total_tokens", 0
             )
+            return
+
+        # Fallback 2: Message metadata location (Newer LangChain versions)
+        try:
+            for gen_list in response.generations:
+                for gen in gen_list:
+                    if (
+                        hasattr(gen, "message")
+                        and hasattr(gen.message, "usage_metadata")
+                        and gen.message.usage_metadata
+                    ):
+                        self.total_tokens += gen.message.usage_metadata.get(
+                            "total_tokens", 0
+                        )
+        except Exception:
+            pass
 
 
 class QueryEngine:
@@ -37,27 +54,22 @@ class QueryEngine:
         Initializes the QueryEngine by setting up the environment variables, models, and Neo4j connection.
 
         Args:
-            env_file (str): Path to the .env file containing configuration settings for the Neo4j connection and models.
+            env_file (str): Path to the .env file containing configuration settings.
             index_name (str): The name of the index in the Neo4j database to be used for querying.
-        Raises:
-            KeyError: If required environment variables are missing.
         """
-        dotenv.load_dotenv(env_file, override=True)
+        dotenv.load_dotenv(env_file, override=False)
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.platform = platform.system()
 
-        # Neo4j connection parameters
         self.neo4j_url = os.environ["NEO4J_URI"].replace("http", "bolt")
         self.neo4j_username = os.environ["NEO4J_USERNAME"]
         self.neo4j_password = os.environ["NEO4J_PASSWORD"]
 
-        # Model configuration names from environment
         self.embedding_model_name = os.getenv(
             "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
         )
         self.modelGroq_name = os.environ["GROQ_MODEL_NAME"]
 
-        # Initialize Hugging Face embeddings natively in Python memory
         self.logger.info(f"Loading local embedding model: {self.embedding_model_name}")
         self.embedding_model = get_embedding_model(self.embedding_model_name)
 
@@ -74,7 +86,7 @@ class QueryEngine:
         Returns:
             tuple: A tuple containing:
                 - str: The verdict/answer from the LLM (e.g., Supported, Refuted, NEI).
-                - dict: Token usage metadata for RQ2 Efficiency (total tokens and call count).
+                - dict: Token usage metadata (total tokens and call count).
         """
         self.logger.info("Executing Hybrid GraphRAG query...")
         token_tracker = TokenTrackerCallback()
@@ -134,7 +146,6 @@ class QueryEngine:
             elapsed_time = time.time() - start_time_similarity
             self.logger.info(f"GraphRAG query completed in {elapsed_time:.2f} seconds.")
 
-            # Package the extracted metrics
             token_data = {
                 "total": token_tracker.total_tokens,
                 "calls": token_tracker.llm_calls,
@@ -146,7 +157,6 @@ class QueryEngine:
             return None, {"total": 0, "calls": 0}
 
         finally:
-            # 2. STRICT CLEANUP: Close the connection pool to prevent the RAM freeze!
             if vector_store is not None:
                 try:
                     vector_store._driver.close()

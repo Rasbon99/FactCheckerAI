@@ -1,32 +1,28 @@
 import os
-import json
 import time
 import uuid
 import dotenv
 from groq import Groq
 from log import Logger
 
-# --- Import Pipeline Components ---
-from Evaluation.Utils.experiment_tracker import ExperimentTracker
 from Evaluation.Utils.dataset_manager import DatasetManager
-from Database.data_entities import Claim, Answer
+from Database.data_entities import Claim, Answer, Experiment
 
-# Load environment variables
-dotenv.load_dotenv("key.env", override=True)
+dotenv.load_dotenv("key.env", override=False)
 
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
 
-# Initialize Groq Client
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
+
 client = Groq(api_key=GROQ_API_KEY)
-logger = Logger("LLM-Only-Baseline").get_logger()
+logger = Logger("ClosedBook-Baseline").get_logger()
 
 
-def get_llm_only_verdict(
+def get_closed_book_verdict(
     claim_text, prompt_instructions, nei_label, metadata_context=""
 ):
     """Asks the LLM to verify the claim using ONLY its internal weights, providing context if available."""
@@ -52,13 +48,12 @@ def get_llm_only_verdict(
     return result_text, tokens_used
 
 
-def run_llm_baseline():
-    # Initialize the Smart Dataset Manager
+def run_closed_book_baseline():
     dataset_manager = DatasetManager()
-    active_dataset = dataset_manager.active_dataset
-    tracker_env_name = dataset_manager.get_tracker_dataset_name("ZeroShot")
 
-    # Define the exact NEI label to prevent LLM hallucination
+    metadata = dataset_manager.get_experiment_metadata(environment="closed_book")
+    active_dataset = metadata["dataset_name"]
+
     nei_label = (
         "NOT ENOUGH INFO" if active_dataset == "FEVER" else "Not Enough Evidence"
     )
@@ -69,15 +64,18 @@ def run_llm_baseline():
         "citing the provided evidence", "based on your internal knowledge"
     )
 
-    logger.info(f"Starting Baseline 1 (LLM-Only) with {MAX_CLAIMS_TO_TEST} claims...")
+    logger.info(
+        f"Starting Baseline (Closed-Book / LLM-Only) with {MAX_CLAIMS_TO_TEST} claims..."
+    )
+    logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {active_dataset}")
+    logger.info(f"Experiment Type: {metadata['experiment_type']}")
     logger.info(f"Using Metadata Context: {USE_METADATA}")
     logger.info(f"Using Model: {GROQ_MODEL}")
 
     successful_runs = 0
 
     try:
-        # Ask the DatasetManager for the claims
         claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
 
         for line_number, data in enumerate(claims_data):
@@ -85,7 +83,6 @@ def run_llm_baseline():
             ground_truth = data.get("label", "")
 
             # --- OPTIONAL METADATA INJECTION ---
-            # Safely extract context for the LLM without modifying the core claim
             metadata_context = ""
             if active_dataset == "AVERITEC" and USE_METADATA:
                 speaker = data.get("speaker", "")
@@ -107,39 +104,27 @@ def run_llm_baseline():
                     metadata_context = (
                         "\nCONTEXT PROVIDED FOR THIS CLAIM:\n" + "\n".join(meta_parts)
                     )
-            # -----------------------------------
 
             logger.info(f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
             logger.info(f"Ground Truth: {ground_truth}")
 
             claim_id = str(uuid.uuid4())
-            tracker = ExperimentTracker(
-                claim_id=claim_id,
-                ground_truth=ground_truth,
-                system_type="LLM-Only",
-                dataset_setting=tracker_env_name,
-            )
 
             Claim(
                 text=claim_text,
-                title="[LLM-Only] " + claim_text[:30] + "...",
+                title="[ClosedBook] " + claim_text[:30] + "...",
                 summary="Tested without any external evidence.",
                 claim_id=claim_id,
             )
 
-            # --- Pass the safe metadata context to the LLM Call ---
-            def run_llm():
-                res_text, toks = get_llm_only_verdict(
-                    claim_text, prompt_instructions, nei_label, metadata_context
-                )
-                return (res_text, None), {"total": toks, "calls": 1}
+            # --- GENERATION STEP ---
+            t0 = time.time()
+            query_result, tokens_used = get_closed_book_verdict(
+                claim_text, prompt_instructions, nei_label, metadata_context
+            )
+            latency_generation = time.time() - t0
 
-            query_result = tracker.run_stage("generation", run_llm)
-
-            if isinstance(query_result, tuple):
-                query_result = query_result[0]
-
-            # 3. Verdict Parsing
+            # Verdict Parsing
             try:
                 if query_result and "VERDICT:" in query_result:
                     predicted_label = (
@@ -152,34 +137,45 @@ def run_llm_baseline():
             except Exception:
                 predicted_label = "Parsing Error"
 
-            logger.info(f"LLM Verdict: {predicted_label}")
+            logger.info(f"Closed-Book Verdict: {predicted_label}")
 
-            # 4. Create Answer Entity for the UI
             Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
 
-            # 5. Log Experiment Metrics
-            tracker.finalize(
-                predicted_label,
-                {
+            # --- LOG TO EXPERIMENTS DATABASE ---
+            Experiment(
+                claim_id=claim_id,
+                predicted_label=predicted_label,
+                ground_truth=ground_truth,
+                latencies={
+                    "preprocessor": 0.0,
+                    "retrieval": 0.0,
+                    "generation": latency_generation,
+                },
+                tokens={"preprocessor": 0, "retrieval": 0, "generation": tokens_used},
+                calls={"preprocessor": 0, "retrieval": 0, "generation": 1},
+                evidence_data={
                     "claim_text": claim_text,
-                    "raw_sources": [],  # No sources used!
+                    "raw_sources": [],
                     "query_result": query_result,
                 },
+                system_type="ClosedBook",
+                environment=metadata["environment"],
+                dataset_name=metadata["dataset_name"],
+                experiment_type=metadata["experiment_type"],
             )
 
             successful_runs += 1
 
-            # Sleep for 2 seconds to avoid hitting Groq API rate limits
             time.sleep(2)
 
     except Exception as e:
         logger.error(f"Error during execution: {e}")
 
     logger.info("=" * 20)
-    logger.info("LLM-ONLY BASELINE COMPLETE!")
+    logger.info("CLOSED-BOOK BASELINE COMPLETE!")
     logger.info(f"Successfully processed: {successful_runs}")
     logger.info("=" * 20)
 
 
 if __name__ == "__main__":
-    run_llm_baseline()
+    run_closed_book_baseline()

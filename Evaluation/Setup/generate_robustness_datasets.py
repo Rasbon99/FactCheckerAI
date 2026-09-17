@@ -7,7 +7,7 @@ from log import Logger
 from Evaluation.Utils.dataset_manager import DatasetManager
 
 # Load environment variables
-dotenv.load_dotenv("key.env", override=True)
+dotenv.load_dotenv("key.env", override=False)
 
 BASE_ROBUSTNESS_DIR = "Datasets/RobustnessTests"
 logger = Logger("generate_robustness_datasets").get_logger()
