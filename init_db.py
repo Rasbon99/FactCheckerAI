@@ -61,6 +61,7 @@ def initialize_database_schema(db: Database | None = None):
             environment TEXT,       -- e.g., "openweb", "controlled"
             dataset_name TEXT,      -- e.g., "FEVER", "AVERITEC"
             experiment_type TEXT,   -- e.g., "standard", "missing", "noisy", "conflicting"
+            use_metadata BOOLEAN,   -- Flag to identify if the metadata super-query was used
             
             -- Latency Metrics (Seconds)
             latency_preprocessor REAL,

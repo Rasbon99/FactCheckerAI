@@ -76,6 +76,7 @@ def run_experiment():
                         environment="open_web",
                         dataset_name=metadata["dataset_name"],
                         experiment_type=metadata["experiment_type"],
+                        use_metadata=metadata["use_metadata"],
                     )
 
                     logger.info(

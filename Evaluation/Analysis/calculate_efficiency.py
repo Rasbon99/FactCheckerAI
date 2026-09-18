@@ -13,7 +13,7 @@ def calculate_efficiency():
 
     query = """
         SELECT 
-            system_type, environment, dataset_name, experiment_type,
+            system_type, environment, dataset_name, experiment_type, use_metadata,
             latency_preprocessor, latency_retrieval, latency_generation,
             tokens_preprocessor, tokens_retrieval, tokens_generation,
             calls_preprocessor, calls_retrieval, calls_generation
@@ -38,7 +38,13 @@ def calculate_efficiency():
     # Convert to Pandas DataFrame
     df = pd.DataFrame([dict(row) for row in rows])
 
-    group_cols = ["system_type", "dataset_name", "environment", "experiment_type"]
+    group_cols = [
+        "system_type",
+        "dataset_name",
+        "environment",
+        "experiment_type",
+        "use_metadata",
+    ]
     null_count = df[group_cols].isna().any(axis=1).sum()
     if null_count > 0:
         logger.warning(f"Found {null_count} trials with NULL metadata in {group_cols}.")
@@ -70,7 +76,7 @@ def calculate_efficiency():
             return pd.isna(value)
         return False
 
-    for (sys_type, ds_name, env, exp_type), group in grouped_experiments:
+    for (sys_type, ds_name, env, exp_type, use_meta), group in grouped_experiments:
         group_size = len(group)
         total_analyzed += group_size
 
@@ -78,10 +84,13 @@ def calculate_efficiency():
         display_ds = "UNKNOWN / NULL" if is_nullish(ds_name) else ds_name
         display_env = "UNKNOWN / NULL" if is_nullish(env) else env
         display_exp = "UNKNOWN / NULL" if is_nullish(exp_type) else exp_type
+        display_meta = (
+            "UNKNOWN / NULL" if is_nullish(use_meta) else ("ON" if use_meta else "OFF")
+        )
 
         logger.info(f"SYSTEM: {display_sys}")
         logger.info(
-            f"DATASET: {display_ds} | ENV: {display_env} | EXP TYPE: {display_exp}"
+            f"DATASET: {display_ds} | ENV: {display_env} | EXP TYPE: {display_exp} | METADATA: {display_meta}"
         )
         logger.info(f"SAMPLE SIZE: {group_size} claims")
 

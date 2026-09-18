@@ -176,6 +176,7 @@ class Experiment:
         environment="open_web",
         dataset_name="User-Query",
         experiment_type="standard",
+        use_metadata=False,
         experiment_id=None,
         db=None,
     ):
@@ -190,6 +191,7 @@ class Experiment:
         self.environment = environment
         self.dataset_name = dataset_name
         self.experiment_type = experiment_type
+        self.use_metadata = use_metadata
 
         self.latencies = latencies
         self.tokens = tokens
@@ -217,12 +219,12 @@ class Experiment:
     def save_to_db(self):
         self.db.execute_query(
             """INSERT INTO experiments 
-               (id, claim_id, predicted_label, ground_truth, system_type, environment, dataset_name, experiment_type,
+               (id, claim_id, predicted_label, ground_truth, system_type, environment, dataset_name, experiment_type, use_metadata,
                 latency_preprocessor, latency_retrieval, latency_generation, 
                 tokens_preprocessor, tokens_retrieval, tokens_generation,
                 calls_preprocessor, calls_retrieval, calls_generation,
                 evidence_log_path) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 self.id,
                 self.claim_id,
@@ -232,6 +234,7 @@ class Experiment:
                 self.environment,
                 self.dataset_name,
                 self.experiment_type,
+                self.use_metadata,
                 self.latencies.get("preprocessor", 0.0),
                 self.latencies.get("retrieval", 0.0),
                 self.latencies.get("generation", 0.0),
