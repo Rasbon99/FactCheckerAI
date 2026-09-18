@@ -207,6 +207,7 @@ def run_sparse_baseline_openweb():
                 environment=metadata["environment"],
                 dataset_name=metadata["dataset_name"],
                 experiment_type=metadata["experiment_type"],
+                use_metadata=metadata["use_metadata"],
             )
 
             successful_runs += 1

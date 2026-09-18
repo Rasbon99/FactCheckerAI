@@ -110,4 +110,5 @@ class DatasetManager:
             "environment": environment,
             "dataset_name": dataset_name,
             "experiment_type": experiment_type,
+            "use_metadata": self.use_metadata,
         }

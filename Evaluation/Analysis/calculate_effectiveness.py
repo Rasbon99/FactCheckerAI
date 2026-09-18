@@ -14,7 +14,7 @@ def calculate_effectiveness():
     db = Database()
 
     query = """
-        SELECT system_type, environment, dataset_name, experiment_type, ground_truth, predicted_label 
+        SELECT system_type, environment, dataset_name, experiment_type, use_metadata, ground_truth, predicted_label 
         FROM experiments 
         WHERE ground_truth IS NOT NULL AND ground_truth NOT IN ('', 'Not Provided')
     """
@@ -48,12 +48,21 @@ def calculate_effectiveness():
     # =========================================================
 
     grouped_experiments = df.groupby(
-        ["system_type", "dataset_name", "environment", "experiment_type"]
+        [
+            "system_type",
+            "dataset_name",
+            "environment",
+            "experiment_type",
+            "use_metadata",
+        ]
     )
 
-    for (sys_type, ds_name, env, exp_type), group in grouped_experiments:
+    for (sys_type, ds_name, env, exp_type, use_meta), group in grouped_experiments:
         logger.info(f"SYSTEM: {sys_type}")
-        logger.info(f"DATASET: {ds_name} | ENV: {env} | EXP TYPE: {exp_type}")
+        meta_str = "ON" if use_meta else "OFF"
+        logger.info(
+            f"DATASET: {ds_name} | ENV: {env} | EXP TYPE: {exp_type} | METADATA: {meta_str}"
+        )
         logger.info(f"SAMPLE SIZE: {len(group)} claims")
 
         y_true = group["ground_truth"].tolist()

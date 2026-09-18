@@ -72,6 +72,7 @@ def run_experiment():
                         environment=metadata["environment"],
                         dataset_name=metadata["dataset_name"],
                         experiment_type=metadata["experiment_type"],
+                        use_metadata=metadata["use_metadata"],
                     )
 
                     logger.info(
