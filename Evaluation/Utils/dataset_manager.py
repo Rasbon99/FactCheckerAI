@@ -22,15 +22,16 @@ class DatasetManager:
             "AVERITEC_DATASET_PATH", "Datasets/AVeriTeC/averitec_dev_dataset.json"
         )
 
-    def load_data(self, max_claims=5):
-        """Intelligently loads either JSONL (FEVER) or JSON Array (AVeriTeC)"""
+    def load_data(self, max_claims=None):
+        """Intelligently loads either JSONL (FEVER) or JSON Array (AVeriTeC).
+        If max_claims is None, it loads the entire dataset."""
         data_list = []
 
         if self.active_dataset == "FEVER":
             logger.info(f"Loading FEVER Dataset from {self.fever_path}...")
             with open(self.fever_path, "r", encoding="utf-8") as f:
                 for i, line in enumerate(f):
-                    if i >= max_claims:
+                    if max_claims is not None and i >= max_claims:
                         break
                     claim_data = json.loads(line)
                     claim_data["internal_id"] = str(i)
@@ -42,7 +43,7 @@ class DatasetManager:
                 full_array = json.load(f)
 
                 for i, claim_data in enumerate(full_array):
-                    if i >= max_claims:
+                    if max_claims is not None and i >= max_claims:
                         break
                     claim_data["internal_id"] = str(i)
                     data_list.append(claim_data)
