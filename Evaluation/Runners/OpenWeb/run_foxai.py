@@ -12,7 +12,6 @@ dotenv.load_dotenv("key.env", override=False)
 BACKEND_URL = os.getenv("BACKEND_API_URL")
 API_URL = f"{BACKEND_URL}/run_pipeline"
 
-MAX_CLAIMS_TO_TEST = 5
 logger = Logger("FoxAI-OpenWeb").get_logger()
 
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
@@ -24,9 +23,7 @@ def run_experiment():
 
     prompt_instructions = dataset_manager.get_prompt_instructions()
 
-    logger.info(
-        f"Starting FoxAI GraphRAG (Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
-    )
+    logger.info(f"Starting FoxAI GraphRAG (Open Web)...")
     logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {metadata['dataset_name']}")
     logger.info(f"Experiment Type: {metadata['experiment_type']}")
@@ -37,7 +34,7 @@ def run_experiment():
     failed_runs = 0
 
     try:
-        claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
+        claims_data = dataset_manager.load_data()
 
         for line_number, data in enumerate(claims_data):
             claim_text = data.get("claim", "")
@@ -47,9 +44,7 @@ def run_experiment():
             if metadata["dataset_name"] == "AVERITEC" and USE_METADATA:
                 search_query = dataset_manager.build_search_query(data)
 
-            logger.info(
-                f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Processing: {claim_text[:50]}..."
-            )
+            logger.info(f"[{line_number + 1}] Processing: {claim_text[:50]}...")
             if search_query != claim_text:
                 logger.info(f"Enriched Search Query: {search_query}")
 

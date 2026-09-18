@@ -19,7 +19,6 @@ set_alias_map({model_alias: model_port})
 load_models([model_alias])
 
 # Configuration
-MAX_CLAIMS_TO_TEST = 5
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 logger = Logger("ClosedBook-Baseline").get_logger()
 
@@ -72,9 +71,7 @@ def run_closed_book_baseline():
         "citing the provided evidence", "based on your internal knowledge"
     )
 
-    logger.info(
-        f"Starting Baseline (Closed-Book / LLM-Only) with {MAX_CLAIMS_TO_TEST} claims..."
-    )
+    logger.info("Starting Baseline (Closed-Book / LLM-Only)...")
     logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Experiment Type: {metadata['experiment_type']}")
@@ -84,7 +81,7 @@ def run_closed_book_baseline():
     successful_runs = 0
 
     try:
-        claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
+        claims_data = dataset_manager.load_data()
 
         for line_number, data in enumerate(claims_data):
             claim_text = data.get("claim", "")
@@ -113,7 +110,7 @@ def run_closed_book_baseline():
                         "\nCONTEXT PROVIDED FOR THIS CLAIM:\n" + "\n".join(meta_parts)
                     )
 
-            logger.info(f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
+            logger.info(f"[{line_number + 1}] Claim: {claim_text}")
             logger.info(f"Ground Truth: {ground_truth}")
 
             claim_id = str(uuid.uuid4())

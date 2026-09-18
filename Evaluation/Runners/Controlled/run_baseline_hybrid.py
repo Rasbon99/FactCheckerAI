@@ -31,9 +31,6 @@ print(f"[Backend] Connecting to local llama.cpp server on port {model_port}...")
 set_alias_map({model_alias: model_port})
 load_models([model_alias])
 
-# Configuration
-MAX_CLAIMS_TO_TEST = 5
-
 # Initialize llama.cpp configuration
 model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
@@ -122,9 +119,7 @@ def run_hybrid_baseline():
 
     prompt_instructions = dataset_manager.get_prompt_instructions()
 
-    logger.info(
-        f"Starting Baseline (HybridRAG Re-ranking) with {MAX_CLAIMS_TO_TEST} claims..."
-    )
+    logger.info("Starting Baseline (HybridRAG Re-ranking)...")
     logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Experiment Type: {metadata['experiment_type']}")
@@ -160,7 +155,7 @@ def run_hybrid_baseline():
     successful_runs = 0
 
     try:
-        claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
+        claims_data = dataset_manager.load_data()
 
         for line_number, data in enumerate(claims_data):
             claim_text = data.get("claim", "")
@@ -170,7 +165,7 @@ def run_hybrid_baseline():
             if active_dataset == "AVERITEC" and USE_METADATA:
                 search_query = dataset_manager.build_search_query(data)
 
-            logger.info(f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
+            logger.info(f"[{line_number + 1}] Claim: {claim_text}")
             if search_query != claim_text:
                 logger.info(f"Enriched Search Query: {search_query}")
             logger.info(f"Ground Truth: {ground_truth}")
