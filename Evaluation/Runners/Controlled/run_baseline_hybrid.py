@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import time
 import uuid
 import re
 import dotenv
@@ -12,26 +13,26 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
 from langchain.retrievers.document_compressors import EmbeddingsFilter
 from langchain.retrievers import ContextualCompressionRetriever
-from langchain_ollama import OllamaEmbeddings
 from langchain_community.retrievers import BM25Retriever
+from langchain_huggingface import HuggingFaceEmbeddings
 
 # --- Import Pipeline Components ---
-from Evaluation.Utils.experiment_tracker import ExperimentTracker
 from Evaluation.Utils.dataset_manager import DatasetManager
 from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
-from Database.data_entities import Claim, Answer
+from Database.data_entities import Claim, Answer, Experiment
+from Utils.nomic_embedding import get_embedding_model
 
-dotenv.load_dotenv("key.env", override=True)
+dotenv.load_dotenv("key.env", override=False)
 
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
 
-# Initialize Groq Client
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
+
 client = Groq(api_key=GROQ_API_KEY)
-logger = Logger("Hybrid-Baseline").get_logger()
+logger = Logger("HybridRAG-Controlled").get_logger()
 
 
 # ====================================================================
@@ -75,11 +76,10 @@ class SQLiteFTS5Retriever(BaseRetriever):
 # ====================================================================
 
 
-def get_hybrid_verdict(claim_text, retrieved_evidence, prompt_instructions, nei_label):
+def get_hybrid_verdict(claim_text, retrieved_evidence, prompt_instructions):
     """Asks the LLM to verify the claim using the Hybrid RAG retrieved text."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
-    If the evidence does not contain enough information to make a definitive decision, answer exactly: {nei_label}.
 
     {prompt_instructions}
 
@@ -101,26 +101,32 @@ def get_hybrid_verdict(claim_text, retrieved_evidence, prompt_instructions, nei_
 
 
 def run_hybrid_baseline():
-    # Initialize the Smart Dataset Manager
     dataset_manager = DatasetManager()
-    active_dataset = dataset_manager.active_dataset
-    tracker_env_name = dataset_manager.get_tracker_dataset_name("Controlled")
+
+    # Using the new metadata function
+    metadata = dataset_manager.get_experiment_metadata(environment="controlled")
+    active_dataset = metadata["dataset_name"]
+
     prompt_instructions = dataset_manager.get_prompt_instructions()
-    nei_label = (
-        "NOT ENOUGH INFO" if active_dataset == "FEVER" else "Not Enough Evidence"
-    )
 
     logger.info(
-        f"Starting Baseline 3 (Hybrid-RAG Re-ranking) with {MAX_CLAIMS_TO_TEST} claims..."
+        f"Starting Baseline (HybridRAG Re-ranking) with {MAX_CLAIMS_TO_TEST} claims..."
     )
+    logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {active_dataset}")
+    logger.info(f"Experiment Type: {metadata['experiment_type']}")
     logger.info(f"Using Metadata Super Query: {USE_METADATA}")
 
     # ---------------------------------------------------------
     # 2. CONFIGURE THE RETRIEVAL PIPELINE BASED ON DATASET
     # ---------------------------------------------------------
-    logger.info("Loading Ollama Embeddings (This takes a few seconds)...")
-    embeddings = OllamaEmbeddings(model="nomic-embed-text")
+    logger.info(
+        "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
+    )
+    embedding_model_name = os.getenv(
+        "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
+    )
+    embeddings = get_embedding_model(embedding_model_name)
     embeddings_filter = EmbeddingsFilter(embeddings=embeddings, k=2)
 
     hybrid_rag_retriever = None
@@ -130,7 +136,6 @@ def run_hybrid_baseline():
         wiki_db_path = os.getenv(
             "FEVER_WIKIPEDIA_DB_PATH", "Datasets/FEVER/fever_wiki.db"
         )
-        # Snap the SQLite search and the Embedding filter together
         hybrid_rag_retriever = ContextualCompressionRetriever(
             base_compressor=embeddings_filter,
             base_retriever=SQLiteFTS5Retriever(db_path=wiki_db_path),
@@ -148,7 +153,6 @@ def run_hybrid_baseline():
             claim_text = data.get("claim", "")
             ground_truth = data.get("label", "")
 
-            # --- CONDITIONAL METADATA QUERY ---
             search_query = claim_text
             if active_dataset == "AVERITEC" and USE_METADATA:
                 search_query = dataset_manager.build_search_query(data)
@@ -159,12 +163,6 @@ def run_hybrid_baseline():
             logger.info(f"Ground Truth: {ground_truth}")
 
             claim_id = str(uuid.uuid4())
-            tracker = ExperimentTracker(
-                claim_id=claim_id,
-                ground_truth=ground_truth,
-                system_type="Baseline-Hybrid",
-                dataset_setting=tracker_env_name,
-            )
 
             Claim(
                 text=claim_text,
@@ -174,41 +172,34 @@ def run_hybrid_baseline():
             )
 
             # --- THE RETRIEVAL STEP ---
-            logger.info("Extracting and Re-ranking with Ollama...")
+            logger.info("Extracting and Re-ranking...")
+            t0 = time.time()
+            best_docs = []
 
-            def run_retrieval():
-                if active_dataset == "FEVER":
-                    if hybrid_rag_retriever is None:
-                        raise RuntimeError(
-                            "FEVER Retriever was not properly initialized."
-                        )
-                    # Use the search_query (which is identical to claim_text for FEVER)
-                    return hybrid_rag_retriever.invoke(search_query)
+            if active_dataset == "FEVER":
+                if hybrid_rag_retriever is None:
+                    raise RuntimeError("FEVER Retriever was not properly initialized.")
+                best_docs = hybrid_rag_retriever.invoke(search_query)
 
-                elif active_dataset == "AVERITEC":
-                    if averitec_retriever is None:
-                        raise RuntimeError(
-                            "AVeriTeC Retriever was not properly initialized."
-                        )
-
-                    claim_id_internal = data.get("internal_id")
-                    sentences = averitec_retriever.get_evidence_for_claim(
-                        claim_id_internal
+            elif active_dataset == "AVERITEC":
+                if averitec_retriever is None:
+                    raise RuntimeError(
+                        "AVeriTeC Retriever was not properly initialized."
                     )
 
-                    # INJECT NOISE (If running the Noisy robustness test)
-                    if "noisy_ids" in data and sentences is not None:
-                        for n_id in data["noisy_ids"]:
-                            noisy_sentences = averitec_retriever.get_evidence_for_claim(
-                                n_id
-                            )
-                            if noisy_sentences:
-                                sentences.extend(noisy_sentences)
+                claim_id_internal = data.get("internal_id")
+                sentences = averitec_retriever.get_evidence_for_claim(claim_id_internal)
 
-                    if not sentences:
-                        return []
+                # INJECT NOISE (If running the Noisy robustness test)
+                if "noisy_ids" in data and sentences is not None:
+                    for n_id in data["noisy_ids"]:
+                        noisy_sentences = averitec_retriever.get_evidence_for_claim(
+                            n_id
+                        )
+                        if noisy_sentences:
+                            sentences.extend(noisy_sentences)
 
-                    # 1. Wrap strings into LangChain Documents
+                if sentences:
                     docs = [
                         Document(
                             page_content=s,
@@ -218,20 +209,16 @@ def run_hybrid_baseline():
                         )
                         for s in sentences
                     ]
-
-                    # 2. STAGE 1: Fast BM25 Math (Perfectly matches FEVER's top_k=50)
                     bm25_retriever = BM25Retriever.from_documents(docs)
                     bm25_retriever.k = 50
 
-                    # 3. STAGE 2: Heavy Semantic Re-ranking (Filter 50 down to 2 using Ollama)
+                    # 3. STAGE 2: Heavy Semantic Re-ranking (Filter 50 down to 2)
                     compression_retriever = ContextualCompressionRetriever(
                         base_compressor=embeddings_filter, base_retriever=bm25_retriever
                     )
+                    best_docs = compression_retriever.invoke(search_query)
 
-                    # Execute the two-stage pipeline using the ENRICHED query
-                    return compression_retriever.invoke(search_query)
-
-            best_docs = tracker.run_stage("retrieval", run_retrieval)
+            latency_retrieval = time.time() - t0
 
             combined_evidence = ""
             raw_sources = []
@@ -251,21 +238,18 @@ def run_hybrid_baseline():
                 )
 
             # --- THE GENERATION STEP ---
-            def run_llm():
-                # Strictly pass the original claim_text, not the search_query
-                res_text, toks = get_hybrid_verdict(
-                    claim_text, combined_evidence, prompt_instructions, nei_label
-                )
-                return (res_text, None), {"total": toks, "calls": 1}
+            t0 = time.time()
+            query_result, tokens_used = get_hybrid_verdict(
+                claim_text, combined_evidence, prompt_instructions
+            )
+            latency_generation = time.time() - t0
 
-            query_result = tracker.run_stage("generation", run_llm)
-
-            if isinstance(query_result, tuple):
-                query_result = query_result[0]
-
-            # Verdict Parsing
+            # --- 3. Verdict Parsing ---
             try:
-                if query_result and "VERDICT:" in query_result:
+                if not query_result or not query_result.strip():
+                    predicted_label = "Error: Empty LLM Response"
+                    query_result = "The LLM failed to generate a response."
+                elif "VERDICT:" in query_result:
                     predicted_label = (
                         query_result.split("REASONING:")[0]
                         .replace("VERDICT:", "")
@@ -280,15 +264,30 @@ def run_hybrid_baseline():
 
             Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
 
-            # Log to DB
-            tracker.finalize(
-                predicted_label,
-                {
+            # --- LOG TO EXPERIMENTS DATABASE ---
+            Experiment(
+                claim_id=claim_id,
+                predicted_label=predicted_label,
+                ground_truth=ground_truth,
+                latencies={
+                    "preprocessor": 0.0,
+                    "retrieval": latency_retrieval,
+                    "generation": latency_generation,
+                },
+                tokens={"preprocessor": 0, "retrieval": 0, "generation": tokens_used},
+                calls={"preprocessor": 0, "retrieval": 0, "generation": 1},
+                evidence_data={
                     "claim_text": claim_text,
                     "raw_sources": raw_sources,
                     "query_result": query_result,
                 },
+                system_type="HybridRAG",
+                environment=metadata["environment"],
+                dataset_name=metadata["dataset_name"],
+                experiment_type=metadata["experiment_type"],
+                use_metadata=metadata["use_metadata"],
             )
+
             successful_runs += 1
 
     except Exception as e:

@@ -6,18 +6,16 @@ from groq import Groq
 from rank_bm25 import BM25Okapi
 from log import Logger
 
-# --- Import Pipeline Components ---
-from Evaluation.Utils.experiment_tracker import ExperimentTracker
 from Evaluation.Utils.dataset_manager import DatasetManager
 from WebScraper.scraper import Scraper
-from Database.data_entities import Claim, Answer
+from Database.data_entities import Claim, Answer, Experiment
 
 # Load environment variables
-dotenv.load_dotenv("key.env", override=True)
+dotenv.load_dotenv("key.env", override=False)
 
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
-logger = Logger("BM25-OpenWeb").get_logger()
+logger = Logger("SparseRAG-OpenWeb").get_logger()
 
 # --- CONFIGURATION FLAG ---
 USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
@@ -38,11 +36,10 @@ def simple_chunker(text, chunk_word_size=150):
     return chunks
 
 
-def get_bm25_verdict(claim_text, best_evidence_string, prompt_instructions, nei_label):
+def get_bm25_verdict(claim_text, best_evidence_string, prompt_instructions):
     """Asks the LLM to verify the claim using ONLY the top chunks found by BM25."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
-    If the evidence does not contain enough information to make a definitive decision, answer exactly: {nei_label}.
 
     {prompt_instructions}
 
@@ -64,20 +61,19 @@ def get_bm25_verdict(claim_text, best_evidence_string, prompt_instructions, nei_
     return result_text, tokens_used
 
 
-def run_bm25_baseline_openweb():
-    # Initialize the Smart Dataset Manager
+def run_sparse_baseline_openweb():
     dataset_manager = DatasetManager()
-    active_dataset = dataset_manager.active_dataset
-    tracker_env_name = dataset_manager.get_tracker_dataset_name("OpenWeb")
+    metadata = dataset_manager.get_experiment_metadata(environment="open_web")
+    active_dataset = metadata["dataset_name"]
+
     prompt_instructions = dataset_manager.get_prompt_instructions()
-    nei_label = (
-        "NOT ENOUGH INFO" if active_dataset == "FEVER" else "Not Enough Evidence"
-    )
 
     logger.info(
-        f"Starting Baseline BM25 Keyword Search - Open Web with {MAX_CLAIMS_TO_TEST} claims..."
+        f"Starting Baseline (SparseRAG - Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
     )
+    logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {active_dataset}")
+    logger.info(f"Experiment Type: {metadata['experiment_type']}")
     logger.info(f"Using Metadata Super Query: {USE_METADATA}")
 
     successful_runs = 0
@@ -86,13 +82,11 @@ def run_bm25_baseline_openweb():
         claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
 
         for line_number, data in enumerate(claims_data):
-            # 1. Instantiate Scraper inside the loop to avoid DuckDuckGo session bans
             scraper = Scraper()
 
             claim_text = data.get("claim", "")
             ground_truth = data.get("label", "")
 
-            # --- CONDITIONAL METADATA QUERY ---
             search_query = claim_text
             if active_dataset == "AVERITEC" and USE_METADATA:
                 search_query = dataset_manager.build_search_query(data)
@@ -102,75 +96,57 @@ def run_bm25_baseline_openweb():
                 logger.info(f"Enriched Search Query: {search_query}")
 
             claim_id = str(uuid.uuid4())
-            tracker = ExperimentTracker(
-                claim_id=claim_id,
-                ground_truth=ground_truth,
-                system_type="Baseline-BM25",
-                dataset_setting=tracker_env_name,
-            )
 
             Claim(
                 text=claim_text,
-                title="[BM25] " + claim_text[:30] + "...",
+                title="[Sparse] " + claim_text[:30] + "...",
                 summary="Tested by scoring scraped pages using the BM25 algorithm.",
                 claim_id=claim_id,
             )
 
-            # --- 2. Retrieval & Filtering (Scraper + BM25) ---
-            def run_retrieval():
-                # We pass the ENRICHED search query to DuckDuckGo
-                raw_scraped_sources, scraper_metrics = scraper.search_and_extract(
-                    search_query, num_results=10
-                )
+            # --- 1. Retrieval & Filtering (Scraper + BM25) ---
+            t0 = time.time()
+            raw_scraped_sources, scraper_metrics = scraper.search_and_extract(
+                search_query, num_results=10
+            )
 
-                logger.info(
-                    f"Scraped {len(raw_scraped_sources)} pages. Running BM25 math..."
-                )
-                # Combine all text from all scraped pages
-                all_text = ""
-                for src in raw_scraped_sources:
-                    all_text += src.get("body", "") + " "
+            logger.info(
+                f"Scraped {len(raw_scraped_sources)} pages. Running BM25 math..."
+            )
 
-                # Break it into chunks
-                chunks = simple_chunker(all_text)
+            all_text = ""
+            for src in raw_scraped_sources:
+                all_text += src.get("body", "") + " "
 
-                if not chunks:
-                    return "No relevant articles could be scraped.", scraper_metrics
+            chunks = simple_chunker(all_text)
 
-                # --- THE BM25 ALGORITHM ---
+            if not chunks:
+                best_evidence = "No relevant articles could be scraped."
+            else:
                 tokenized_corpus = [chunk.lower().split() for chunk in chunks]
                 bm25 = BM25Okapi(tokenized_corpus)
-
-                # We use the ENRICHED search query to find the best chunks
                 tokenized_query = search_query.lower().split()
 
-                # Get the Top 3 most mathematically relevant chunks
                 top_3_chunks = bm25.get_top_n(tokenized_query, chunks, n=3)
                 best_evidence = "\n--- BM25 TOP MATCH ---\n".join(top_3_chunks)
 
-                return best_evidence, scraper_metrics
+            latency_retrieval = time.time() - t0
+            tokens_retrieval = scraper_metrics.get("total", 0)
+            calls_retrieval = scraper_metrics.get("calls", 0)
 
-            best_evidence = tracker.run_stage("retrieval", run_retrieval)
+            # --- 2. Generation (The LLM Call) ---
+            t0 = time.time()
+            query_result, tokens_used = get_bm25_verdict(
+                claim_text, best_evidence, prompt_instructions
+            )
+            latency_generation = time.time() - t0
 
-            if isinstance(best_evidence, tuple):
-                best_evidence = best_evidence[0]
-
-            # --- 3. Generation (The LLM Call) ---
-            def run_llm():
-                # Strictly pass the unedited claim_text to the generator
-                res_text, toks = get_bm25_verdict(
-                    claim_text, best_evidence, prompt_instructions, nei_label
-                )
-                return res_text, {"total": toks, "calls": 1}
-
-            query_result = tracker.run_stage("generation", run_llm)
-
-            if isinstance(query_result, tuple):
-                query_result = query_result[0]
-
-            # --- 4. Verdict Parsing ---
+            # --- 3. Verdict Parsing ---
             try:
-                if query_result and "VERDICT:" in query_result:
+                if not query_result or not query_result.strip():
+                    predicted_label = "Error: Empty LLM Response"
+                    query_result = "The LLM failed to generate a response."
+                elif "VERDICT:" in query_result:
                     predicted_label = (
                         query_result.split("REASONING:")[0]
                         .replace("VERDICT:", "")
@@ -181,18 +157,41 @@ def run_bm25_baseline_openweb():
             except Exception:
                 predicted_label = "Parsing Error"
 
-            logger.info(f"BM25 Verdict: {predicted_label}")
+            logger.info(f"Sparse Verdict: {predicted_label}")
 
             Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
 
-            # --- 5. Log to DB ---
-            tracker.finalize(
-                predicted_label,
-                {
+            # --- 4. Log to DB ---
+            Experiment(
+                claim_id=claim_id,
+                predicted_label=predicted_label,
+                ground_truth=ground_truth,
+                latencies={
+                    "preprocessor": 0.0,
+                    "retrieval": latency_retrieval,
+                    "generation": latency_generation,
+                },
+                tokens={
+                    "preprocessor": 0,
+                    "retrieval": tokens_retrieval,
+                    "generation": tokens_used,
+                },
+                calls={
+                    "preprocessor": 0,
+                    "retrieval": calls_retrieval,
+                    "generation": 1,
+                },
+                evidence_data={
                     "claim_text": claim_text,
+                    "raw_sources": raw_scraped_sources,
                     "bm25_evidence": best_evidence,
                     "query_result": query_result,
                 },
+                system_type="SparseRAG",
+                environment=metadata["environment"],
+                dataset_name=metadata["dataset_name"],
+                experiment_type=metadata["experiment_type"],
+                use_metadata=metadata["use_metadata"],
             )
 
             successful_runs += 1
@@ -203,9 +202,9 @@ def run_bm25_baseline_openweb():
         logger.error(f"{e}")
 
     logger.info("=" * 20)
-    logger.info("BM25 (OPEN WEB) COMPLETE!")
+    logger.info("SPARSE (OPEN WEB) COMPLETE!")
     logger.info("=" * 20)
 
 
 if __name__ == "__main__":
-    run_bm25_baseline_openweb()
+    run_sparse_baseline_openweb()
