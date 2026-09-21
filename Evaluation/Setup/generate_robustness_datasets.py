@@ -9,26 +9,33 @@ from Evaluation.Utils.dataset_manager import DatasetManager
 # Load environment variables
 dotenv.load_dotenv("key.env", override=False)
 
-BASE_ROBUSTNESS_DIR = "Datasets/RobustnessTests"
 logger = Logger("generate_robustness_datasets").get_logger()
 
 # Set a random seed so your thesis experiments are 100% reproducible!
 random.seed(42)
 
+FEVER_ROBUSTNESS_DIR = os.getenv("FEVER_ROBUSTNESS_DIR", "Datasets/FEVER/Robustness")
+AVERITEC_ROBUSTNESS_DIR = os.getenv(
+    "AVERITEC_ROBUSTNESS_DIR", "Datasets/AVERITEC/Robustness"
+)
+
 
 def save_dataset(dataset, filename_base, active_dataset):
-    """Saves as JSONL for FEVER, or JSON Array for AVeriTeC, in specific subfolders."""
-    # Ensure the dataset-specific subfolder exists
-    target_dir = os.path.join(BASE_ROBUSTNESS_DIR, active_dataset)
-    os.makedirs(target_dir, exist_ok=True)
+    """Saves as JSONL for FEVER, or JSON Array for AVeriTeC, in dynamically loaded subfolders."""
 
     if active_dataset == "FEVER":
-        filepath = os.path.join(target_dir, f"{filename_base}.jsonl")
+        target_dir = FEVER_ROBUSTNESS_DIR
+        os.makedirs(target_dir, exist_ok=True)
+        filepath = os.path.join(target_dir, f"fever_dev_{filename_base}.jsonl")
+
         with open(filepath, "w", encoding="utf-8") as f:
             for row in dataset:
                 f.write(json.dumps(row) + "\n")
     else:
-        filepath = os.path.join(target_dir, f"{filename_base}.json")
+        target_dir = AVERITEC_ROBUSTNESS_DIR
+        os.makedirs(target_dir, exist_ok=True)
+        filepath = os.path.join(target_dir, f"averitec_dev_{filename_base}.json")
+
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(dataset, f, indent=4)
 
@@ -64,8 +71,7 @@ def generate_noisy_dataset(base_claims, active_dataset):
     """
     TRAP 2: NOISY EVIDENCE
     FEVER: Appends random evidence blocks directly.
-    AVeriTeC: Adds a 'noisy_ids' array. (Note: To test this on AVeriTeC, you will
-    need to tweak your retriever to also load these extra IDs during the test).
+    AVeriTeC: Adds a 'noisy_ids' array.
     """
     dataset = []
 
@@ -133,24 +139,41 @@ def generate_conflicting_dataset(base_claims, active_dataset):
 
 
 if __name__ == "__main__":
-    logger.info("Starting Robustness Dataset Generation...")
+    logger.info("Starting Robustness Dataset Generation for ALL datasets...")
 
-    # Use DatasetManager to handle loading logic intelligently
-    manager = DatasetManager()
-    active = manager.active_dataset
+    datasets_to_process = ["FEVER", "AVERITEC"]
 
-    logger.info(f"Targeting active environment: {active}")
+    for dataset_name in datasets_to_process:
+        logger.info(f"--- Processing {dataset_name} ---")
 
-    try:
-        # Load exactly 100 claims for the robustness tests
-        claims = manager.load_data(max_claims=100)
+        # Temporarily override the OS environment variable so DatasetManager picks it up
+        os.environ["EXPERIMENT_ACTIVE_DATASET"] = dataset_name
 
-        generate_missing_dataset(claims, active)
-        generate_noisy_dataset(claims, active)
-        generate_conflicting_dataset(claims, active)
+        # Instantiate a fresh manager for this specific dataset
+        manager = DatasetManager()
 
-        logger.info(
-            f"All 3 robustness datasets are ready and safely stored in Datasets/RobustnessTests/{active}/!"
-        )
-    except Exception as e:
-        logger.error(f"Failed to generate datasets: {e}")
+        try:
+            # Load the entire dataset (no max_claims limit)
+            claims = manager.load_data()
+
+            if not claims:
+                logger.warning(f"No claims loaded for {dataset_name}. Skipping...")
+                continue
+
+            generate_missing_dataset(claims, dataset_name)
+            generate_noisy_dataset(claims, dataset_name)
+            generate_conflicting_dataset(claims, dataset_name)
+
+            target_log_dir = (
+                FEVER_ROBUSTNESS_DIR
+                if dataset_name == "FEVER"
+                else AVERITEC_ROBUSTNESS_DIR
+            )
+            logger.info(
+                f"All 3 robustness datasets are ready and safely stored in {target_log_dir}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to generate datasets for {dataset_name}: {e}")
+
+    logger.info("=" * 40)
+    logger.info("ROBUSTNESS GENERATION COMPLETE!")
