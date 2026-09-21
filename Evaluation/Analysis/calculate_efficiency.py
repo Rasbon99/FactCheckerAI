@@ -45,9 +45,14 @@ def calculate_efficiency():
         "experiment_type",
         "use_metadata",
     ]
-    null_count = df[group_cols].isna().any(axis=1).sum()
+
+    # Check for unexpected nulls in core metadata (ignoring use_metadata since FEVER uses NULL intentionally)
+    core_group_cols = [col for col in group_cols if col != "use_metadata"]
+    null_count = df[core_group_cols].isna().any(axis=1).sum()
     if null_count > 0:
-        logger.warning(f"Found {null_count} trials with NULL metadata in {group_cols}.")
+        logger.warning(
+            f"Found {null_count} trials with NULL core metadata in {core_group_cols}."
+        )
 
     # Calculate the 'Total Pipeline' metrics for each claim
     df["total_latency"] = (
@@ -84,9 +89,7 @@ def calculate_efficiency():
         display_ds = "UNKNOWN / NULL" if is_nullish(ds_name) else ds_name
         display_env = "UNKNOWN / NULL" if is_nullish(env) else env
         display_exp = "UNKNOWN / NULL" if is_nullish(exp_type) else exp_type
-        display_meta = (
-            "UNKNOWN / NULL" if is_nullish(use_meta) else ("ON" if use_meta else "OFF")
-        )
+        display_meta = "N/A" if is_nullish(use_meta) else ("ON" if use_meta else "OFF")
 
         logger.info(f"SYSTEM: {display_sys}")
         logger.info(

@@ -11,9 +11,13 @@ class DatasetManager:
         dotenv.load_dotenv(env_file, override=False)
 
         self.active_dataset = os.getenv("EXPERIMENT_ACTIVE_DATASET", "FEVER").upper()
-        self.use_metadata = (
-            os.getenv("AVERITEC_USE_METADATA", "false").lower() == "true"
-        )
+
+        if self.active_dataset == "AVERITEC":
+            self.use_metadata = (
+                os.getenv("AVERITEC_USE_METADATA", "false").lower() == "true"
+            )
+        else:
+            self.use_metadata = None
 
         self.fever_path = os.getenv(
             "FEVER_DATASET_PATH", "Datasets/FEVER/fever_dev_dataset.jsonl"

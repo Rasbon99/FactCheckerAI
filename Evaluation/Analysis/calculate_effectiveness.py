@@ -1,5 +1,6 @@
 import pandas as pd
 from sklearn.metrics import classification_report, accuracy_score
+from typing import Any, cast
 
 from Database.sqldb import Database
 from log import Logger
@@ -46,7 +47,6 @@ def calculate_effectiveness():
     # =========================================================
     # MULTI-SYSTEM COMPARISON REPORT
     # =========================================================
-
     grouped_experiments = df.groupby(
         [
             "system_type",
@@ -54,12 +54,19 @@ def calculate_effectiveness():
             "environment",
             "experiment_type",
             "use_metadata",
-        ]
+        ],
+        dropna=False,
     )
 
     for (sys_type, ds_name, env, exp_type, use_meta), group in grouped_experiments:
         logger.info(f"SYSTEM: {sys_type}")
-        meta_str = "ON" if use_meta else "OFF"
+
+        # Safely handle the NULL value for FEVER
+        if pd.isna(cast(Any, use_meta)):
+            meta_str = "N/A"
+        else:
+            meta_str = "ON" if use_meta else "OFF"
+
         logger.info(
             f"DATASET: {ds_name} | ENV: {env} | EXP TYPE: {exp_type} | METADATA: {meta_str}"
         )
