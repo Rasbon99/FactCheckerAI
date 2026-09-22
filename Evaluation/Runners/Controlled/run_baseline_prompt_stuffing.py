@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import time
 import uuid
 import dotenv
@@ -7,9 +8,10 @@ from langchain_core.messages import HumanMessage
 from log import Logger
 
 from Evaluation.Utils.dataset_manager import DatasetManager
-from WebScraper.scraper import Scraper
+from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
 from Database.data_entities import Claim, Answer, Experiment
 
+# Load environment variables
 dotenv.load_dotenv("key.env", override=False)
 
 model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
@@ -20,13 +22,45 @@ set_alias_map({model_alias: model_port})
 load_models([model_alias])
 
 # Configuration
-logger = Logger("PromptStuffing-OpenWeb").get_logger()
+USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
+logger = Logger("PromptStuffing-Controlled").get_logger()
+
+
+def extract_perfect_evidence(evidence_data, wiki_cursor):
+    """
+    Parses the FEVER evidence JSON, queries the SQLite DB, and extracts the exact text.
+    """
+    extracted_text = ""
+
+    for evidence_set in evidence_data:
+        for ev in evidence_set:
+            page_id = ev[2]
+            sentence_num = str(ev[3])
+
+            if page_id is None:
+                continue
+
+            wiki_cursor.execute(
+                "SELECT lines FROM wiki_articles WHERE page_id = ?", (page_id,)
+            )
+            result = wiki_cursor.fetchone()
+
+            if result:
+                raw_lines = result[0]
+                sentences = raw_lines.split("\n")
+                for sentence in sentences:
+                    parts = sentence.split("\t")
+                    if parts[0] == sentence_num and len(parts) > 1:
+                        extracted_text += parts[1] + " "
+                        break
+
+    return extracted_text.strip()
 
 
 def get_prompt_stuffing_verdict(
     claim_text, massive_evidence_string, prompt_instructions
 ):
-    """Asks the LLM to verify the claim using the massive wall of scraped text."""
+    """Asks the LLM to verify the claim using the massive wall of retrieved text."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
 
@@ -47,29 +81,42 @@ def get_prompt_stuffing_verdict(
     messages = [HumanMessage(content=prompt)]
     response = client.invoke(messages)
 
-    result_text = response.content
-    tokens_used = (
+    content = response.content
+    tokens = (
         response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
         if hasattr(response, "response_metadata")
         else 0
     )
 
-    return result_text, tokens_used
+    return content, tokens
 
 
-def run_prompt_stuffing_baseline_openweb():
+def run_prompt_stuffing_baseline_controlled():
     dataset_manager = DatasetManager()
-    metadata = dataset_manager.get_experiment_metadata(environment="open_web")
+    metadata = dataset_manager.get_experiment_metadata(environment="controlled")
     active_dataset = metadata["dataset_name"]
     use_meta = metadata["use_metadata"]
 
     prompt_instructions = dataset_manager.get_prompt_instructions()
 
-    logger.info("Starting Baseline (Prompt Stuffing - Open Web)...")
+    logger.info("Starting Baseline (Prompt Stuffing - Controlled)...")
     logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Experiment Type: {metadata['experiment_type']}")
     logger.info(f"Using Metadata Super Query: {use_meta}")
+
+    wiki_conn = None
+    wiki_cursor = None
+    averitec_retriever = None
+
+    if active_dataset == "FEVER":
+        wiki_db_path = os.getenv(
+            "FEVER_WIKIPEDIA_DB_PATH", "Datasets/FEVER/fever_wiki.db"
+        )
+        wiki_conn = sqlite3.connect(wiki_db_path)
+        wiki_cursor = wiki_conn.cursor()
+    elif active_dataset == "AVERITEC":
+        averitec_retriever = AVeriTeCKnowledgeRetriever()
 
     successful_runs = 0
 
@@ -77,8 +124,6 @@ def run_prompt_stuffing_baseline_openweb():
         claims_data = dataset_manager.load_data()
 
         for line_number, data in enumerate(claims_data):
-            scraper = Scraper()
-
             claim_text = data.get("claim", "")
             ground_truth = data.get("label", "")
 
@@ -89,36 +134,51 @@ def run_prompt_stuffing_baseline_openweb():
             logger.info(f"[{line_number + 1}] Claim: {claim_text}")
             if search_query != claim_text:
                 logger.info(f"Enriched Search Query: {search_query}")
+            logger.info(f"Ground Truth: {ground_truth}")
 
             claim_id = str(uuid.uuid4())
 
             Claim(
                 text=claim_text,
                 title="[PromptStuff] " + claim_text[:30] + "...",
-                summary="Tested by stuffing all scraped web pages directly into the prompt.",
+                summary="Tested by stuffing all database evidence directly into the prompt.",
                 claim_id=claim_id,
             )
 
-            # --- 1. Retrieval (Scraper) ---
+            # --- 1. Retrieval (Database Extract) ---
             t0 = time.time()
-            raw_scraped_sources, scraper_metrics = scraper.search_and_extract(
-                search_query, num_results=10
-            )
-
             combined_evidence = ""
-            for src in raw_scraped_sources:
-                combined_evidence += (
-                    f"\n--- Source: {src.get('url')} ---\n{src.get('body', '')}\n"
+
+            if active_dataset == "FEVER":
+                evidence_data = data.get("evidence", [])
+                combined_evidence = extract_perfect_evidence(evidence_data, wiki_cursor)
+
+            elif active_dataset == "AVERITEC" and averitec_retriever is not None:
+                claim_id_internal = data.get("internal_id")
+                all_sentences = averitec_retriever.get_evidence_for_claim(
+                    claim_id_internal
                 )
 
+                if "noisy_ids" in data and all_sentences is not None:
+                    for n_id in data["noisy_ids"]:
+                        noisy_sentences = averitec_retriever.get_evidence_for_claim(
+                            n_id
+                        )
+                        if noisy_sentences:
+                            all_sentences.extend(noisy_sentences)
+
+                if all_sentences:
+                    # In prompt stuffing, we just dump EVERYTHING into the prompt
+                    combined_evidence = "\n".join(all_sentences)
+
             if not combined_evidence.strip():
-                best_evidence = "No relevant articles could be scraped."
+                best_evidence = "No relevant evidence could be found in the dataset."
             else:
                 # --- API SAFETY VALVE FOR PROMPT STUFFING ---
                 MAX_CHARS = 20000
                 if len(combined_evidence) > MAX_CHARS:
                     logger.warning(
-                        f"Evidence massive ({len(combined_evidence)} chars). Truncating to {MAX_CHARS} to survive context limits."
+                        f"Evidence massive ({len(combined_evidence)} chars). Truncating to {MAX_CHARS} to survive API limits."
                     )
                     best_evidence = (
                         combined_evidence[:MAX_CHARS]
@@ -128,8 +188,6 @@ def run_prompt_stuffing_baseline_openweb():
                     best_evidence = combined_evidence
 
             latency_retrieval = time.time() - t0
-            tokens_retrieval = scraper_metrics.get("total", 0)
-            calls_retrieval = scraper_metrics.get("calls", 0)
 
             # --- 2. Generation (The LLM Call) ---
             t0 = time.time()
@@ -179,17 +237,17 @@ def run_prompt_stuffing_baseline_openweb():
                 },
                 tokens={
                     "preprocessor": 0,
-                    "retrieval": tokens_retrieval,
+                    "retrieval": 0,
                     "generation": tokens_used,
                 },
                 calls={
                     "preprocessor": 0,
-                    "retrieval": calls_retrieval,
+                    "retrieval": 0,
                     "generation": 1,
                 },
                 evidence_data={
                     "claim_text": claim_text,
-                    "raw_sources": raw_scraped_sources,
+                    "raw_sources": [],
                     "best_evidence": best_evidence,
                     "query_result": query_result,
                 },
@@ -201,16 +259,19 @@ def run_prompt_stuffing_baseline_openweb():
             )
 
             successful_runs += 1
-            logger.info("Sleeping for 15 seconds to respect DuckDuckGo rate limits...")
-            time.sleep(15)
+            time.sleep(2)
 
     except Exception as e:
         logger.error(f"{e}")
+    finally:
+        if wiki_conn:
+            wiki_conn.close()
 
     logger.info("=" * 20)
-    logger.info("PROMPT STUFFING (OPEN WEB) COMPLETE!")
+    logger.info("PROMPT STUFFING (CONTROLLED) COMPLETE!")
+    logger.info(f"Successfully processed: {successful_runs}")
     logger.info("=" * 20)
 
 
 if __name__ == "__main__":
-    run_prompt_stuffing_baseline_openweb()
+    run_prompt_stuffing_baseline_controlled()

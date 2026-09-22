@@ -23,7 +23,7 @@ class DashboardPipeline:
         Raises:
             Exception: If environment variables cannot be loaded or other initialization errors occur.
         """
-        dotenv.load_dotenv(env_file, override=True)
+        dotenv.load_dotenv(env_file, override=False)
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.logo = os.getenv("AI_IMAGE_UI", "assets/FOX_AI.png")
         self.controller_url = os.getenv("CONTROLLER_API_URL", "http://127.0.0.1:8003")

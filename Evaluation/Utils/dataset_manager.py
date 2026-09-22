@@ -8,15 +8,17 @@ logger = Logger("dataset_manager").get_logger()
 
 class DatasetManager:
     def __init__(self, env_file="key.env"):
-        dotenv.load_dotenv(env_file, override=True)
+        dotenv.load_dotenv(env_file, override=False)
 
-        # Load controls
         self.active_dataset = os.getenv("EXPERIMENT_ACTIVE_DATASET", "FEVER").upper()
-        self.use_metadata = (
-            os.getenv("AVERITEC_USE_METADATA", "false").lower() == "true"
-        )
 
-        # Load paths
+        if self.active_dataset == "AVERITEC":
+            self.use_metadata = (
+                os.getenv("AVERITEC_USE_METADATA", "false").lower() == "true"
+            )
+        else:
+            self.use_metadata = None
+
         self.fever_path = os.getenv(
             "FEVER_DATASET_PATH", "Datasets/FEVER/fever_dev_dataset.jsonl"
         )
@@ -24,18 +26,18 @@ class DatasetManager:
             "AVERITEC_DATASET_PATH", "Datasets/AVeriTeC/averitec_dev_dataset.json"
         )
 
-    def load_data(self, max_claims=5):
-        """Intelligently loads either JSONL (FEVER) or JSON Array (AVeriTeC)"""
+    def load_data(self, max_claims=None):
+        """Intelligently loads either JSONL (FEVER) or JSON Array (AVeriTeC).
+        If max_claims is None, it loads the entire dataset."""
         data_list = []
 
         if self.active_dataset == "FEVER":
             logger.info(f"Loading FEVER Dataset from {self.fever_path}...")
             with open(self.fever_path, "r", encoding="utf-8") as f:
                 for i, line in enumerate(f):
-                    if i >= max_claims:
+                    if max_claims is not None and i >= max_claims:
                         break
                     claim_data = json.loads(line)
-                    # FEVER doesn't have an explicit numeric ID for the knowledge store, so we add an index
                     claim_data["internal_id"] = str(i)
                     data_list.append(claim_data)
 
@@ -45,9 +47,8 @@ class DatasetManager:
                 full_array = json.load(f)
 
                 for i, claim_data in enumerate(full_array):
-                    if i >= max_claims:
+                    if max_claims is not None and i >= max_claims:
                         break
-                    # The AVeriTeC knowledge store uses the array index (0, 1, 2) as the claim_id
                     claim_data["internal_id"] = str(i)
                     data_list.append(claim_data)
 
@@ -63,7 +64,6 @@ class DatasetManager:
         location_ISO_code = data.get("location_ISO_code", "")
         reporting_source = data.get("reporting_source", "")
 
-        # Add everything to a single list
         final_query_parts = [claim]
 
         if speaker:
@@ -73,7 +73,6 @@ class DatasetManager:
         if reporting_source:
             final_query_parts.append(f"Source: {reporting_source}")
 
-        # Join them all perfectly with semicolons
         return " ; ".join(final_query_parts)
 
     def get_prompt_instructions(self):
@@ -82,7 +81,12 @@ class DatasetManager:
             return """
             You must format your response EXACTLY like this:
             VERDICT: [SUPPORTS or REFUTES or NOT ENOUGH INFO]
-            REASONING: [Your brief explanation citing the provided evidence]"""
+            REASONING: [Your brief explanation citing the provided evidence]
+            
+            RULES FOR VERDICT:
+            - SUPPORTS: The provided evidence clearly proves the claim is true.
+            - REFUTES: The provided evidence clearly proves the claim is false.
+            - NOT ENOUGH INFO: The provided evidence does not contain sufficient information to judge the claim."""
         else:
             return """
             You must format your response EXACTLY like this:
@@ -95,13 +99,20 @@ class DatasetManager:
             - Not Enough Evidence: The evidence does not contain the information needed to judge the claim.
             - Conflicting Evidence/Cherry-picking: The claim is technically true but leaves out crucial context, is misleading, or the evidence is heavily mixed."""
 
-    def get_tracker_dataset_name(self, environment="OpenWeb"):
+    def get_experiment_metadata(self, environment="open_web"):
         """
-        Returns the correct dataset string for the Experiment Tracker.
-        If an EXPERIMENT_NAME is set in the .env file (e.g., for Robustness tests), it overrides the default.
+        Returns the specific breakdown of the current experiment configuration
+        for precise database logging across four normalized columns.
         """
-        custom_name = os.getenv("EXPERIMENT_NAME")
-        if custom_name:
-            return custom_name
+        dataset_name = self.active_dataset
 
-        return f"{self.active_dataset}-{environment}"
+        experiment_type = os.getenv("EXPERIMENT_TYPE", "").strip().lower()
+        if not experiment_type:
+            experiment_type = "standard"
+
+        return {
+            "environment": environment,
+            "dataset_name": dataset_name,
+            "experiment_type": experiment_type,
+            "use_metadata": self.use_metadata,
+        }
