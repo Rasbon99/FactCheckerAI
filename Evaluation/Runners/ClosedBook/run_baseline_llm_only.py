@@ -13,8 +13,6 @@ dotenv.load_dotenv("key.env", override=False)
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
 
-USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
-
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
 
@@ -53,6 +51,7 @@ def run_closed_book_baseline():
 
     metadata = dataset_manager.get_experiment_metadata(environment="closed_book")
     active_dataset = metadata["dataset_name"]
+    use_meta = metadata["use_metadata"]
 
     nei_label = (
         "NOT ENOUGH INFO" if active_dataset == "FEVER" else "Not Enough Evidence"
@@ -70,8 +69,8 @@ def run_closed_book_baseline():
     logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Experiment Type: {metadata['experiment_type']}")
-    logger.info(f"Using Metadata Context: {USE_METADATA}")
     logger.info(f"Using Model: {GROQ_MODEL}")
+    logger.info(f"Using Metadata Context: {use_meta}")
 
     successful_runs = 0
 
@@ -84,7 +83,7 @@ def run_closed_book_baseline():
 
             # --- OPTIONAL METADATA INJECTION ---
             metadata_context = ""
-            if active_dataset == "AVERITEC" and USE_METADATA:
+            if active_dataset == "AVERITEC" and use_meta:
                 speaker = data.get("speaker", "")
                 date = data.get("claim_date", "")
                 location_ISO_code = data.get("location_ISO_code", "")
@@ -158,11 +157,11 @@ def run_closed_book_baseline():
                     "raw_sources": [],
                     "query_result": query_result,
                 },
-                system_type="ClosedBook",
+                system_type="LLM-Only",
                 environment=metadata["environment"],
                 dataset_name=metadata["dataset_name"],
                 experiment_type=metadata["experiment_type"],
-                use_metadata=metadata["use_metadata"],
+                use_metadata=use_meta,
             )
 
             successful_runs += 1

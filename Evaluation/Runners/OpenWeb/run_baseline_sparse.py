@@ -10,15 +10,11 @@ from Evaluation.Utils.dataset_manager import DatasetManager
 from WebScraper.scraper import Scraper
 from Database.data_entities import Claim, Answer, Experiment
 
-# Load environment variables
 dotenv.load_dotenv("key.env", override=False)
 
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
 logger = Logger("SparseRAG-OpenWeb").get_logger()
-
-# --- CONFIGURATION FLAG ---
-USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 
 # Initialize Groq Client
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -65,6 +61,7 @@ def run_sparse_baseline_openweb():
     dataset_manager = DatasetManager()
     metadata = dataset_manager.get_experiment_metadata(environment="open_web")
     active_dataset = metadata["dataset_name"]
+    use_meta = metadata["use_metadata"]
 
     prompt_instructions = dataset_manager.get_prompt_instructions()
 
@@ -74,7 +71,7 @@ def run_sparse_baseline_openweb():
     logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Experiment Type: {metadata['experiment_type']}")
-    logger.info(f"Using Metadata Super Query: {USE_METADATA}")
+    logger.info(f"Using Metadata Super Query: {use_meta}")
 
     successful_runs = 0
 
@@ -88,7 +85,7 @@ def run_sparse_baseline_openweb():
             ground_truth = data.get("label", "")
 
             search_query = claim_text
-            if active_dataset == "AVERITEC" and USE_METADATA:
+            if active_dataset == "AVERITEC" and use_meta:
                 search_query = dataset_manager.build_search_query(data)
 
             logger.info(f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
@@ -191,7 +188,7 @@ def run_sparse_baseline_openweb():
                 environment=metadata["environment"],
                 dataset_name=metadata["dataset_name"],
                 experiment_type=metadata["experiment_type"],
-                use_metadata=metadata["use_metadata"],
+                use_metadata=use_meta,
             )
 
             successful_runs += 1

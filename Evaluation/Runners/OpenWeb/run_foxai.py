@@ -7,6 +7,7 @@ from log import Logger
 from Evaluation.Utils.dataset_manager import DatasetManager
 from Database.data_entities import Experiment
 
+# Load environment variables
 dotenv.load_dotenv("key.env", override=False)
 
 BACKEND_URL = os.getenv("BACKEND_API_URL")
@@ -15,12 +16,11 @@ API_URL = f"{BACKEND_URL}/run_pipeline"
 MAX_CLAIMS_TO_TEST = 5
 logger = Logger("FoxAI-OpenWeb").get_logger()
 
-USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
-
 
 def run_experiment():
     dataset_manager = DatasetManager()
-    metadata = dataset_manager.get_experiment_metadata()
+    metadata = dataset_manager.get_experiment_metadata(environment="open_web")
+    use_meta = metadata["use_metadata"]
 
     prompt_instructions = dataset_manager.get_prompt_instructions()
 
@@ -29,7 +29,7 @@ def run_experiment():
     )
     logger.info(f"Active Dataset: {metadata['dataset_name']}")
     logger.info(f"Experiment Type: {metadata['experiment_type']}")
-    logger.info(f"Using Metadata Super Query: {USE_METADATA}")
+    logger.info(f"Using Metadata Super Query: {use_meta}")
     logger.info(f"Sending requests to: {API_URL}")
 
     successful_runs = 0
@@ -43,7 +43,7 @@ def run_experiment():
             ground_truth = data.get("label", "")
 
             search_query = claim_text
-            if metadata["dataset_name"] == "AVERITEC" and USE_METADATA:
+            if metadata["dataset_name"] == "AVERITEC" and use_meta:
                 search_query = dataset_manager.build_search_query(data)
 
             logger.info(
