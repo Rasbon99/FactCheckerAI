@@ -10,7 +10,6 @@ from log import Logger
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.vectorstores import InMemoryVectorStore
-from langchain_huggingface import HuggingFaceEmbeddings
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.dataset_manager import DatasetManager
@@ -30,9 +29,6 @@ load_models([model_alias])
 
 # Configuration
 logger = Logger("HybridRAG-OpenWeb").get_logger()
-
-# --- CONFIGURATION FLAG ---
-USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 
 
 def get_hybrid_rag_verdict(claim_text, best_evidence_string, prompt_instructions):
@@ -71,6 +67,7 @@ def run_hybrid_rag_baseline_openweb():
     dataset_manager = DatasetManager()
     metadata = dataset_manager.get_experiment_metadata(environment="open_web")
     active_dataset = metadata["dataset_name"]
+    use_meta = metadata["use_metadata"]
 
     prompt_instructions = dataset_manager.get_prompt_instructions()
 
@@ -78,7 +75,7 @@ def run_hybrid_rag_baseline_openweb():
     logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Experiment Type: {metadata['experiment_type']}")
-    logger.info(f"Using Metadata Super Query: {USE_METADATA}")
+    logger.info(f"Using Metadata Super Query: {use_meta}")
 
     logger.info(
         "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
@@ -100,7 +97,7 @@ def run_hybrid_rag_baseline_openweb():
             ground_truth = data.get("label", "")
 
             search_query = claim_text
-            if active_dataset == "AVERITEC" and USE_METADATA:
+            if active_dataset == "AVERITEC" and use_meta:
                 search_query = dataset_manager.build_search_query(data)
 
             logger.info(f"[{line_number + 1}] Claim: {claim_text}")
@@ -224,7 +221,7 @@ def run_hybrid_rag_baseline_openweb():
                 environment=metadata["environment"],
                 dataset_name=metadata["dataset_name"],
                 experiment_type=metadata["experiment_type"],
-                use_metadata=metadata["use_metadata"],
+                use_metadata=use_meta,
             )
 
             successful_runs += 1

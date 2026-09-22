@@ -19,7 +19,6 @@ set_alias_map({model_alias: model_port})
 load_models([model_alias])
 
 # Configuration
-USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 logger = Logger("ClosedBook-Baseline").get_logger()
 
 
@@ -64,6 +63,7 @@ def run_closed_book_baseline():
 
     metadata = dataset_manager.get_experiment_metadata(environment="closed_book")
     active_dataset = metadata["dataset_name"]
+    use_meta = metadata["use_metadata"]
 
     # Tweak the instructions slightly since this baseline has no "provided evidence"
     base_instructions = dataset_manager.get_prompt_instructions()
@@ -75,8 +75,8 @@ def run_closed_book_baseline():
     logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Experiment Type: {metadata['experiment_type']}")
-    logger.info(f"Using Metadata Context: {USE_METADATA}")
     logger.info(f"Using Model Alias: {model_alias}")
+    logger.info(f"Using Metadata Context: {use_meta}")
 
     successful_runs = 0
 
@@ -89,7 +89,7 @@ def run_closed_book_baseline():
 
             # --- OPTIONAL METADATA INJECTION ---
             metadata_context = ""
-            if active_dataset == "AVERITEC" and USE_METADATA:
+            if active_dataset == "AVERITEC" and use_meta:
                 speaker = data.get("speaker", "")
                 date = data.get("claim_date", "")
                 location_ISO_code = data.get("location_ISO_code", "")
@@ -166,11 +166,11 @@ def run_closed_book_baseline():
                     "raw_sources": [],
                     "query_result": query_result,
                 },
-                system_type="ClosedBook",
+                system_type="LLM-Only",
                 environment=metadata["environment"],
                 dataset_name=metadata["dataset_name"],
                 experiment_type=metadata["experiment_type"],
-                use_metadata=metadata["use_metadata"],
+                use_metadata=use_meta,
             )
 
             successful_runs += 1

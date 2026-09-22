@@ -23,7 +23,6 @@ set_alias_map({model_alias: model_port})
 load_models([model_alias])
 
 # Configuration
-USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
 logger = Logger("SparseRAG-Controlled").get_logger()
 
 
@@ -66,10 +65,9 @@ def get_bm25_verdict(claim_text, retrieved_evidence, prompt_instructions):
 
 def run_sparse_baseline():
     dataset_manager = DatasetManager()
-
-    # Using the new metadata function from your manager
     metadata = dataset_manager.get_experiment_metadata(environment="controlled")
     active_dataset = metadata["dataset_name"]
+    use_meta = metadata["use_metadata"]
 
     prompt_instructions = dataset_manager.get_prompt_instructions()
 
@@ -77,7 +75,7 @@ def run_sparse_baseline():
     logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {active_dataset}")
     logger.info(f"Experiment Type: {metadata['experiment_type']}")
-    logger.info(f"Using Metadata Super Query: {USE_METADATA}")
+    logger.info(f"Using Metadata Super Query: {use_meta}")
 
     wiki_conn = None
     wiki_cursor = None
@@ -102,7 +100,7 @@ def run_sparse_baseline():
             ground_truth = data.get("label", "")
 
             search_query = claim_text
-            if active_dataset == "AVERITEC" and USE_METADATA:
+            if active_dataset == "AVERITEC" and use_meta:
                 search_query = dataset_manager.build_search_query(data)
 
             logger.info(f"[{line_number + 1}] Claim: {claim_text}")
@@ -154,7 +152,6 @@ def run_sparse_baseline():
                         claim_id_internal
                     )
 
-                    # INJECT NOISE (If running the Noisy robustness test)
                     if "noisy_ids" in data and sentences is not None:
                         for n_id in data["noisy_ids"]:
                             noisy_sentences = averitec_retriever.get_evidence_for_claim(
@@ -249,7 +246,7 @@ def run_sparse_baseline():
                 environment=metadata["environment"],
                 dataset_name=metadata["dataset_name"],
                 experiment_type=metadata["experiment_type"],
-                use_metadata=metadata["use_metadata"],
+                use_metadata=use_meta,
             )
 
             successful_runs += 1
