@@ -18,11 +18,11 @@ Beginning with a claim provided by the user, related news articles are retrieved
 - [Running the Project](#running-the-project)
 - [Usage Examples](#usage-examples)
 - [Evaluation Framework](#evaluation)
-- [Project Structure](#project-overview)
+- [Project Structure](#project-structure)
 - [Components](#components)
 - [Contributing](#contributing)
 - [Authors](#authors)
-- [Credits & Acknowledgments](#credits--acknowledgments)
+- [Credits & Acknowledgments](#credits-and-acknowledgments)
 - [License](#license)
 
 ---
@@ -36,8 +36,9 @@ FOX AI provides comprehensive fact-checking capabilities through:
 - **Knowledge Graphs**: Generate visual knowledge graphs from identified sources to enhance interpretability.
 - **Comprehensive Reporting**: Deliver user-friendly, interactive reports via an intuitive dashboard.
 - **Scientific Evaluation**: Benchmark GraphRAG architecture across two datasets in two settings:
-  - **Controlled Environment**: Compared against LLM-Only, BM25 Keyword Search, and Hybrid RAG baselines
-  - **Open-Web Environment**: Compared against Prompt Stuffing, BM25 Keyword Search, and Hybrid RAG baselines
+   - **Closed-Book Environment**: Compared against the LLM-Only baseline
+   - **Controlled Environment**: Compared against Prompt Stuffing, Sparse/BM25, HybridRAG, and FoxAI
+   - **Open-Web Environment**: Compared against Prompt Stuffing, SparseRAG, HybridRAG, and FoxAI
 
 ---
 
@@ -73,7 +74,7 @@ FOX AI follows a **microservices architecture** with an **object-oriented, pipel
 git clone https://github.com/Rasbon99/FactCheckerAI
 cd FactCheckerAI
 
-# Run with Docker Compose
+# Create and configure key.env first, then run Docker Compose
 docker compose up --build
 
 # Access the dashboard at http://localhost:8501
@@ -81,7 +82,7 @@ docker compose up --build
 
 **For GPU acceleration** (NVIDIA CUDA required):
 ```bash
-docker-compose -f docker-compose-gpu.yml up
+docker compose -f docker-compose-gpu.yml up
 ```
 
 ### Manual Setup (Local Installation)
@@ -95,10 +96,11 @@ For detailed manual setup instructions, see [Installation](#installation) sectio
 Before installation, ensure you have:
 
 **Required:**
-- **Python 3.13.1** (for manual installation)
-- **Docker & Docker Compose** (for Docker setup - recommended)
+- **Python 3.13.1** (for manual installation; Docker uses Python 3.10)
+- **Docker & Docker Compose** (for Docker setup)
 - **Groq Cloud API Key** ([Register here](https://console.groq.com/))
-- **Neo4j Desktop** with the Neo4j instance running before starting FOX AI
+
+For manual installation, use **Neo4j Desktop** and start the configured Neo4j instance before starting FOX AI. Docker setup starts its own Neo4j container.
 
 ---
 
@@ -123,8 +125,8 @@ Access the dashboard at `http://localhost:8501`
 - Docker Desktop on Windows includes the toolkit automatically
 
 ```bash
-docker-compose -f docker-compose-gpu.yml build
-docker-compose -f docker-compose-gpu.yml up
+docker compose -f docker-compose-gpu.yml build
+docker compose -f docker-compose-gpu.yml up
 ```
 
 **Note:** Neo4j authentication is disabled in Docker, so no credentials needed.
@@ -144,9 +146,10 @@ pip install -r requirements.txt
 
 #### Step 2: Neo4j Setup
 
-**Download Neo4j:**
-- Visit [Neo4j Deployment Center](https://neo4j.com/deployment-center/) and download the Community Edition
-- Default credentials: `neo4j` / `neo4j`
+**Create and start a Neo4j Desktop instance:**
+- Create a local Community Edition instance in [Neo4j Desktop](https://neo4j.com/download/)
+- Start the instance before running the application
+- Configure the username and password to match `NEO4J_USERNAME` and `NEO4J_PASSWORD` in `key.env`
 
 **Install APOC Plugin (Recommended):**
 1. Open your Neo4j instance
@@ -163,18 +166,6 @@ pip install -r requirements.txt
    dbms.security.procedures.unrestricted=apoc.*, algo.*
    dbms.security.procedures.allowlist=apoc.meta.data,apoc.help
    ```
-
-**Set Neo4j Environment Variables:**
-
-*Mac/Linux:*
-```bash
-echo 'export NEO4J_BIN=/path/to/neo4j/bin' >> ~/.zshrc
-source ~/.zshrc
-```
-
-*Windows:*
-- Open Environment Variables
-- Add new System Variable with Neo4j bin path
 
 #### Step 3: Hugging Face Embedding Model Setup
 
@@ -195,9 +186,10 @@ EMBEDDING_MODEL_NAME=nomic-ai/nomic-embed-text-v1.5
 
 **Create `key.env` Configuration File:**
 
-In case of launching with Docker, set `DOCKER=true` and uncomment all variables under the **Docker Version** section. Otherwise, set `DOCKER=false` and uncomment the variables under the **Local Version** section.
+For Docker, use the Docker service URLs and `NEO4J_URI` shown below. For local execution, use the localhost values and start Neo4j Desktop first.
 
 ```env
+DEPLOYMENT_ENV=local
 DOCKER=false
 
 # API URL Docker Version
@@ -233,17 +225,20 @@ EMBEDDING_MODEL_NAME=nomic-ai/nomic-embed-text-v1.5
 
 # EXPERIMENT VARIABLES
 EXPERIMENTS_EVIDENCES_PATH=Outputs/experiments_evidences
-# Set this for the robustness tests to differentiate them in the tracker e.g., noisy, conflicting or missing otherwise keep it empty.
-EXPERIMENT_NAME= 
+EXPERIMENT_RANDOM_SEED=42
+# Use standard, missing, noisy, or conflicting for robustness experiments.
+EXPERIMENT_TYPE=standard
 EXPERIMENT_ACTIVE_DATASET=AVERITEC
 
 # FEVER VARIABLES
 FEVER_DATASET_PATH=Datasets/FEVER/fever_dev_dataset.jsonl
+FEVER_ROBUSTNESS_DIR=Datasets/FEVER/Robustness
 FEVER_WIKIPEDIA_PAGES_PATH=Datasets/FEVER/wiki-pages/wiki-pages
 FEVER_WIKIPEDIA_DB_PATH=Datasets/FEVER/fever_wiki.db
 
 # AVERITEC VARIABLES
 AVERITEC_DATASET_PATH=Datasets/AVERITEC/averitec_dev_dataset.json
+AVERITEC_ROBUSTNESS_DIR=Datasets/AVERITEC/Robustness
 AVERITEC_KNOWLEDGE_STORE_PATH=Datasets/AVERITEC/dev_knowledge_store
 AVERITEC_USE_METADATA=True
 
@@ -318,8 +313,10 @@ FOX AI uses a **microservices architecture** and requires simultaneous execution
 # Submit a claim via HTTP
 curl -X POST http://localhost:8001/run_pipeline \
   -H "Content-Type: application/json" \
-  -d '{"claim": "Your claim here"}'
+   -d '{"text": "Your claim here"}'
 ```
+
+The dashboard normally uses the controller at `http://localhost:8003/results` with the same `text` field. The controller also exposes `GET /conversations` and `POST /clean_conversations`.
 
 ### Running Evaluation Benchmarks
 
@@ -329,11 +326,12 @@ See [Evaluation Framework](#evaluation) section for running scientific benchmark
 
 ## Evaluation
 
-The evaluation code lives under the `Evaluation/` folder and is split into four parts:
+The evaluation code lives under the `Evaluation/` folder and is split into five parts:
 
-- `Evaluation/Setup/` for dataset preparation and indexing
-- `Evaluation/Runners/Controlled/` for the controlled-dataset experiments
-- `Evaluation/Runners/OpenWeb/` for the open-web experiments
+- `Evaluation/Setup/` for dataset preparation, indexing, and create robustness datasets
+- `Evaluation/Runners/ClosedBook/` for the closed-book LLM-only baseline
+- `Evaluation/Runners/Controlled/` for controlled-dataset experiments
+- `Evaluation/Runners/OpenWeb/` for open-web experiments
 - `Evaluation/Analysis/` for post-run metrics
 
 Each runner script defines `MAX_CLAIMS_TO_TEST` near the top of the file. The default value is small so you can do a fast sanity check, but you can increase or decrease it before running the script if you want to benchmark more or fewer claims.
@@ -356,7 +354,7 @@ Place them in these paths:
 - `Datasets/FEVER/fever_dev_dataset.jsonl`
 - `Datasets/FEVER/wiki-pages/wiki-pages/`
 
-Then build the local SQLite database and BM25 index:
+Then build the local SQLite database and sparse/BM25 index:
 
 ```bash
 python -m Evaluation.Setup.build_fever_db
@@ -379,34 +377,44 @@ The development dataset is loaded by array index, so the evidence files inside `
 
 If you extract the dataset into a different folder structure, rename or move the files so the final paths still match the values in `key.env`.
 
-### 2. Controlled Environment Experiments
+### Evaluation Configuration
 
-Set `EXPERIMENT_ACTIVE_DATASET` in `key.env` to either `FEVER` or `AVERITEC` before running the scripts.
+Set `EXPERIMENT_ACTIVE_DATASET` in `key.env` to either `FEVER` or `AVERITEC` before running the scripts. Set `EXPERIMENT_TYPE` to `standard`, `missing`, `noisy`, or `conflicting` when running robustness experiments.
+
+### 2. Closed-Book Experiment
+
+The closed-book experiment evaluates the LLM without retrieved evidence:
+
+```bash
+python -m Evaluation.Runners.ClosedBook.run_baseline_llm_only
+```
+
+### 3. Controlled Environment Experiments
 
 The controlled experiments are:
 
-- `Evaluation/Runners/Controlled/run_baseline_llm_only.py`
-- `Evaluation/Runners/Controlled/run_baseline_bm25.py`
+- `Evaluation/Runners/Controlled/run_baseline_prompt_stuffing.py`
+- `Evaluation/Runners/Controlled/run_baseline_sparse.py`
 - `Evaluation/Runners/Controlled/run_baseline_hybrid.py`
 - `Evaluation/Runners/Controlled/run_foxai.py`
 
 Run them with module syntax from the project root:
 
 ```bash
-python -m Evaluation.Runners.Controlled.run_baseline_llm_only
-python -m Evaluation.Runners.Controlled.run_baseline_bm25
+python -m Evaluation.Runners.Controlled.run_baseline_prompt_stuffing
+python -m Evaluation.Runners.Controlled.run_baseline_sparse
 python -m Evaluation.Runners.Controlled.run_baseline_hybrid
 python -m Evaluation.Runners.Controlled.run_foxai
 ```
 
 The controlled FoxAI runner uses the local preprocessing and GraphRAG pipeline directly, so no backend HTTP call is required.
 
-### 3. Open-Web Experiments
+### 4. Open-Web Experiments
 
 The open-web experiments are:
 
 - `Evaluation/Runners/OpenWeb/run_baseline_prompt_stuffing.py`
-- `Evaluation/Runners/OpenWeb/run_baseline_bm25.py`
+- `Evaluation/Runners/OpenWeb/run_baseline_sparse.py`
 - `Evaluation/Runners/OpenWeb/run_baseline_hybrid.py`
 - `Evaluation/Runners/OpenWeb/run_foxai.py`
 
@@ -414,14 +422,22 @@ Run them with module syntax from the project root:
 
 ```bash
 python -m Evaluation.Runners.OpenWeb.run_baseline_prompt_stuffing
-python -m Evaluation.Runners.OpenWeb.run_baseline_bm25
+python -m Evaluation.Runners.OpenWeb.run_baseline_sparse
 python -m Evaluation.Runners.OpenWeb.run_baseline_hybrid
 python -m Evaluation.Runners.OpenWeb.run_foxai
 ```
 
 The open-web FoxAI runner sends requests to the backend endpoint defined in `key.env`, so make sure the supporting services are running first.
 
-### 4. Evaluation Reports
+### 5. Robustness Dataset Generation
+
+Generate the missing, noisy, and conflicting variants for the active dataset with:
+
+```bash
+python -m Evaluation.Setup.generate_robustness_datasets
+```
+
+### 6. Evaluation Reports
 
 After running the experiments, use the analysis scripts to summarize the results stored in the SQLite database:
 
@@ -454,7 +470,7 @@ The architecture follows a **microservices model** and consists of the following
 To enhance functionality, the system integrates dedicated external services:  
 
 - **Hugging Face Nomic Embeddings**: Provide local semantic embeddings through `nomic-ai/nomic-embed-text-v1.5` for retrieval and similarity search.  
-- **Neo4j Console**: Handles the graph database, modeling relationships between sources to verify credibility.  
+- **Neo4j Desktop**: Hosts the local graph database, modeling relationships between sources to verify credibility.
 
 The system leverages **Groq Cloud APIs** and local lightweight models for efficient computation, balancing performance with resource requirements.  
 
@@ -477,8 +493,8 @@ The **Preprocessing Pipeline** is designed to transform user claims and retrieve
 
 1. **Claim Preprocessing**  
    - Transforms user-provided claims into concise, searchable titles that retain critical information (e.g., names, dates, locations).  
-   - Relies on the **llama-3.3** model via **Groq Cloud APIs** for summarization, optimizing titles for effective web search queries.  
-   - Utilizes a lightweight model (**gemma-2.9**) to generate English summaries for internal processes like similarity checks and content refinement.  
+   - Relies on the configured `GROQ_MODEL_NAME` via **Groq Cloud APIs** for summarization, optimizing titles for effective web search queries.
+   - Utilizes the configured `GROQ_LOW_MODEL_NAME` to generate English summaries for internal processes like similarity checks and content refinement.
 
 2. **Sources Preprocessing**  
    - Prepares retrieved web sources for integration into the **GraphRAG** framework.  
@@ -531,7 +547,7 @@ Once the data is ingested, the **Query Engine** manages the key steps of the RAG
 - **Encoding**: The retrieved data is encoded into a format that the LLM can process effectively.
 - **Generating**: A response is generated by the LLM based on the encoded data, producing a coherent and contextually relevant output.
 
-The encoding step is performed locally using the Hugging Face `nomic-ai/nomic-embed-text-v1.5` embedding model through `langchain_huggingface`. The **retriever** utilizes Neo4j alongside the embedding model to search for and retrieve relevant information that matches the user's query. For response generation, the `llama-3.3-70b-versatile` model is used, accessed via the Groq Cloud platform. At the beginning of each execution, a cleanup of the GraphDB is performed to ensure that old information does not interfere with the new context of the response.
+The encoding step is performed locally using the Hugging Face `nomic-ai/nomic-embed-text-v1.5` embedding model through `langchain_huggingface`. The **retriever** utilizes Neo4j alongside the embedding model to search for and retrieve relevant information that matches the user's query. For response generation, the model configured by `GROQ_MODEL_NAME` is accessed via the Groq Cloud platform. At the beginning of each execution, a cleanup of the GraphDB is performed to ensure that old information does not interfere with the new context of the response.
 
 #### RAG Pipeline
 
