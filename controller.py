@@ -27,14 +27,12 @@ class Controller:
         Initializes the Controller instance.
 
         This sets up the logger, reads environment variables for server URLs, initializes
-        the FastAPI app, and registers the API routes. It also starts the Neo4j server
-        if not running in a Docker environment.
+        the FastAPI app, and registers the API routes.
         """
         # Initialize the logger
         self.logger = Logger(self.__class__.__name__).get_logger()
 
         # Read the server URLs from environment variables
-        self.neo4j_server_url = os.getenv("NEO4J_API_URL", "http://127.0.0.1:8002")
         self.backend_server_url = os.getenv("BACKEND_API_URL", "http://127.0.0.1:8001")
 
         # Create FastAPI instance to expose endpoints
@@ -65,10 +63,6 @@ class Controller:
             summary="Get history of conversations",
             description="Endpoint that returns conversations by calling the backend's /get_history endpoint.",
         )
-
-        # Start the Neo4j server on controller startup
-        if os.getenv("DOCKER") != "true":
-            self._start_servers()
 
     def post_results(self, input_text: InputText):
         """
@@ -147,35 +141,6 @@ class Controller:
         except Exception as e:
             self.logger.error(f"Error calling get_history: {e}")
             raise HTTPException(status_code=500, detail=str(e))
-
-    def _start_servers(self):
-        """
-        Starts the Neo4j server by making POST requests to their respective endpoints.
-
-        Raises:
-            Exception: If there is an error while starting either server.
-        """
-        # Start the Neo4j server
-        try:
-            url = f"{self.neo4j_server_url}/start"
-            requests.post(url)
-            self.logger.info("Neo4j server started successfully.")
-        except Exception as e:
-            self.logger.error(f"Error starting Neo4j server: {e}")
-
-    def stop_servers(self):
-        """
-        Stops the Neo4j server by making POST requests to their respective endpoints.
-
-        Raises:
-            Exception: If there is an error while stopping the server.
-        """
-        try:
-            url = f"{self.neo4j_server_url}/stop"
-            requests.post(url)
-            self.logger.info("Neo4j server stopped.")
-        except Exception as e:
-            self.logger.error(f"Error stopping Neo4j server: {e}")
 
 
 # Create an instance of Controller and retrieve the FastAPI app

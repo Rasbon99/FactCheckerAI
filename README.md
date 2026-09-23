@@ -98,7 +98,7 @@ Before installation, ensure you have:
 - **Python 3.13.1** (for manual installation)
 - **Docker & Docker Compose** (for Docker setup - recommended)
 - **Groq Cloud API Key** ([Register here](https://console.groq.com/))
-- **Neo4j Desktop** (for local graph database management)
+- **Neo4j Desktop** with the Neo4j instance running before starting FOX AI
 
 ---
 
@@ -201,15 +201,11 @@ In case of launching with Docker, set `DOCKER=true` and uncomment all variables 
 DOCKER=false
 
 # API URL Docker Version
-# NEO4J_SERVER_URL=http://neo4j:7474
-# NEO4J_API_URL=http://neo4j:7474
 # BACKEND_API_URL=http://backend:8001
 # CONTROLLER_API_URL=http://controller:8003
 # NEO4J_URI=bolt://neo4j:7687
 
 # API URL Local Version
-NEO4J_SERVER_URL=http://localhost:7474
-NEO4J_API_URL=http://localhost:8002
 BACKEND_API_URL=http://localhost:8001
 CONTROLLER_API_URL=http://localhost:8003
 NEO4J_URI=bolt://localhost:7687
@@ -269,35 +265,35 @@ Automatically handled by the backend service on startup.
 
 FOX AI uses a **microservices architecture** and requires simultaneous execution of multiple services.
 
-### Local Setup (4 Terminals)
+### Local Setup (3 Terminals)
 
 **Prerequisites:**
 - Complete all [Installation](#installation) steps
 - Set `DOCKER=false` in `key.env`
-- Ensure all prerequisite services are installed
+- Open Neo4j Desktop and start the configured Neo4j instance
 
-**Open 4 separate terminals** and run these commands:
+**Open 3 separate terminals** and run these commands:
 
 | Terminal | Service | Command | Port |
 |----------|---------|---------|------|
-| 1 | Neo4j Database | `python start_neo4j_server.py` | 8002 |
-| 2 | Controller (API Gateway) | `python start_controller_server.py` | 8003 |
-| 3 | Backend Service | `python start_backend_server.py` | 8001 |
-| 4 | Dashboard (Streamlit) | `streamlit run Dashboard/dashboard.py` | 8501 |
+| 1 | Controller (API Gateway) | `python start_controller_server.py` | 8003 |
+| 2 | Backend Service | `python start_backend_server.py` | 8001 |
+| 3 | Dashboard (Streamlit) | `streamlit run Dashboard/dashboard.py` | 8501 |
 
 ### Verification
 
 ✅ **System Check:**
 1. Navigate to [http://localhost:8501](http://localhost:8501) for the Streamlit Dashboard
 2. Submit a test claim to verify all services are communicating
-3. Check logs in each terminal for errors
+3. Check that the Neo4j instance is running in Neo4j Desktop
+4. Check logs in each terminal for errors
 
 ### Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
 | Port Already in Use | Modify port numbers in configuration files or start scripts |
-| Service Connection Errors | Verify all 4 services started successfully; check logs |
+| Service Connection Errors | Verify Neo4j Desktop and all 3 application services are running; check logs |
 | Embedding Model Issues | Verify `EMBEDDING_MODEL_NAME=nomic-ai/nomic-embed-text-v1.5` and ensure the model can be downloaded from Hugging Face |
 | Database Errors | Run `python init_db.py` and verify Neo4j is running |
 | Import Errors | Ensure all packages installed: `pip install -r requirements.txt` |
@@ -450,7 +446,7 @@ The architecture follows a **microservices model** and consists of the following
 
 ### Key Architectural Patterns  
 
-- **API Gateway**: Implemented by the Controller, it centralizes access to the system's microservices and manages server startup in manual mode.  
+- **API Gateway**: Implemented by the Controller, it centralizes access to the system's microservices.
 - **Pipeline Processing**: Implemented in the Backend, this design ensures modular and maintainable execution of stages like source retrieval, analysis, and response generation.  
 
 ### Supporting Components  
