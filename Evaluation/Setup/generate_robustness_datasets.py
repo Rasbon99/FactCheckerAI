@@ -11,8 +11,8 @@ dotenv.load_dotenv("key.env", override=False)
 
 logger = Logger("generate_robustness_datasets").get_logger()
 
-# Set a random seed so your thesis experiments are 100% reproducible!
-random.seed(42)
+experiment_seed = int(os.getenv("EXPERIMENT_RANDOM_SEED", "42"))
+random.seed(experiment_seed)
 
 FEVER_ROBUSTNESS_DIR = os.getenv("FEVER_ROBUSTNESS_DIR", "Datasets/FEVER/Robustness")
 AVERITEC_ROBUSTNESS_DIR = os.getenv(

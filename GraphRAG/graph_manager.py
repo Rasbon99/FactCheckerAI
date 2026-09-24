@@ -2,7 +2,6 @@ import os
 import time
 import dotenv
 import platform
-import requests
 
 import numpy as np
 import matplotlib
@@ -29,9 +28,6 @@ class GraphManager:
         dotenv.load_dotenv(env_file, override=False)
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.platform = platform.system()
-
-        if not self._is_neo4j_running():
-            raise ConnectionError("Neo4j server is not running. Please start it.")
 
         # Neo4j connection parameters
         self.neo4j_url = os.environ["NEO4J_URI"].replace("http", "bolt")
@@ -385,21 +381,3 @@ class GraphManager:
             self.logger.info("Graphs generated and saved successfully.")
         except Exception as e:
             self.logger.error(f"Error during graph extraction and saving: {e}")
-
-    def _is_neo4j_running(self):
-        """
-        Check if the Neo4j server is active by querying its status endpoint.
-
-        Returns:
-            bool: True if the Neo4j server responds with status code 200, False otherwise.
-
-        Raises:
-            requests.exceptions.RequestException: If there is an issue with the HTTP request,
-                                                such as a timeout or a connection error.
-        """
-        try:
-            # Default Neo4j HTTP port
-            response = requests.get(os.getenv("NEO4J_SERVER_URL"), timeout=5)
-            return response.status_code == 200
-        except requests.exceptions.RequestException:
-            return False
