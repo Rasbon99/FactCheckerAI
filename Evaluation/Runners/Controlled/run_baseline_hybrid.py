@@ -20,7 +20,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from Evaluation.Utils.dataset_manager import DatasetManager
 from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
 from Database.data_entities import Claim, Answer, Experiment
-from Utils.nomic_embedding import get_embedding_model
+from Utils.embedding import get_embedding_model
 
 dotenv.load_dotenv("key.env", override=False)
 
@@ -124,7 +124,7 @@ def run_hybrid_baseline():
         "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
     )
     embedding_model_name = os.getenv(
-        "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
+        "EMBEDDING_MODEL_NAME", "BAAI/bge-base-en-v1.5"
     )
     embeddings = get_embedding_model(embedding_model_name)
     embeddings_filter = EmbeddingsFilter(embeddings=embeddings, k=2)
