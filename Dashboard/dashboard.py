@@ -181,7 +181,7 @@ class DashboardPipeline:
         assistant_message = st.chat_message("assistant", avatar="🦊")
 
         # Styling for the title
-        title_html = f"<h2 style='color: rgba(0, 0, 0, 0.9); font-size: 1.5em; line-height: 1.4;'>{response['title'][2:]}</h2>"
+        title_html = f"<h2 style='color: rgba(0, 0, 0, 0.9); font-size: 1.5em; line-height: 1.4;'>{response['title']}</h2>"
         assistant_message.markdown(title_html, unsafe_allow_html=True)
 
         # Styling for the summary
