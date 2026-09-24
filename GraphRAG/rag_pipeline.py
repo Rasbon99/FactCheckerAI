@@ -39,8 +39,6 @@ class RAG_Pipeline:
         if config:
             self.config.update(config)
 
-        self.graph_manager.reset_data()
-
         self.graph_folder = os.getenv("GRAPHS_PATH", "data/graphs")
 
         if not os.path.exists(self.graph_folder):
@@ -74,9 +72,7 @@ class RAG_Pipeline:
         Generates and saves graphs using the GraphManager.
 
         Args:
-            output_file_topic (str): The file name to save the topic graph.
-            output_file_entity (str): The file name to save the entity graph.
-            output_file_site (str): The file name to save the site graph.
+            output_folder (str): The folder path to save the generated graphs.
 
         Raises:
             Exception: If there is an error during graph generation.
@@ -153,6 +149,9 @@ class RAG_Pipeline:
         self.logger.info("Starting the entire pipeline...")
         start_time = time.time()
         try:
+            self.logger.info("Wiping Neo4j Graph clean for new claim...")
+            self.graph_manager.reset_data()
+
             # Step 1: Load the data
             self.load_data(data)
 
