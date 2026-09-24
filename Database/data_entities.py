@@ -23,7 +23,7 @@ class Claim:
 
         self.id = claim_id if claim_id else str(uuid.uuid4())
         self.text = text
-        self.title = title[2:]
+        self.title = title
         self.summary = summary
         self.logger.info("Creating claim with ID: %s", self.id)
         self.save_to_db()
