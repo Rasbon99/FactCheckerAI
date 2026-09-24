@@ -123,7 +123,7 @@ class RAG_Pipeline:
             return result, token_data
         except Exception as e:
             self.logger.error(f"Error during similarity query execution: {e}")
-            return None, {"total": 0, "calls": 0}
+            raise
 
     def run_pipeline(
         self,
@@ -201,4 +201,4 @@ class RAG_Pipeline:
             self.logger.error(
                 f"Error during pipeline execution (total time: {total_time:.2f} seconds): {e}"
             )
-            return None, None, {"total": 0, "calls": 0}
+            raise

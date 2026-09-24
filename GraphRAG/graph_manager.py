@@ -126,6 +126,7 @@ class GraphManager:
             self.logger.info(f"Loading completed in {elapsed_time:.2f} seconds.")
         except Exception as e:
             self.logger.error(f"Error during data loading: {e}")
+            raise
 
         self.graph.refresh_schema()
 
