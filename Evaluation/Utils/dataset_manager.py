@@ -2,8 +2,13 @@ import os
 import json
 import dotenv
 from log import Logger
+import random
 
 logger = Logger("dataset_manager").get_logger()
+
+# Lock the random seed globally for all experiments that
+experiment_seed = int(os.getenv("EXPERIMENT_RANDOM_SEED", "42"))
+random.seed(experiment_seed)
 
 
 class DatasetManager:
