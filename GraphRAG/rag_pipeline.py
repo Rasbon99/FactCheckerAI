@@ -125,14 +125,12 @@ class RAG_Pipeline:
             self.logger.error(f"Error during similarity query execution: {e}")
             return None, {"total": 0, "calls": 0}
 
-    # --- Added nei_label parameter to match the backend payload ---
     def run_pipeline(
         self,
         data,
         claim,
         claim_id,
         prompt_instructions=None,
-        nei_label="NOT ENOUGH INFO",
     ):
         """
         Executes the entire RAG pipeline: data loading, graph generation, and fact-checking.
@@ -142,7 +140,6 @@ class RAG_Pipeline:
             claim (str): The specific claim text to be verified.
             claim_id (str): The unique ID of the claim, used to organize graph assets.
             prompt_instructions (str, optional): Custom instructions for the LLM prompt.
-            nei_label (str, optional): The specific string to output if evidence is lacking.
 
         Returns:
             tuple: A tuple containing:
@@ -183,7 +180,6 @@ class RAG_Pipeline:
             # Perfectly synchronized with all of other baseline scripts!
             question = f"""You are a strict fact-checking AI.
             Verify the following claim using ONLY the provided evidence. 
-            If the evidence does not contain enough information to make a definitive decision, answer exactly: {nei_label}.
 
             {active_instructions}
 

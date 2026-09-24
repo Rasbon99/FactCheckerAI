@@ -237,11 +237,8 @@ def run_controlled_experiment():
             # Safety Check: Entities
             has_entities = False
             for src in preprocessed_sources:
-                if (
-                    src.get("entities")
-                    and src.get("entities") != "[]"
-                    and len(src.get("entities")) > 0
-                ):
+                entities = src.get("entities")
+                if entities is not None and entities != "[]" and len(entities) > 0:
                     has_entities = True
                     break
 
