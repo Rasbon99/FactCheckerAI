@@ -20,13 +20,10 @@ client = Groq(api_key=GROQ_API_KEY)
 logger = Logger("ClosedBook-Baseline").get_logger()
 
 
-def get_closed_book_verdict(
-    claim_text, prompt_instructions, nei_label, metadata_context=""
-):
+def get_closed_book_verdict(claim_text, prompt_instructions, metadata_context=""):
     """Asks the LLM to verify the claim using ONLY its internal weights, providing context if available."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY your internal knowledge. 
-    Do not assume any external context other than what is provided. If you do not know the answer with absolute certainty, answer exactly: {nei_label}.
 
     {prompt_instructions}
 
@@ -52,10 +49,6 @@ def run_closed_book_baseline():
     metadata = dataset_manager.get_experiment_metadata(environment="closed_book")
     active_dataset = metadata["dataset_name"]
     use_meta = metadata["use_metadata"]
-
-    nei_label = (
-        "NOT ENOUGH INFO" if active_dataset == "FEVER" else "Not Enough Evidence"
-    )
 
     # Tweak the instructions slightly since this baseline has no "provided evidence"
     base_instructions = dataset_manager.get_prompt_instructions()
@@ -119,7 +112,7 @@ def run_closed_book_baseline():
             # --- GENERATION STEP ---
             t0 = time.time()
             query_result, tokens_used = get_closed_book_verdict(
-                claim_text, prompt_instructions, nei_label, metadata_context
+                claim_text, prompt_instructions, metadata_context
             )
             latency_generation = time.time() - t0
 

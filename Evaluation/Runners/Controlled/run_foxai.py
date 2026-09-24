@@ -232,11 +232,8 @@ def run_controlled_experiment():
             # Safety Check: Entities
             has_entities = False
             for src in preprocessed_sources:
-                if (
-                    src.get("entities")
-                    and src.get("entities") != "[]"
-                    and len(src.get("entities")) > 0
-                ):
+                entities = src.get("entities")
+                if entities is not None and entities != "[]" and len(entities) > 0:
                     has_entities = True
                     break
 
@@ -280,7 +277,18 @@ def run_controlled_experiment():
 
             # 4. Verdict Parsing
             try:
-                if query_result and "VERDICT:" in query_result:
+                if isinstance(query_result, list):
+                    query_result = "\n".join(
+                        item if isinstance(item, str) else str(item)
+                        for item in query_result
+                    )
+                elif query_result is not None and not isinstance(query_result, str):
+                    query_result = str(query_result)
+
+                if not query_result or not query_result.strip():
+                    predicted_label = "Error: Empty LLM Response"
+                    query_result = "The LLM failed to generate a response."
+                elif "VERDICT:" in query_result:
                     predicted_label = (
                         query_result.split("REASONING:")[0]
                         .replace("VERDICT:", "")
