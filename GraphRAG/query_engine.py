@@ -4,9 +4,9 @@ import platform
 
 import dotenv
 from langchain.chains import RetrievalQA
+from langchain.prompts import PromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain_community.vectorstores import Neo4jVector
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from Utils.nomic_embedding import get_embedding_model
 
@@ -76,12 +76,13 @@ class QueryEngine:
         self.llm_model = ChatGroq(model=self.modelGroq_name)
         self.index_name = index_name
 
-    def query_similarity(self, query):
+    def query_similarity(self, query, prompt_instructions=None):
         """
         Performs a hybrid GraphRAG query: Vector search + Graph Traversal on the Neo4j graph.
 
         Args:
-            query (str): The claim and instructions to be processed by the LLM.
+            query (str): The raw claim to be searched in the vector database.
+            prompt_instructions (str, optional): The strict formatting instructions for the LLM.
 
         Returns:
             tuple: A tuple containing:
@@ -121,17 +122,37 @@ class QueryEngine:
                 password=self.neo4j_password,
                 index_name=self.index_name,
                 node_label="Article",
-                text_node_properties=[
-                    "title",
-                    "body",
-                ],
+                text_node_properties=["title", "body"],
                 embedding_node_property="embedding",
                 retrieval_query=graph_retrieval_query,
             )
 
             retriever = vector_store.as_retriever()
+
+            final_prompt_instructions = (
+                prompt_instructions if prompt_instructions else ""
+            )
+
+            template = f"""You are a strict fact-checking AI.
+            Verify the following claim using ONLY the provided evidence.
+
+            {final_prompt_instructions}
+
+            EVIDENCE:
+            {{context}}
+
+            CLAIM: {{question}}
+            """
+
+            qa_prompt = PromptTemplate(
+                template=template, input_variables=["context", "question"]
+            )
+
             vector_qa = RetrievalQA.from_chain_type(
-                llm=self.llm_model, chain_type="stuff", retriever=retriever
+                llm=self.llm_model,
+                chain_type="stuff",
+                retriever=retriever,
+                chain_type_kwargs={"prompt": qa_prompt},
             )
 
             result = vector_qa.invoke(
