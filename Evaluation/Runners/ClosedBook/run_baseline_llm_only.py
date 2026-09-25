@@ -6,6 +6,7 @@ from groq import Groq
 from log import Logger
 
 from Evaluation.Utils.dataset_manager import DatasetManager
+from Utils.prompt_manager import get_dataset_prompt_instructions
 from Database.data_entities import Claim, Answer, Experiment
 
 dotenv.load_dotenv("key.env", override=False)
@@ -51,7 +52,7 @@ def run_closed_book_baseline():
     use_meta = metadata["use_metadata"]
 
     # Tweak the instructions slightly since this baseline has no "provided evidence"
-    base_instructions = dataset_manager.get_prompt_instructions()
+    base_instructions = get_dataset_prompt_instructions(active_dataset)
     prompt_instructions = base_instructions.replace(
         "citing the provided evidence", "based on your internal knowledge"
     )

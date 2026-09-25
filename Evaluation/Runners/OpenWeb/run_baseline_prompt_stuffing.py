@@ -6,6 +6,7 @@ from groq import Groq
 from log import Logger
 
 from Evaluation.Utils.dataset_manager import DatasetManager
+from Utils.prompt_manager import get_dataset_prompt_instructions
 from WebScraper.scraper import Scraper
 from Database.data_entities import Claim, Answer, Experiment
 
@@ -54,7 +55,7 @@ def run_prompt_stuffing_baseline_openweb():
     active_dataset = metadata["dataset_name"]
     use_meta = metadata["use_metadata"]
 
-    prompt_instructions = dataset_manager.get_prompt_instructions()
+    prompt_instructions = get_dataset_prompt_instructions(active_dataset)
 
     logger.info(
         f"Starting Baseline (Prompt Stuffing - Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
