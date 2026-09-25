@@ -24,7 +24,3 @@ def get_dataset_prompt_instructions(dataset_name: str) -> str:
         - Refuted: The evidence clearly proves the claim is false.
         - Not Enough Evidence: The evidence does not contain the information needed to judge the claim.
         - Conflicting Evidence/Cherry-picking: The claim is technically true but leaves out crucial context, is misleading, or the evidence is heavily mixed."""
-
-    else:
-        # DEFAULT UI FALLBACK:
-        return ""
