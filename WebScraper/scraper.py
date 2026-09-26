@@ -200,7 +200,7 @@ class Scraper:
                 with DDGS() as fresh_ddg:
                     # Note: We wrap it in list() because newer versions of DDGS return a generator
                     results = list(
-                        fresh_ddg.text(query, max_results=num_results, backend="lite")
+                        fresh_ddg.text(query, max_results=num_results, backend="google")
                     )
 
                 if not results:  # If there are no results, log and return empty list
