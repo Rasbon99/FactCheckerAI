@@ -15,7 +15,7 @@ from Evaluation.Utils.dataset_manager import DatasetManager
 from Utils.prompt_manager import get_dataset_prompt_instructions
 from WebScraper.scraper import Scraper
 from Database.data_entities import Claim, Answer, Experiment
-from Utils.nomic_embedding import get_embedding_model
+from Utils.embedding import get_embedding_model
 
 # Load environment variables
 dotenv.load_dotenv("key.env", override=False)
@@ -75,7 +75,7 @@ def run_hybrid_rag_baseline_openweb():
         "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
     )
     embedding_model_name = os.getenv(
-        "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
+        "EMBEDDING_MODEL_NAME", "BAAI/bge-base-en-v1.5"
     )
     embeddings = get_embedding_model(embedding_model_name)
 

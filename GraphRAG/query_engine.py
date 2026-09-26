@@ -8,7 +8,7 @@ from langchain.prompts import PromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain_community.vectorstores import Neo4jVector
 from langchain_groq import ChatGroq
-from Utils.nomic_embedding import get_embedding_model
+from Utils.embedding import get_embedding_model
 
 
 from log import Logger
@@ -49,7 +49,7 @@ class TokenTrackerCallback(BaseCallbackHandler):
 
 class QueryEngine:
 
-    def __init__(self, env_file="key.env", index_name="articles_nomic"):
+    def __init__(self, env_file="key.env", index_name="articles_bge"):
         """
         Initializes the QueryEngine by setting up the environment variables, models, and Neo4j connection.
 
@@ -66,7 +66,7 @@ class QueryEngine:
         self.neo4j_password = os.environ["NEO4J_PASSWORD"]
 
         self.embedding_model_name = os.getenv(
-            "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
+            "EMBEDDING_MODEL_NAME", "BAAI/bge-base-en-v1.5"
         )
         self.modelGroq_name = os.environ["GROQ_MODEL_NAME"]
 
@@ -170,7 +170,7 @@ class QueryEngine:
 
         except Exception as e:
             self.logger.error(f"Error during GraphRAG query: {e}")
-            return None, {"total": 0, "calls": 0}
+            raise
 
         finally:
             if vector_store is not None:

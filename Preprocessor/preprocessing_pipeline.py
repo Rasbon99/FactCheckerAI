@@ -50,7 +50,7 @@ class Preprocessing_Pipeline:
             token_data["calls"] += 1
             token_data["total"] += title_tokens
 
-            claim_summary, summary_tokens = self.summarizer.generate_summary(
+            claim_summary, summary_tokens = self.summarizer.claim_summary_summarize(
                 claim, max_lenght
             )
             token_data["calls"] += 1

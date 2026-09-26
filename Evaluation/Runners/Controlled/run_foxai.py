@@ -201,7 +201,7 @@ def run_controlled_experiment():
 
             # SAFETY FALLBACK: If LLM fails to summarize, use the raw claim text
             if not claim_title:
-                claim_title = f"!g {claim_text[:50]}..."
+                claim_title = f"{claim_text[:50]}..."
             if not claim_summary:
                 claim_summary = claim_text
 

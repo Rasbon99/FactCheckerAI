@@ -40,7 +40,7 @@ class Summarizer:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an AI designed to rephrase a claim into a concise, specific, and highly searchable query. Focus on preserving all critical details such as names, dates, locations, or key terms, but avoid unnecessary words. Provide only the text without any additional formatting only add at the beginning !g",
+                        "content": "You are an AI designed to rephrase a claim into a concise, specific, and highly searchable query. Focus on preserving all critical details such as names, dates, locations, or key terms, but avoid unnecessary words. Provide only the text without any additional formatting.",
                     },
                     {"role": "user", "content": text},
                 ],
@@ -64,6 +64,47 @@ class Summarizer:
             self.logger.error("Error generating summary: %s", e)
             return None, 0
 
+    def claim_summary_summarize(
+        self, text, max_tokens=1024, temperature=0.0, stop=None
+    ):
+        try:
+            response = self.client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Rewrite the user's claim as one concise factual statement "
+                            "in English. Preserve the original meaning and all important "
+                            "details. Do not answer, verify, confirm, or refute the claim. "
+                            "Do not add information that is not present in the input. "
+                            "If the input is a question, rewrite it as a neutral statement "
+                            "describing what needs to be verified. "
+                            "Return only the rewritten claim."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": text,
+                    },
+                ],
+                model=self.low_model,
+                temperature=temperature,
+                max_completion_tokens=max_tokens,
+                stop=stop,
+            )
+
+            summary = response.choices[0].message.content
+            tokens = response.usage.total_tokens if response.usage else 0
+
+            if not summary:
+                return None, 0
+
+            return summary.strip(), tokens
+
+        except Exception as e:
+            self.logger.error("Error generating claim summary: %s", e)
+            return None, 0
+        
     def generate_summary(self, text, max_tokens=1024, temperature=0.5, stop=None):
         """
         Generates a general summary for the given text.
