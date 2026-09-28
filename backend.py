@@ -17,7 +17,7 @@ db = Database()
 class InputText(BaseModel):
     text: str
     search_query: Optional[str] = None
-    prompt_instructions: Optional[str] = None
+    response_format_instructions: Optional[str] = None
 
 
 @backend_app.post("/run_pipeline")
@@ -76,31 +76,34 @@ def process_text(input_text: InputText):
         preprocessed_sources,
         claim.text,
         claim.id,
-        prompt_instructions=input_text.prompt_instructions,
+        response_format_instructions=input_text.response_format_instructions,
     )
     latencies["generation"] = time.time() - t0
 
     tokens["generation"] = t_usage.get("llm_total", t_usage.get("total", 0))
     calls["generation"] = t_usage.get("llm_calls", t_usage.get("calls", 0))
 
-    # --- 4. Verdict Parsing ---
+    # --- 4. Parse structured verdicts only for experiment requests ---
     try:
-        if query_result and "VERDICT:" in query_result:
-            predicted_label = (
-                query_result.split("REASONING:")[0].replace("VERDICT:", "").strip()
-            )
+        if input_text.response_format_instructions:
+            if query_result and "VERDICT:" in query_result:
+                predicted_label = (
+                    query_result.split("REASONING:")[0].replace("VERDICT:", "").strip()
+                )
+            else:
+                predicted_label = "Error: Unstructured Response"
         else:
-            predicted_label = "Error: Unstructured Response"
+            predicted_label = None
     except Exception:
         predicted_label = "Parsing Error"
 
     # --- 5. Answer Entity ---
     try:
         if query_result:
-            if "REASONING:" in query_result:
+            if input_text.response_format_instructions and "REASONING:" in query_result:
                 reasoning = query_result.split("REASONING:")[1].strip()
             else:
-                reasoning = query_result.replace("VERDICT:", "").strip()
+                reasoning = query_result.strip()
         else:
             reasoning = "No results found."
     except Exception:

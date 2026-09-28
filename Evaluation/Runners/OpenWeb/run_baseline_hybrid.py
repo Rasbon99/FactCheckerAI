@@ -12,7 +12,7 @@ from langchain_core.vectorstores import InMemoryVectorStore
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.dataset_manager import DatasetManager
-from Utils.prompt_manager import get_dataset_prompt_instructions
+from Utils.prompt_manager import get_dataset_response_format_instructions
 from WebScraper.scraper import Scraper
 from Database.data_entities import Claim, Answer, Experiment
 from Utils.nomic_embedding import get_embedding_model
@@ -30,12 +30,14 @@ GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
 client = Groq(api_key=GROQ_API_KEY)
 
 
-def get_hybrid_rag_verdict(claim_text, best_evidence_string, prompt_instructions):
+def get_hybrid_rag_verdict(
+    claim_text, best_evidence_string, response_format_instructions
+):
     """Asks the LLM to verify the claim using ONLY the top chunks found by Hybrid RAG (BM25 + Dense Embeddings)."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
 
-    {prompt_instructions}
+    {response_format_instructions}
 
     EVIDENCE:
     {best_evidence_string}
@@ -61,7 +63,9 @@ def run_hybrid_rag_baseline_openweb():
     active_dataset = metadata["dataset_name"]
     use_meta = metadata["use_metadata"]
 
-    prompt_instructions = get_dataset_prompt_instructions(active_dataset)
+    response_format_instructions = get_dataset_response_format_instructions(
+        active_dataset
+    )
 
     logger.info(
         f"Starting Baseline (HybridRAG - Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
@@ -152,7 +156,7 @@ def run_hybrid_rag_baseline_openweb():
             # --- 2. Generation (The LLM Call) ---
             t0 = time.time()
             query_result, tokens_used = get_hybrid_rag_verdict(
-                claim_text, best_evidence, prompt_instructions
+                claim_text, best_evidence, response_format_instructions
             )
             latency_generation = time.time() - t0
 

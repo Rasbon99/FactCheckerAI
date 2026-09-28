@@ -18,7 +18,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.dataset_manager import DatasetManager
-from Utils.prompt_manager import get_dataset_prompt_instructions
+from Utils.prompt_manager import get_dataset_response_format_instructions
 from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
 from Database.data_entities import Claim, Answer, Experiment
 from Utils.nomic_embedding import get_embedding_model
@@ -76,12 +76,12 @@ class SQLiteFTS5Retriever(BaseRetriever):
 # ====================================================================
 
 
-def get_hybrid_verdict(claim_text, retrieved_evidence, prompt_instructions):
+def get_hybrid_verdict(claim_text, retrieved_evidence, response_format_instructions):
     """Asks the LLM to verify the claim using the Hybrid RAG retrieved text."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
 
-    {prompt_instructions}
+    {response_format_instructions}
 
     EVIDENCE:
     {retrieved_evidence}
@@ -108,7 +108,9 @@ def run_hybrid_baseline():
     active_dataset = metadata["dataset_name"]
     use_meta = metadata["use_metadata"]
 
-    prompt_instructions = get_dataset_prompt_instructions(active_dataset)
+    response_format_instructions = get_dataset_response_format_instructions(
+        active_dataset
+    )
 
     logger.info(
         f"Starting Baseline (HybridRAG Re-ranking) with {MAX_CLAIMS_TO_TEST} claims..."
@@ -241,7 +243,7 @@ def run_hybrid_baseline():
             # --- THE GENERATION STEP ---
             t0 = time.time()
             query_result, tokens_used = get_hybrid_verdict(
-                claim_text, combined_evidence, prompt_instructions
+                claim_text, combined_evidence, response_format_instructions
             )
             latency_generation = time.time() - t0
 

@@ -8,7 +8,7 @@ from groq import Groq
 from log import Logger
 
 from Evaluation.Utils.dataset_manager import DatasetManager
-from Utils.prompt_manager import get_dataset_prompt_instructions
+from Utils.prompt_manager import get_dataset_response_format_instructions
 from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
 from Database.data_entities import Claim, Answer, Experiment
 from rank_bm25 import BM25Okapi
@@ -29,12 +29,12 @@ def clean_query_for_fts(text):
     return re.sub(r"[^a-zA-Z0-9\s]", "", text).strip()
 
 
-def get_bm25_verdict(claim_text, retrieved_evidence, prompt_instructions):
+def get_bm25_verdict(claim_text, retrieved_evidence, response_format_instructions):
     """Asks the LLM to verify the claim using the BM25 retrieved text."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
 
-    {prompt_instructions}
+    {response_format_instructions}
 
     EVIDENCE:
     {retrieved_evidence}
@@ -60,7 +60,9 @@ def run_sparse_baseline():
     active_dataset = metadata["dataset_name"]
     use_meta = metadata["use_metadata"]
 
-    prompt_instructions = get_dataset_prompt_instructions(active_dataset)
+    response_format_instructions = get_dataset_response_format_instructions(
+        active_dataset
+    )
 
     logger.info(f"Starting Baseline (Sparse/BM25) with {MAX_CLAIMS_TO_TEST} claims...")
     logger.info(f"Environment: {metadata['environment']}")
@@ -184,7 +186,7 @@ def run_sparse_baseline():
             # --- THE GENERATION STEP ---
             t0 = time.time()
             query_result, toks = get_bm25_verdict(
-                claim_text, combined_evidence, prompt_instructions
+                claim_text, combined_evidence, response_format_instructions
             )
             latency_generation = time.time() - t0
 

@@ -76,13 +76,13 @@ class QueryEngine:
         self.llm_model = ChatGroq(model=self.modelGroq_name)
         self.index_name = index_name
 
-    def query_similarity(self, query, prompt_instructions=None):
+    def query_similarity(self, query, response_format_instructions=None):
         """
         Performs a hybrid GraphRAG query: Vector search + Graph Traversal on the Neo4j graph.
 
         Args:
             query (str): The raw claim to be searched in the vector database.
-            prompt_instructions (str, optional): The strict formatting instructions for the LLM.
+            response_format_instructions (str, optional): Instructions for structured model output.
 
         Returns:
             tuple: A tuple containing:
@@ -129,14 +129,14 @@ class QueryEngine:
 
             retriever = vector_store.as_retriever()
 
-            final_prompt_instructions = (
-                prompt_instructions if prompt_instructions else ""
+            final_response_format_instructions = (
+                response_format_instructions if response_format_instructions else ""
             )
 
             template = f"""You are a strict fact-checking AI.
             Verify the following claim using ONLY the provided evidence.
 
-            {final_prompt_instructions}
+            {final_response_format_instructions}
 
             EVIDENCE:
             {{context}}

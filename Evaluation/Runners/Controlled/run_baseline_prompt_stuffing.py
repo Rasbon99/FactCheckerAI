@@ -7,7 +7,7 @@ from groq import Groq
 from log import Logger
 
 from Evaluation.Utils.dataset_manager import DatasetManager
-from Utils.prompt_manager import get_dataset_prompt_instructions
+from Utils.prompt_manager import get_dataset_response_format_instructions
 from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
 from Database.data_entities import Claim, Answer, Experiment
 
@@ -59,13 +59,13 @@ def extract_perfect_evidence(evidence_data, wiki_cursor):
 
 
 def get_prompt_stuffing_verdict(
-    claim_text, massive_evidence_string, prompt_instructions
+    claim_text, massive_evidence_string, response_format_instructions
 ):
     """Asks the LLM to verify the claim using the massive wall of retrieved text."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
 
-    {prompt_instructions}
+    {response_format_instructions}
 
     EVIDENCE:
     {massive_evidence_string}
@@ -91,7 +91,9 @@ def run_prompt_stuffing_baseline_controlled():
     active_dataset = metadata["dataset_name"]
     use_meta = metadata["use_metadata"]
 
-    prompt_instructions = get_dataset_prompt_instructions(active_dataset)
+    response_format_instructions = get_dataset_response_format_instructions(
+        active_dataset
+    )
 
     logger.info(
         f"Starting Baseline (Prompt Stuffing - Controlled) with {MAX_CLAIMS_TO_TEST} claims..."
@@ -188,7 +190,7 @@ def run_prompt_stuffing_baseline_controlled():
             # --- 2. Generation (The LLM Call) ---
             t0 = time.time()
             query_result, tokens_used = get_prompt_stuffing_verdict(
-                claim_text, best_evidence, prompt_instructions
+                claim_text, best_evidence, response_format_instructions
             )
             latency_generation = time.time() - t0
 
