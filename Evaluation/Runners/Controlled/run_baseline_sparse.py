@@ -9,6 +9,7 @@ from langchain_core.messages import HumanMessage
 from log import Logger
 
 from Evaluation.Utils.dataset_manager import DatasetManager
+from Utils.prompt_manager import get_dataset_prompt_instructions
 from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
 from Database.data_entities import Claim, Answer, Experiment
 from rank_bm25 import BM25Okapi
@@ -69,7 +70,7 @@ def run_sparse_baseline():
     active_dataset = metadata["dataset_name"]
     use_meta = metadata["use_metadata"]
 
-    prompt_instructions = dataset_manager.get_prompt_instructions()
+    prompt_instructions = get_dataset_prompt_instructions(active_dataset)
 
     logger.info(f"Starting Baseline (Sparse/BM25)...")
     logger.info(f"Environment: {metadata['environment']}")

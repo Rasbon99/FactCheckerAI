@@ -18,6 +18,7 @@ from langchain_community.retrievers import BM25Retriever
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.dataset_manager import DatasetManager
+from Utils.prompt_manager import get_dataset_prompt_instructions
 from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
 from Database.data_entities import Claim, Answer, Experiment
 from Utils.nomic_embedding import get_embedding_model
@@ -116,7 +117,7 @@ def run_hybrid_baseline():
     active_dataset = metadata["dataset_name"]
     use_meta = metadata["use_metadata"]
 
-    prompt_instructions = dataset_manager.get_prompt_instructions()
+    prompt_instructions = get_dataset_prompt_instructions(active_dataset)
 
     logger.info("Starting Baseline (HybridRAG Re-ranking)...")
     logger.info(f"Environment: {metadata['environment']}")

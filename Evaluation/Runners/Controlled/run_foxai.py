@@ -7,6 +7,7 @@ from llamacpp_client import load_models, set_alias_map
 from log import Logger
 
 from Evaluation.Utils.dataset_manager import DatasetManager
+from Utils.prompt_manager import get_dataset_prompt_instructions
 from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
 from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from GraphRAG.rag_pipeline import RAG_Pipeline
@@ -62,7 +63,7 @@ def run_controlled_experiment():
     active_dataset = metadata["dataset_name"]
     use_meta = metadata["use_metadata"]
 
-    prompt_instructions = dataset_manager.get_prompt_instructions()
+    prompt_instructions = get_dataset_prompt_instructions(active_dataset)
 
     logger.info("Starting Controlled Experiment (FoxAI)...")
     logger.info(f"Environment: {metadata['environment']}")
