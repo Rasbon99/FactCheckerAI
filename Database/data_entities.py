@@ -37,7 +37,7 @@ class Claim:
         """
         self.logger.info("Saving claim to the database.")
         self.db.execute_query(
-            "INSERT INTO claims (id, text, title, summary) VALUES (?, ?, ?, ?)",
+            "INSERT INTO claims (id, text, title) VALUES (?, ?, ?)",
             (self.id, self.text, self.title),
         )
         self.logger.info("Claim with ID %s saved to the database.", self.id)
