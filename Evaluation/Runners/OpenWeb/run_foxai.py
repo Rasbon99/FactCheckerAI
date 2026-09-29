@@ -11,6 +11,9 @@ from Database.data_entities import Experiment
 dotenv.load_dotenv("key.env", override=False)
 
 BACKEND_URL = os.getenv("BACKEND_API_URL")
+if not BACKEND_URL:
+    raise RuntimeError("BACKEND_API_URL is not set in key.env")
+
 API_URL = f"{BACKEND_URL}/run_pipeline"
 
 MAX_CLAIMS_TO_TEST = 5
@@ -84,9 +87,12 @@ def run_experiment():
                     )
                     successful_runs += 1
                 else:
-                    logger.error(
-                        f"Backend Error {response.status_code}: {response.text}"
-                    )
+                    try:
+                        detail = response.json().get("detail", response.text)
+                    except ValueError:
+                        detail = response.text
+
+                    logger.error(f"Backend Error {response.status_code}: {detail}")
                     failed_runs += 1
 
             except requests.exceptions.Timeout:
@@ -94,14 +100,17 @@ def run_experiment():
                     "Request timed out! Scraping and Graph building took too long. Skipping to next claim."
                 )
                 failed_runs += 1
+            except requests.exceptions.RequestException as e:
+                logger.exception(f"Request failed: {e}")
+                failed_runs += 1
             except Exception as e:
-                logger.error(f"Request failed: {e}")
+                logger.exception(f"Unexpected error while processing claim: {e}")
                 failed_runs += 1
 
             time.sleep(15)
 
     except Exception as e:
-        logger.error(f"Fatal Error during execution: {e}")
+        logger.exception(f"Fatal Error during execution: {e}")
         return
 
     logger.info("=" * 20)

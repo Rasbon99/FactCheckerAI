@@ -33,8 +33,10 @@ def build_wikipedia_database():
     # 2. Find all the .jsonl files in the folder
     jsonl_files = glob.glob(os.path.join(WIKIPEDIA_FOLDER, "*.jsonl"))
     if not jsonl_files:
-        logger.error(f"Could not find any .jsonl files in {WIKIPEDIA_FOLDER}")
-        return
+        conn.close()
+        raise FileNotFoundError(
+            f"Could not find any .jsonl files in {WIKIPEDIA_FOLDER}"
+        )
 
     logger.info(f"Found {len(jsonl_files)} JSONL files to process.")
 

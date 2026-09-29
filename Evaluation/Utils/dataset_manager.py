@@ -12,6 +12,11 @@ class DatasetManager:
 
         self.active_dataset = os.getenv("EXPERIMENT_ACTIVE_DATASET", "FEVER").upper()
 
+        if self.active_dataset not in {"FEVER", "AVERITEC"}:
+            raise ValueError(
+                f"Unsupported dataset: {self.active_dataset}. Expected FEVER or AVERITEC."
+            )
+
         if self.active_dataset == "AVERITEC":
             self.use_metadata = (
                 os.getenv("AVERITEC_USE_METADATA", "false").lower() == "true"

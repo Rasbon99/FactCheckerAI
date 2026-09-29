@@ -114,141 +114,158 @@ def run_prompt_stuffing_baseline_controlled():
         averitec_retriever = AVeriTeCKnowledgeRetriever()
 
     successful_runs = 0
+    failed_runs = 0
 
     try:
         claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
 
         for line_number, data in enumerate(claims_data):
-            claim_text = data.get("claim", "")
-            ground_truth = data.get("label", "")
+            try:
+                claim_text = data.get("claim", "")
+                ground_truth = data.get("label", "")
 
-            search_query = claim_text
-            if active_dataset == "AVERITEC" and use_meta:
-                search_query = dataset_manager.build_search_query(data)
+                search_query = claim_text
+                if active_dataset == "AVERITEC" and use_meta:
+                    search_query = dataset_manager.build_search_query(data)
 
-            logger.info(f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
-            if search_query != claim_text:
-                logger.info(f"Enriched Search Query: {search_query}")
-            logger.info(f"Ground Truth: {ground_truth}")
+                logger.info(f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
+                if search_query != claim_text:
+                    logger.info(f"Enriched Search Query: {search_query}")
+                logger.info(f"Ground Truth: {ground_truth}")
 
-            claim_id = str(uuid.uuid4())
+                claim_id = str(uuid.uuid4())
 
-            Claim(
-                text=claim_text,
-                title="[PromptStuff] " + claim_text[:30] + "...",
-                summary="Tested by stuffing all database evidence directly into the prompt.",
-                claim_id=claim_id,
-            )
-
-            # --- 1. Retrieval (Database Extract) ---
-            t0 = time.time()
-            combined_evidence = ""
-
-            if active_dataset == "FEVER":
-                evidence_data = data.get("evidence", [])
-                combined_evidence = extract_perfect_evidence(evidence_data, wiki_cursor)
-
-            elif active_dataset == "AVERITEC" and averitec_retriever is not None:
-                claim_id_internal = data.get("internal_id")
-                all_sentences = averitec_retriever.get_evidence_for_claim(
-                    claim_id_internal
+                Claim(
+                    text=claim_text,
+                    title="[PromptStuff] " + claim_text[:30] + "...",
+                    claim_id=claim_id,
                 )
 
-                if "noisy_ids" in data and all_sentences is not None:
-                    for n_id in data["noisy_ids"]:
-                        noisy_sentences = averitec_retriever.get_evidence_for_claim(
-                            n_id
+                # --- 1. Retrieval (Database Extract) ---
+                t0 = time.time()
+                combined_evidence = ""
+
+                if active_dataset == "FEVER":
+                    evidence_data = data.get("evidence", [])
+                    combined_evidence = extract_perfect_evidence(evidence_data, wiki_cursor)
+
+                elif active_dataset == "AVERITEC" and averitec_retriever is not None:
+                    claim_id_internal = data.get("internal_id")
+                    all_sentences = averitec_retriever.get_evidence_for_claim(
+                        claim_id_internal
+                    )
+
+                    if "noisy_ids" in data and all_sentences is not None:
+                        for n_id in data["noisy_ids"]:
+                            noisy_sentences = averitec_retriever.get_evidence_for_claim(
+                                n_id
+                            )
+                            if noisy_sentences:
+                                all_sentences.extend(noisy_sentences)
+
+                    if all_sentences:
+                        # In prompt stuffing, we just dump EVERYTHING into the prompt
+                        combined_evidence = "\n".join(all_sentences)
+
+                if not combined_evidence.strip():
+                    best_evidence = "No relevant evidence could be found in the dataset."
+                else:
+                    # --- API SAFETY VALVE FOR PROMPT STUFFING ---
+                    MAX_CHARS = 20000
+                    if len(combined_evidence) > MAX_CHARS:
+                        logger.warning(
+                            f"Evidence massive ({len(combined_evidence)} chars). Truncating to {MAX_CHARS} to survive API limits."
                         )
-                        if noisy_sentences:
-                            all_sentences.extend(noisy_sentences)
+                        best_evidence = (
+                            combined_evidence[:MAX_CHARS]
+                            + "\n...[EVIDENCE TRUNCATED DUE TO CONTEXT LIMITS]..."
+                        )
+                    else:
+                        best_evidence = combined_evidence
 
-                if all_sentences:
-                    # In prompt stuffing, we just dump EVERYTHING into the prompt
-                    combined_evidence = "\n".join(all_sentences)
+                latency_retrieval = time.time() - t0
 
-            if not combined_evidence.strip():
-                best_evidence = "No relevant evidence could be found in the dataset."
-            else:
-                # --- API SAFETY VALVE FOR PROMPT STUFFING ---
-                MAX_CHARS = 20000
-                if len(combined_evidence) > MAX_CHARS:
-                    logger.warning(
-                        f"Evidence massive ({len(combined_evidence)} chars). Truncating to {MAX_CHARS} to survive API limits."
-                    )
-                    best_evidence = (
-                        combined_evidence[:MAX_CHARS]
-                        + "\n...[EVIDENCE TRUNCATED DUE TO CONTEXT LIMITS]..."
-                    )
+                # --- 2. Generation (The LLM Call) ---
+                t0 = time.time()
+                query_result, tokens_used = get_prompt_stuffing_verdict(
+                    claim_text, best_evidence, prompt_instructions
+                )
+                latency_generation = time.time() - t0
+
+                # --- 3. Verdict Parsing ---
+                try:
+                    if not query_result or not query_result.strip():
+                        predicted_label = "Error: Empty LLM Response"
+                        query_result = "The LLM failed to generate a response."
+                    elif "VERDICT:" in query_result:
+                        predicted_label = (
+                            query_result.split("REASONING:")[0]
+                            .replace("VERDICT:", "")
+                            .strip()
+                        )
+                    else:
+                        predicted_label = "Error: Unstructured Response"
+                except Exception as e:
+                    logger.exception(f"Error parsing verdict: {e}")
+                    predicted_label = "Parsing Error"
+
+                logger.info(f"Prompt Stuffing Verdict: {predicted_label}")
+
+                Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
+
+                # --- 4. Log to DB ---
+                Experiment(
+                    claim_id=claim_id,
+                    predicted_label=predicted_label,
+                    ground_truth=ground_truth,
+                    latencies={
+                        "preprocessor": 0.0,
+                        "retrieval": latency_retrieval,
+                        "generation": latency_generation,
+                    },
+                    tokens={
+                        "preprocessor": 0,
+                        "retrieval": 0,
+                        "generation": tokens_used,
+                    },
+                    calls={
+                        "preprocessor": 0,
+                        "retrieval": 0,
+                        "generation": 1,
+                    },
+                    evidence_data={
+                        "claim_text": claim_text,
+                        "raw_sources": [],
+                        "best_evidence": best_evidence,
+                        "query_result": query_result,
+                    },
+                    system_type="PromptStuffing",
+                    environment=metadata["environment"],
+                    dataset_name=metadata["dataset_name"],
+                    experiment_type=metadata["experiment_type"],
+                    use_metadata=use_meta,
+                )
+
+                if predicted_label in {
+                    "Error: Empty LLM Response",
+                    "Error: Unstructured Response",
+                    "Parsing Error",
+                }:
+                    failed_runs += 1
                 else:
-                    best_evidence = combined_evidence
+                    successful_runs += 1
 
-            latency_retrieval = time.time() - t0
-
-            # --- 2. Generation (The LLM Call) ---
-            t0 = time.time()
-            query_result, tokens_used = get_prompt_stuffing_verdict(
-                claim_text, best_evidence, prompt_instructions
-            )
-            latency_generation = time.time() - t0
-
-            # --- 3. Verdict Parsing ---
-            try:
-                if not query_result or not query_result.strip():
-                    predicted_label = "Error: Empty LLM Response"
-                    query_result = "The LLM failed to generate a response."
-                elif "VERDICT:" in query_result:
-                    predicted_label = (
-                        query_result.split("REASONING:")[0]
-                        .replace("VERDICT:", "")
-                        .strip()
-                    )
-                else:
-                    predicted_label = "Error: Unstructured Response"
-            except Exception:
-                predicted_label = "Parsing Error"
-
-            logger.info(f"Prompt Stuffing Verdict: {predicted_label}")
-
-            Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
-
-            # --- 4. Log to DB ---
-            Experiment(
-                claim_id=claim_id,
-                predicted_label=predicted_label,
-                ground_truth=ground_truth,
-                latencies={
-                    "preprocessor": 0.0,
-                    "retrieval": latency_retrieval,
-                    "generation": latency_generation,
-                },
-                tokens={
-                    "preprocessor": 0,
-                    "retrieval": 0,
-                    "generation": tokens_used,
-                },
-                calls={
-                    "preprocessor": 0,
-                    "retrieval": 0,
-                    "generation": 1,
-                },
-                evidence_data={
-                    "claim_text": claim_text,
-                    "raw_sources": [],
-                    "best_evidence": best_evidence,
-                    "query_result": query_result,
-                },
-                system_type="PromptStuffing",
-                environment=metadata["environment"],
-                dataset_name=metadata["dataset_name"],
-                experiment_type=metadata["experiment_type"],
-                use_metadata=use_meta,
-            )
-
-            successful_runs += 1
-            time.sleep(2)
+                time.sleep(2)
+                                
+            except Exception as e:
+                logger.exception(
+                    f"Error processing claim {line_number + 1}: {e}"
+                )
+                failed_runs += 1
+                continue
 
     except Exception as e:
-        logger.error(f"{e}")
+        logger.exception(f"Fatal error during experiment: {e}")
     finally:
         if wiki_conn:
             wiki_conn.close()
@@ -256,6 +273,7 @@ def run_prompt_stuffing_baseline_controlled():
     logger.info("=" * 20)
     logger.info("PROMPT STUFFING (CONTROLLED) COMPLETE!")
     logger.info(f"Successfully processed: {successful_runs}")
+    logger.info(f"Failed processing: {failed_runs}")
     logger.info("=" * 20)
 
 

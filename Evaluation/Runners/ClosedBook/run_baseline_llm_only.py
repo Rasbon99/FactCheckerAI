@@ -66,107 +66,123 @@ def run_closed_book_baseline():
     logger.info(f"Using Metadata Context: {use_meta}")
 
     successful_runs = 0
+    failed_runs = 0
 
     try:
         claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
 
         for line_number, data in enumerate(claims_data):
-            claim_text = data.get("claim", "")
-            ground_truth = data.get("label", "")
-
-            # --- OPTIONAL METADATA INJECTION ---
-            metadata_context = ""
-            if active_dataset == "AVERITEC" and use_meta:
-                speaker = data.get("speaker", "")
-                date = data.get("claim_date", "")
-                location_ISO_code = data.get("location_ISO_code", "")
-                reporting_source = data.get("reporting_source", "")
-
-                meta_parts = []
-                if speaker:
-                    meta_parts.append(f"- Speaker: {speaker}")
-                if location_ISO_code:
-                    meta_parts.append(f"- Location: {location_ISO_code}")
-                if date:
-                    meta_parts.append(f"- Date: {date}")
-                if reporting_source:
-                    meta_parts.append(f"- Source: {reporting_source}")
-
-                if meta_parts:
-                    metadata_context = (
-                        "\nCONTEXT PROVIDED FOR THIS CLAIM:\n" + "\n".join(meta_parts)
-                    )
-
-            logger.info(f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
-            logger.info(f"Ground Truth: {ground_truth}")
-
-            claim_id = str(uuid.uuid4())
-
-            Claim(
-                text=claim_text,
-                title="[ClosedBook] " + claim_text[:30] + "...",
-                summary="Tested without any external evidence.",
-                claim_id=claim_id,
-            )
-
-            # --- GENERATION STEP ---
-            t0 = time.time()
-            query_result, tokens_used = get_closed_book_verdict(
-                claim_text, prompt_instructions, metadata_context
-            )
-            latency_generation = time.time() - t0
-
-            # Verdict Parsing
             try:
-                if query_result and "VERDICT:" in query_result:
-                    predicted_label = (
-                        query_result.split("REASONING:")[0]
-                        .replace("VERDICT:", "")
-                        .strip()
-                    )
+                claim_text = data.get("claim", "")
+                ground_truth = data.get("label", "")
+
+                # --- OPTIONAL METADATA INJECTION ---
+                metadata_context = ""
+                if active_dataset == "AVERITEC" and use_meta:
+                    speaker = data.get("speaker", "")
+                    date = data.get("claim_date", "")
+                    location_ISO_code = data.get("location_ISO_code", "")
+                    reporting_source = data.get("reporting_source", "")
+
+                    meta_parts = []
+                    if speaker:
+                        meta_parts.append(f"- Speaker: {speaker}")
+                    if location_ISO_code:
+                        meta_parts.append(f"- Location: {location_ISO_code}")
+                    if date:
+                        meta_parts.append(f"- Date: {date}")
+                    if reporting_source:
+                        meta_parts.append(f"- Source: {reporting_source}")
+
+                    if meta_parts:
+                        metadata_context = (
+                            "\nCONTEXT PROVIDED FOR THIS CLAIM:\n" + "\n".join(meta_parts)
+                        )
+
+                logger.info(f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
+                logger.info(f"Ground Truth: {ground_truth}")
+
+                claim_id = str(uuid.uuid4())
+
+                Claim(
+                    text=claim_text,
+                    title="[ClosedBook] " + claim_text[:30] + "...",
+                    claim_id=claim_id,
+                )
+
+                # --- GENERATION STEP ---
+                t0 = time.time()
+                query_result, tokens_used = get_closed_book_verdict(
+                    claim_text, prompt_instructions, metadata_context
+                )
+                latency_generation = time.time() - t0
+
+                # Verdict Parsing
+                try:
+                    if query_result and "VERDICT:" in query_result:
+                        predicted_label = (
+                            query_result.split("REASONING:")[0]
+                            .replace("VERDICT:", "")
+                            .strip()
+                        )
+                    else:
+                        predicted_label = "Error: Unstructured Response"
+                except Exception as e:
+                    logger.exception(f"Error parsing verdict: {e}")
+                    predicted_label = "Parsing Error"
+
+                logger.info(f"Closed-Book Verdict: {predicted_label}")
+
+                Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
+
+                # --- LOG TO EXPERIMENTS DATABASE ---
+                Experiment(
+                    claim_id=claim_id,
+                    predicted_label=predicted_label,
+                    ground_truth=ground_truth,
+                    latencies={
+                        "preprocessor": 0.0,
+                        "retrieval": 0.0,
+                        "generation": latency_generation,
+                    },
+                    tokens={"preprocessor": 0, "retrieval": 0, "generation": tokens_used},
+                    calls={"preprocessor": 0, "retrieval": 0, "generation": 1},
+                    evidence_data={
+                        "claim_text": claim_text,
+                        "raw_sources": [],
+                        "query_result": query_result,
+                    },
+                    system_type="LLM-Only",
+                    environment=metadata["environment"],
+                    dataset_name=metadata["dataset_name"],
+                    experiment_type=metadata["experiment_type"],
+                    use_metadata=use_meta,
+                )
+
+                if predicted_label in {
+                    "Error: Unstructured Response",
+                    "Parsing Error",
+                }:
+                    failed_runs += 1
                 else:
-                    predicted_label = "Error: Unstructured Response"
-            except Exception:
-                predicted_label = "Parsing Error"
+                    successful_runs += 1
 
-            logger.info(f"Closed-Book Verdict: {predicted_label}")
+                time.sleep(2)
 
-            Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
-
-            # --- LOG TO EXPERIMENTS DATABASE ---
-            Experiment(
-                claim_id=claim_id,
-                predicted_label=predicted_label,
-                ground_truth=ground_truth,
-                latencies={
-                    "preprocessor": 0.0,
-                    "retrieval": 0.0,
-                    "generation": latency_generation,
-                },
-                tokens={"preprocessor": 0, "retrieval": 0, "generation": tokens_used},
-                calls={"preprocessor": 0, "retrieval": 0, "generation": 1},
-                evidence_data={
-                    "claim_text": claim_text,
-                    "raw_sources": [],
-                    "query_result": query_result,
-                },
-                system_type="LLM-Only",
-                environment=metadata["environment"],
-                dataset_name=metadata["dataset_name"],
-                experiment_type=metadata["experiment_type"],
-                use_metadata=use_meta,
-            )
-
-            successful_runs += 1
-
-            time.sleep(2)
+            except Exception as e:
+                logger.exception(
+                    f"Error processing claim {line_number + 1}: {e}"
+                )
+                failed_runs += 1
+                continue
 
     except Exception as e:
-        logger.error(f"Error during execution: {e}")
+        logger.exception(f"Fatal error during experiment: {e}")
 
     logger.info("=" * 20)
     logger.info("CLOSED-BOOK BASELINE COMPLETE!")
     logger.info(f"Successfully processed: {successful_runs}")
+    logger.info(f"Failed processing: {failed_runs}")
     logger.info("=" * 20)
 
 

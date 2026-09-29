@@ -6,7 +6,7 @@ from log import Logger
 
 
 class Claim:
-    def __init__(self, text, title, summary, claim_id=None, db=None):
+    def __init__(self, text, title, claim_id=None, db=None):
         """
         Initializes a Claim object with text and optionally a provided claim ID.
         It will also save the claim to the database.
@@ -24,7 +24,6 @@ class Claim:
         self.id = claim_id if claim_id else str(uuid.uuid4())
         self.text = text
         self.title = title
-        self.summary = summary
         self.logger.info("Creating claim with ID: %s", self.id)
         self.save_to_db()
 
@@ -39,7 +38,7 @@ class Claim:
         self.logger.info("Saving claim to the database.")
         self.db.execute_query(
             "INSERT INTO claims (id, text, title, summary) VALUES (?, ?, ?, ?)",
-            (self.id, self.text, self.title, self.summary),
+            (self.id, self.text, self.title),
         )
         self.logger.info("Claim with ID %s saved to the database.", self.id)
 
@@ -110,9 +109,9 @@ class Claim:
             Exception: If there is an error during clearing the claim data from the database.
         """
         self.logger.info("Clearing claim data for claim ID %s.", self.id)
-        self.db.execute_query("DELETE FROM claims WHERE id = ?", (self.id,))
         self.db.execute_query("DELETE FROM sources WHERE claim_id = ?", (self.id,))
         self.db.execute_query("DELETE FROM answers WHERE claim_id = ?", (self.id,))
+        self.db.execute_query("DELETE FROM claims WHERE id = ?", (self.id,))
         self.logger.info("Claim data for claim ID %s cleared.", self.id)
 
     def has_answer(self):
@@ -207,7 +206,7 @@ class Experiment:
         log_dir = os.environ.get("EXPERIMENTS_EVIDENCES_PATH", "data/experiments")
 
         if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
+            os.makedirs(log_dir, exist_ok=True)
             self.logger.info("Created experiments directory: %s", log_dir)
 
         file_path = os.path.join(log_dir, f"{self.id}.json")

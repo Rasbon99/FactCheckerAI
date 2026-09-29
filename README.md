@@ -572,7 +572,7 @@ The **Data Logic** component is crucial for the structured processing and organi
    This module defines the core entities of the system, such as **Claim** and **Answer**, which represent the primary objects of interest in the fact-checking process.
 
 2. **Claim**: 
-   This class is responsible for managing the claim’s text, concise title, and summary, as well as linking the claim to related sources.
+   This class is responsible for managing the claim’s text, concise title, as well as linking the claim to related sources.
 3. **Answer**: 
    This class is used to store and organize the response generated for a claim.
 
@@ -591,7 +591,7 @@ The SQLite database is organized with a relational model comprising three main t
 
 #### Data Entities
 
-- **Claim Class**: Manages claim-related data, generates unique UUIDs, stores claim text, title, and summary, and handles sources via `add_sources()` and `get_dict_sources()`.
+- **Claim Class**: Manages claim-related data, generates unique UUIDs, stores claim text, title, and handles sources via `add_sources()` and `get_dict_sources()`.
 - **Answer Class**: Manages responses for claims, generates unique UUIDs, and saves answer text and optional images.
 
 #### Database Access
@@ -608,7 +608,7 @@ The **Database** class handles data persistence with functions for:
 The **Backend Component** is responsible for orchestrating the entire response processing pipeline, ensuring seamless integration between preprocessing, web scraping, and GraphRAG retrieval. It serves as the central coordination layer, managing the flow of data between these modules while acting as the sole access point to the SQLite database.
 
 #### Workflow Overview
-1. **Preprocessing**: The pipeline starts with preprocessing, which structures the input claim into a title and summary, optimizing it for further analysis.
+1. **Preprocessing**: The pipeline starts with preprocessing, which structures the input claim into a title, optimizing it for further analysis.
 2. **Web Scraping**: The system performs web scraping to gather relevant sources, which are then further preprocessed to enhance clarity and usability.
 3. **GraphRAG Retrieval**: Once the sources are refined, the GraphRAG mechanism analyzes the claim against the retrieved information, utilizing structured knowledge graphs to generate a well-founded response.
 4. **Data Management**: The backend ensures efficient data storage and management, maintaining a coherent and reliable history of fact-checking interactions within the SQLite database.

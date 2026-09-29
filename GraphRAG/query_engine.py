@@ -19,6 +19,7 @@ class TokenTrackerCallback(BaseCallbackHandler):
     def __init__(self):
         self.total_tokens = 0
         self.llm_calls = 0
+        self.logger = Logger("TokenTrackerCallback").get_logger()
 
     def on_llm_end(self, response, **kwargs):
         self.llm_calls += 1
@@ -42,9 +43,8 @@ class TokenTrackerCallback(BaseCallbackHandler):
                         self.total_tokens += gen.message.usage_metadata.get(
                             "total_tokens", 0
                         )
-        except Exception:
-            pass
-
+        except Exception as e:
+            self.logger.warning(f"Could not extract token usage metadata: {e}")
 
 class QueryEngine:
 
@@ -57,7 +57,7 @@ class QueryEngine:
             index_name (str): The name of the index in the Neo4j database to be used for querying.
         """
         dotenv.load_dotenv(env_file, override=False)
-        self.logger = Logger(self.__class__.__name__).get_logger()
+        self.logger = Logger("QueryEngine").get_logger()
         self.platform = platform.system()
 
         self.neo4j_url = os.environ["NEO4J_URI"].replace("http", "bolt")
@@ -70,7 +70,7 @@ class QueryEngine:
         self.modelGroq_name = os.environ["GROQ_MODEL_NAME"]
 
         self.logger.info(f"Loading local embedding model: {self.embedding_model_name}")
-        self.embedding_model = get_embedding_model(self.embedding_model_name)
+        self.embedding_model = get_embedding_model()
 
         self.llm_model = ChatGroq(model=self.modelGroq_name)
         self.index_name = index_name
@@ -144,10 +144,15 @@ class QueryEngine:
                 "total": token_tracker.total_tokens,
                 "calls": token_tracker.llm_calls,
             }
-            return result.get("result", "No results found."), token_data
+            query_result = result.get("result")
+
+            if not query_result:
+                raise RuntimeError("GraphRAG query returned an empty result.")
+
+            return query_result, token_data
 
         except Exception as e:
-            self.logger.error(f"Error during GraphRAG query: {e}")
+            self.logger.exception(f"Error during GraphRAG query: {e}")
             raise
 
         finally:

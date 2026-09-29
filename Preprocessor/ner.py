@@ -59,18 +59,16 @@ class NER:
 
             content = response.choices[0].message.content
             if not content:
-                self.logger.error("API response content is None")
-                return None, tokens
+                raise RuntimeError("API response content is None")
 
             result = content.strip()
             self.logger.debug("Raw API response: %s", result)
 
             return json.loads(result), tokens
 
-        except (json.JSONDecodeError, Exception) as e:
-            self.logger.error("Error extracting topic and entities: %s", e)
-            # Return the tokens even if JSON parsing failed!
-            return None, tokens
+        except Exception as e:
+            self.logger.exception("Error extracting topic and entities: %s", e)
+            raise
 
     def find_similar_entities_globally(
         self, entities, max_tokens=1024, temperature=0.0, stop=None
@@ -114,8 +112,7 @@ class NER:
             self.logger.debug(f"Response content: {response_content}")
 
             if not response_content:
-                self.logger.error("API response content is None")
-                return {entity: [entity] for entity in entities}, tokens
+                raise RuntimeError("API response content is None")
 
             # Clean brackets and quotes to prevent Python list hallucination from breaking the split
             cleaned_content = (
@@ -143,9 +140,8 @@ class NER:
             return entity_groups, tokens
 
         except Exception as e:
-            self.logger.error(f"Error in global entity similarity analysis: {e}")
-            # Fallback: return each entity as its own group, but SAVE THE TOKENS!
-            return {entity: [entity] for entity in entities}, tokens
+            self.logger.exception(f"Error in global entity similarity analysis: {e}")
+            raise
 
     def merge_entities(self, sources):
         """

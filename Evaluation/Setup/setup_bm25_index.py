@@ -13,8 +13,7 @@ def build_fts_index():
     logger.info(f"Connecting to Wikipedia Database at: {WIKI_DB_PATH}")
 
     if not os.path.exists(WIKI_DB_PATH):
-        logger.error("Database not found!")
-        return
+        raise FileNotFoundError(f"Database not found: {WIKI_DB_PATH}")
 
     conn = sqlite3.connect(WIKI_DB_PATH)
     cursor = conn.cursor()
@@ -63,7 +62,8 @@ def build_fts_index():
         logger.info(f"SUCCESS! BM25 Index built in {elapsed:.2f} minutes.")
 
     except Exception as e:
-        logger.error(f"Error building index: {e}")
+        logger.exception(f"Error building index: {e}")
+        raise
     finally:
         conn.close()
 
