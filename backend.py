@@ -22,7 +22,10 @@ logger = Logger("Backend").get_logger()
 @backend_app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled backend error: %s", exc)
-    return JSONResponse(status_code=500, content={"detail": {"type": type(exc).__name__, "message": str(exc)}})
+    return JSONResponse(
+        status_code=500,
+        content={"detail": {"type": type(exc).__name__, "message": str(exc)}},
+    )
 
 
 class InputText(BaseModel):
@@ -30,15 +33,13 @@ class InputText(BaseModel):
     search_query: Optional[str] = None
     prompt_instructions: Optional[str] = None
 
+
 @backend_app.post("/run_pipeline")
 def process_text(input_text: InputText):
     text = input_text.text.strip()
 
     if not text:
-        raise HTTPException(
-            status_code=400,
-            detail="Claim text cannot be empty."
-        )
+        raise HTTPException(status_code=400, detail="Claim text cannot be empty.")
 
     claim_id = str(uuid.uuid4())
 
@@ -83,8 +84,12 @@ def process_text(input_text: InputText):
 
         latencies["retrieval"] = time.time() - t0
 
-        tokens["retrieval"] = scraper_metrics.get("total", 0) + prep_metrics.get("total", 0)
-        calls["retrieval"] = scraper_metrics.get("calls", 0) + prep_metrics.get("calls", 0)
+        tokens["retrieval"] = scraper_metrics.get("total", 0) + prep_metrics.get(
+            "total", 0
+        )
+        calls["retrieval"] = scraper_metrics.get("calls", 0) + prep_metrics.get(
+            "calls", 0
+        )
 
         # --- 3. GraphRAG ---
         t0 = time.time()
@@ -103,15 +108,18 @@ def process_text(input_text: InputText):
         if not isinstance(query_result, str) or not query_result.strip():
             raise RuntimeError("GraphRAG returned an empty response.")
 
-        if "VERDICT:" not in query_result or "REASONING:" not in query_result:
-            raise RuntimeError("GraphRAG returned an unstructured response.")
+        # If it's a strict experiment prompt, it will have the tags
+        if "VERDICT:" in query_result and "REASONING:" in query_result:
+            predicted_label = (
+                query_result.split("REASONING:")[0].replace("VERDICT:", "").strip()
+            )
+            # --- 5. Answer Entity (Experiment Mode) ---
+            reasoning = query_result.split("REASONING:", 1)[1].strip()
 
-        predicted_label = (
-            query_result.split("REASONING:")[0].replace("VERDICT:", "").strip()
-        )
-
-        # --- 5. Answer Entity ---
-        reasoning = query_result.split("REASONING:", 1)[1].strip()
+        else:
+            predicted_label = "Unstructured Response (UI Mode)"
+            # --- 5. Answer Entity (UI Mode) ---
+            reasoning = query_result.strip()
 
         answer = Answer(claim.id, reasoning, graphs_folder)
 
@@ -132,7 +140,7 @@ def process_text(input_text: InputText):
             "metrics": {"latencies": latencies, "tokens": tokens, "calls": calls},
             "evidence_data": evidence_data,
         }
-    
+
     except Exception:
         if claim is not None:
             try:
@@ -154,6 +162,7 @@ def process_text(input_text: InputText):
                 )
 
         raise
+
 
 @backend_app.post("/delete_db")
 def delete_database():
