@@ -8,7 +8,7 @@ from langchain.prompts import PromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain_community.vectorstores import Neo4jVector
 from langchain_groq import ChatGroq
-from Utils.nomic_embedding import get_embedding_model
+from Utils.embedding_handler import get_embedding_model
 
 
 from log import Logger
@@ -70,8 +70,7 @@ class QueryEngine:
         )
         self.modelGroq_name = os.environ["GROQ_MODEL_NAME"]
 
-        self.logger.info(f"Loading local embedding model: {self.embedding_model_name}")
-        self.embedding_model = get_embedding_model(self.embedding_model_name)
+        self.embedding_model = get_embedding_model()
 
         self.llm_model = ChatGroq(model=self.modelGroq_name)
         self.index_name = index_name

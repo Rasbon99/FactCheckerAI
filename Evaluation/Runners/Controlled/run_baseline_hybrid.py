@@ -14,14 +14,13 @@ from langchain_core.documents import Document
 from langchain.retrievers.document_compressors import EmbeddingsFilter
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain_community.retrievers import BM25Retriever
-from langchain_huggingface import HuggingFaceEmbeddings
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.dataset_manager import DatasetManager
 from Utils.prompt_manager import get_dataset_response_format_instructions
 from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
 from Database.data_entities import Claim, Answer, Experiment
-from Utils.nomic_embedding import get_embedding_model
+from Utils.embedding_handler import get_embedding_model
 
 dotenv.load_dotenv("key.env", override=False)
 
@@ -126,10 +125,7 @@ def run_hybrid_baseline():
     logger.info(
         "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
     )
-    embedding_model_name = os.getenv(
-        "EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5"
-    )
-    embeddings = get_embedding_model(embedding_model_name)
+    embeddings = get_embedding_model()
     embeddings_filter = EmbeddingsFilter(embeddings=embeddings, k=2)
 
     hybrid_rag_retriever = None
