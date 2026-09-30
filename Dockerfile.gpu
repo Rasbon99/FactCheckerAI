@@ -15,18 +15,15 @@ RUN apt-get update && apt-get install -y \
 # Copy the required files
 COPY requirements.txt .
 
-# 1. Upgrade pip
-# 2. FORCE install CPU-only PyTorch to prevent 3GB image bloat
-# 3. Install the rest of the requirements
+# Upgrade pip and install requirements (This will pull the GPU version of PyTorch by default)
 RUN pip install --upgrade pip \
-    && pip install torch --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements.txt
 
-# Copy all the code (after setting up .dockerignore)
+# Copy all the code
 COPY . .
 
 # Expose the ports used by the various applications
 EXPOSE 8001 8003 8501
 
-# Default command (overridden by docker-compose)
+# Default command
 CMD ["bash"]

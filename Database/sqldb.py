@@ -20,7 +20,7 @@ class Database:
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
         try:
-            dotenv.load_dotenv(env_file, override=True)
+            dotenv.load_dotenv(env_file, override=False)
             self.db_file = os.environ["SQLDB_PATH"]
             self.assets_dir = os.environ["ASSET_PATH"]
             self.experiments_dir = os.environ["EXPERIMENTS_EVIDENCES_PATH"]
@@ -102,10 +102,6 @@ class Database:
         Raises:
             sqlite3.DatabaseError: If there is an error during query execution.
         """
-        masked_params = [
-            param if not isinstance(param, (bytes, bytearray)) else "BLOB"
-            for param in params
-        ]
         self.logger.info("Executing query: %s", query)
 
         try:

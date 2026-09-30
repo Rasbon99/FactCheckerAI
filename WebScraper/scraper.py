@@ -23,7 +23,6 @@ class Scraper:
 
         # Load the Iffy.news domains into a fast-lookup set for instant filtering
         self.iffy_domains = self._load_iffy_index(iffy_csv_path)
-
         self.model = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
         self.client = Groq()
 
@@ -49,7 +48,6 @@ class Scraper:
             self.logger.warning(
                 f"Could not load Iffy Index CSV at {filepath}. Filter disabled. Error: {e}"
             )
-
         return unreliable_domains
 
     def extract_context(self, url):
@@ -158,39 +156,41 @@ class Scraper:
         num_results=10,
         max_retries=3,
         min_valid_sources=2,
-        search_results=None,
+        visited_urls=None,
         retries=0,
         attempts=0,
     ):
         """
-        Performs a search using the provided query, and extracts the title, body, and site of the resulting pages.
+        Orchestrates the search, extraction, and validation of web sources for a given query.
+
+        This method queries DuckDuckGo, filters out untrustworthy or restricted domains,
+        extracts the text content from the remaining URLs, and utilizes an LLM to retain
+        only sources strictly correlated to the query. If the number of valid sources
+        falls below `min_valid_sources`, it recursively searches for more results.
 
         Args:
-            query (str): The search query to send to DuckDuckGo.
-            num_results (int): The number of search results to retrieve. Default is 10.
-            max_retries (int): The maximum number of retries in case of a rate limit or other errors. Default is 3.
-            min_valid_sources (int): The minimum number of sources that must be valid after filtering. Default is 2.
-            search_results (list): The accumulated list of search results.
-            retries (int): The current number of retries.
-            attempts (int): The current number of full search attempts.
+            query (str): The search query to submit to the DuckDuckGo engine.
+            num_results (int, optional): The number of initial search results to retrieve. Default is 10.
+            max_retries (int, optional): The maximum number of API retries allowed upon encountering rate limits. Default is 3.
+            min_valid_sources (int, optional): The minimum number of correlated sources required to finalize the extraction. Default is 2.
+            visited_urls (set, optional): A set of previously processed URLs to prevent duplicate LLM evaluations during recursion. Default is None.
+            retries (int, optional): The current rate-limit retry iteration. Used internally for recursion. Default is 0.
+            attempts (int, optional): The current search attempt iteration. Used internally to prevent infinite recursion. Default is 0.
 
         Returns:
-            list: A list of dictionaries, each containing:
-                - 'title' (str): The title extracted from the search result pages.
-                - 'url' (str): The URL extracted from the search result pages.
-                - 'body' (str): The body content extracted from the search result pages.
-                - 'site' (str): The domain name of the site.
+            tuple: A tuple containing:
+                - filtered_results (list): A list of dictionaries representing the correlated sources.
+                  Each dictionary includes 'title', 'url', 'body', and 'site'.
+                - token_data (dict): Accumulative token usage metrics containing 'total' (tokens used)
+                  and 'calls' (number of LLM invocations).
 
         Raises:
-            Exception: If there is an error during the search and extract process after all retries.
+            Exception: If the maximum number of retries is exceeded due to rate limits or unhandled network errors.
         """
-        # Initialize search_results and visited_urls on the first call
-        if search_results is None:
-            search_results = []
-        visited_urls = set(result["url"] for result in search_results)
+        if visited_urls is None:
+            visited_urls = set()
 
         token_data = {"total": 0, "calls": 0}
-
         self.logger.info("Start searching and extracting query...")
 
         while retries < max_retries and attempts < 3:
@@ -220,6 +220,9 @@ class Scraper:
                     )
                     return [], token_data
 
+                # Current batch of new, unvisited results
+                current_batch_results = []
+
                 for result in results:
                     url = result["href"]
 
@@ -234,13 +237,13 @@ class Scraper:
                         self.logger.info(
                             f"{extracted_data['title'][:20]} - {extracted_data['url'][:20]}"
                         )
-                        search_results.append(extracted_data)
+                        current_batch_results.append(extracted_data)
                         visited_urls.add(url)
 
                 # Phase 3: Apply correlation filter
                 self.logger.info("Applying correlation filter...")
                 filtered_results, filter_token_data = self.correlation_filter(
-                    query, search_results
+                    query, current_batch_results
                 )
 
                 token_data["total"] += filter_token_data["total"]
@@ -249,10 +252,9 @@ class Scraper:
                 # Check if there are fewer than the required number of valid sources
                 if len(filtered_results) < min_valid_sources:
                     self.logger.warning(
-                        f"Only {len(filtered_results)} correlated sources found. Initiating new search for more sources."
+                        f"Only {len(filtered_results)} correlated sources found. Initiating new search..."
                     )
                     remaining_sources_needed = min_valid_sources - len(filtered_results)
-
                     attempts += 1
 
                     # Perform another search to get more results
@@ -261,14 +263,13 @@ class Scraper:
                         num_results=remaining_sources_needed,
                         max_retries=max_retries,
                         min_valid_sources=min_valid_sources,
-                        search_results=search_results,
+                        visited_urls=visited_urls,
                         retries=retries,
                         attempts=attempts,
                     )
 
                     # Ensure more_sources is not None before extending
                     if more_sources:
-                        search_results.extend(more_sources)
                         filtered_results.extend(more_sources)
 
                     # Adding token data from the recursive call, to ensure we keep track of all tokens used
@@ -282,7 +283,7 @@ class Scraper:
                     )
                     if attempts >= 3:
                         self.logger.warning(
-                            f"Max attempts reached. Returning the {len(filtered_results)} sources found."
+                            f"Max attempts reached. Returning {len(filtered_results)} sources."
                         )
                         return filtered_results, token_data
                     continue

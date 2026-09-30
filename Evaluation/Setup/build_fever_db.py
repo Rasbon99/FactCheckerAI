@@ -6,7 +6,7 @@ import time
 import dotenv
 from log import Logger
 
-dotenv.load_dotenv("key.env", override=True)
+dotenv.load_dotenv("key.env", override=False)
 
 WIKIPEDIA_FOLDER = os.getenv("FEVER_WIKIPEDIA_PAGES_PATH", "Datasets/wiki-pages")
 DB_PATH = os.getenv("FEVER_WIKIPEDIA_DB_PATH", "Datasets/fever_wiki.db")

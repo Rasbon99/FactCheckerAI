@@ -19,7 +19,7 @@ class RAG_Pipeline:
         Raises:
             KeyError: If required environment variables are missing.
         """
-        dotenv.load_dotenv(env_file, override=True)
+        dotenv.load_dotenv(env_file, override=False)
 
         # Logger
         self.logger = Logger(self.__class__.__name__).get_logger()
@@ -38,8 +38,6 @@ class RAG_Pipeline:
         }
         if config:
             self.config.update(config)
-
-        self.graph_manager.reset_data()
 
         self.graph_folder = os.getenv("GRAPHS_PATH", "data/graphs")
 
@@ -74,9 +72,7 @@ class RAG_Pipeline:
         Generates and saves graphs using the GraphManager.
 
         Args:
-            output_file_topic (str): The file name to save the topic graph.
-            output_file_entity (str): The file name to save the entity graph.
-            output_file_site (str): The file name to save the site graph.
+            output_folder (str): The folder path to save the generated graphs.
 
         Raises:
             Exception: If there is an error during graph generation.
@@ -97,12 +93,13 @@ class RAG_Pipeline:
         except Exception as e:
             self.logger.error(f"Error during graph generation: {e}")
 
-    def query_similarity(self, query):
+    def query_similarity(self, query, response_format_instructions=None):
         """
         Executes a similarity query using the QueryEngine and tracks LLM usage metrics.
 
         Args:
-            query (str): The query string containing the claim and verification instructions.
+            query (str): The raw claim text to be used for graph retrieval.
+            response_format_instructions (str, optional): Instructions for structured model output.
 
         Returns:
             tuple: A tuple containing:
@@ -118,21 +115,21 @@ class RAG_Pipeline:
 
         self.logger.info("Starting similarity query...")
         try:
-            result, token_data = self.query_engine.query_similarity(query)
+            result, token_data = self.query_engine.query_similarity(
+                query, response_format_instructions
+            )
             self.logger.info("Similarity query completed.")
             return result, token_data
         except Exception as e:
             self.logger.error(f"Error during similarity query execution: {e}")
             return None, {"total": 0, "calls": 0}
 
-    # --- Added nei_label parameter to match the backend payload ---
     def run_pipeline(
         self,
         data,
         claim,
         claim_id,
-        prompt_instructions=None,
-        nei_label="NOT ENOUGH INFO",
+        response_format_instructions=None,
     ):
         """
         Executes the entire RAG pipeline: data loading, graph generation, and fact-checking.
@@ -141,21 +138,20 @@ class RAG_Pipeline:
             data (list): List of dictionaries containing the scraped article data.
             claim (str): The specific claim text to be verified.
             claim_id (str): The unique ID of the claim, used to organize graph assets.
-            prompt_instructions (str, optional): Custom instructions for the LLM prompt.
-            nei_label (str, optional): The specific string to output if evidence is lacking.
+            response_format_instructions (str, optional): Instructions for structured model output.
 
         Returns:
             tuple: A tuple containing:
-                - str: The AI's final verdict and reasoning (Supported/Refuted/NEI).
+                - str: The AI's final verdict and reasoning.
                 - str: The file path to the folder containing the generated graph images.
                 - dict: Token usage and call count metrics for efficiency evaluation.
-
-        Raises:
-            None: Internal exceptions are caught, logged, and return (None, None, 0-metrics).
         """
         self.logger.info("Starting the entire pipeline...")
         start_time = time.time()
         try:
+            self.logger.info("Wiping Neo4j Graph clean for new claim...")
+            self.graph_manager.reset_data()
+
             # Step 1: Load the data
             self.load_data(data)
 
@@ -168,30 +164,11 @@ class RAG_Pipeline:
             # Step 2: Generate and save graphs
             self.generate_and_save_graphs(claim_graphs_folder)
 
-            # Fallback specifically tailored to FEVER if no dynamic instructions are provided
-            fallback_instructions = """
-            You must format your response EXACTLY like this:
-            VERDICT: [SUPPORTS or REFUTES or NOT ENOUGH INFO]
-            REASONING: [Your detailed explanation citing the provided evidence]
-            """
-
-            active_instructions = (
-                prompt_instructions if prompt_instructions else fallback_instructions
+            # Step 3: Execute the similarity query directly with whatever instructions were passed
+            result, token_data = self.query_similarity(
+                query=claim,
+                response_format_instructions=response_format_instructions,
             )
-
-            # --- THE UNIVERSAL PROMPT ---
-            # Perfectly synchronized with all of other baseline scripts!
-            question = f"""You are a strict fact-checking AI.
-            Verify the following claim using ONLY the provided evidence. 
-            If the evidence does not contain enough information to make a definitive decision, answer exactly: {nei_label}.
-
-            {active_instructions}
-
-            CLAIM: {claim}
-            """
-
-            # Step 3: Execute the similarity query and catch token data
-            result, token_data = self.query_similarity(question)
 
             total_time = time.time() - start_time
             self.logger.info(
