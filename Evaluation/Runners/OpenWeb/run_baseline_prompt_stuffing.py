@@ -6,6 +6,7 @@ from groq import Groq
 from log import Logger
 
 from Evaluation.Utils.dataset_manager import DatasetManager
+from Utils.prompt_manager import get_dataset_response_format_instructions
 from WebScraper.scraper import Scraper
 from Database.data_entities import Claim, Answer, Experiment
 
@@ -22,13 +23,13 @@ client = Groq(api_key=GROQ_API_KEY)
 
 
 def get_prompt_stuffing_verdict(
-    claim_text, massive_evidence_string, prompt_instructions
+    claim_text, massive_evidence_string, response_format_instructions
 ):
     """Asks the LLM to verify the claim using the massive wall of scraped text."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
 
-    {prompt_instructions}
+    {response_format_instructions}
 
     EVIDENCE:
     {massive_evidence_string}
@@ -54,7 +55,9 @@ def run_prompt_stuffing_baseline_openweb():
     active_dataset = metadata["dataset_name"]
     use_meta = metadata["use_metadata"]
 
-    prompt_instructions = dataset_manager.get_prompt_instructions()
+    response_format_instructions = get_dataset_response_format_instructions(
+        active_dataset
+    )
 
     logger.info(
         f"Starting Baseline (Prompt Stuffing - Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
@@ -128,7 +131,7 @@ def run_prompt_stuffing_baseline_openweb():
                 # --- 2. Generation (The LLM Call) ---
                 t0 = time.time()
                 query_result, tokens_used = get_prompt_stuffing_verdict(
-                    claim_text, best_evidence, prompt_instructions
+                    claim_text, best_evidence, response_format_instructions
                 )
                 latency_generation = time.time() - t0
 

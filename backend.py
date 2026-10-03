@@ -31,7 +31,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 class InputText(BaseModel):
     text: str
     search_query: Optional[str] = None
-    prompt_instructions: Optional[str] = None
+    response_format_instructions: Optional[str] = None
 
 
 @backend_app.post("/run_pipeline")
@@ -97,7 +97,7 @@ def process_text(input_text: InputText):
             preprocessed_sources,
             claim.text,
             claim.id,
-            prompt_instructions=input_text.prompt_instructions,
+            response_format_instructions=input_text.response_format_instructions,
         )
         latencies["generation"] = time.time() - t0
 

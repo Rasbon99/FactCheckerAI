@@ -21,7 +21,7 @@ class NER:
         self.client = Groq()
 
     def extract_entities_and_topic(
-        self, text, max_tokens=1024, temperature=0.5, stop=None
+        self, text, max_tokens=1024, temperature=0.0, stop=None
     ):
         """
         Extracts entities and the main topic from the given text using the Groq API.
@@ -29,22 +29,23 @@ class NER:
         Args:
             text (str): The text from which entities and the topic will be extracted.
             max_tokens (int, optional): The maximum number of tokens for the response. Default is 1024.
-            temperature (float, optional): Controls randomness in the model output. Default is 0.5.
+            temperature (float, optional): Controls randomness in the model output. Default is 0.0.
             stop (list, optional): A list of stop sequences for the model to terminate at. Default is None.
 
         Returns:
-            tuple: (dict containing topic/entities or None, tokens_used)
+            tuple: (dict containing topic/entities, tokens_used)
         """
         self.logger.info("Starting entity and topic extraction process.")
-        tokens = 0  # Initialize early so it isn't lost during an exception
+        tokens = 0
 
         try:
             response = self.client.chat.completions.create(
                 messages=[
                     {
                         "role": "system",
-                        "content": """you are an NER model that extracts entities and the topic from a text.\n 
-                    The output must be strictly formatted as: {\"topic\": \"Technology\", \"entities\": [\"Elon Musk\", \"SpaceX\", \"Tesla\", \"Paris\"]}""",
+                        "content": """You are an NER model that extracts entities and the topic from a text.
+                        The output MUST be a valid JSON object strictly formatted as:
+                        {"topic": "Technology", "entities": ["Elon Musk", "SpaceX", "Tesla", "Paris"]}""",
                     },
                     {"role": "user", "content": text},
                 ],
@@ -52,6 +53,7 @@ class NER:
                 temperature=temperature,
                 max_completion_tokens=max_tokens,
                 stop=stop,
+                response_format={"type": "json_object"},
             )
 
             self.logger.info("Groq API call successful.")
@@ -86,25 +88,25 @@ class NER:
         tokens = 0
 
         try:
-            input_entities = ", ".join(entities)
+            system_prompt = f"""Please normalize or unify the following list of entities:
+            {json.dumps(entities)}
+
+            You must output a single JSON object where the keys are the EXACT original entity names,
+            and the values are the single unified version of that entity.
+            If an entity has multiple valid representations or acronyms, select the most common form.
+            If an entity is already unified, map it to itself.
+            Do not include any extra information. Output ONLY the JSON object.
+
+            Example output format:
+            {{"U.S.A.": "United States", "USA": "United States", "Apple Inc": "Apple", "Elon Musk": "Elon Musk"}}"""
+
             response = self.client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": f"""Please normalize or unify the following entities: {input_entities}. 
-                                        For each entity, return a single unified version. 
-                                        If an entity has multiple valid representations, variations, synonyms, or acronyms, select the most common or widely recognized form. 
-                                        Ensure the unified versions are returned in the same order as the input, separated by commas, and the total number of unified entities matches the number of input entities. 
-                                        If any entity is already unified or does not require normalization, return it as is. 
-                                        Do not include any extra information, notes, or context.
-                                        Example: 
-                                            Input: ['United States', 'USA', 'US', 'U.S.'] Output: ['United States', 'United States', 'United States', 'United States']""",
-                    }
-                ],
+                messages=[{"role": "system", "content": system_prompt}],
                 model=self.model,
                 temperature=temperature,
                 max_completion_tokens=max_tokens,
                 stop=stop,
+                response_format={"type": "json_object"},
             )
 
             tokens = response.usage.total_tokens if response.usage else 0
@@ -114,30 +116,21 @@ class NER:
             if not response_content:
                 raise RuntimeError("API response content is None")
 
-            # Clean brackets and quotes to prevent Python list hallucination from breaking the split
-            cleaned_content = (
-                response_content.replace("[", "")
-                .replace("]", "")
-                .replace("'", "")
-                .replace('"', "")
-            )
-            unified_entities_list = [ue.strip() for ue in cleaned_content.split(",")]
-
-            if len(unified_entities_list) != len(entities):
-                raise ValueError(
-                    "The number of unified entities does not match the number of input entities."
-                )
-
-            unified_mapping = {
-                entities[i]: unified_entities_list[i] for i in range(len(entities))
-            }
+            unified_mapping = json.loads(response_content)
 
             entity_groups = defaultdict(list)
-            for entity, unified in unified_mapping.items():
-                entity_groups[unified].append(entity)
+            for original_entity, unified_entity in unified_mapping.items():
+                # Failsafe in case the LLM dropped an entity
+                if original_entity in entities:
+                    entity_groups[unified_entity].append(original_entity)
+
+            # Catch any entities the LLM might have accidentally left out of the JSON
+            for original_entity in entities:
+                if original_entity not in unified_mapping:
+                    entity_groups[original_entity].append(original_entity)
 
             self.logger.debug(f"Grouped entities globally: {dict(entity_groups)}")
-            return entity_groups, tokens
+            return dict(entity_groups), tokens
 
         except Exception as e:
             self.logger.exception(f"Error in global entity similarity analysis: {e}")

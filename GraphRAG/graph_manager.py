@@ -102,8 +102,8 @@ class GraphManager:
         """
         q_load_articles = """
         UNWIND $data AS article
-        MERGE (a:Article {title: article.title})
-        SET a.url = article.url,
+        MERGE (a:Article {url: article.url})
+        SET a.title = article.title,
             a.body = article.body
 
         MERGE (s:Site {name: article.site})

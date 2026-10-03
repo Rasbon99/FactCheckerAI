@@ -22,7 +22,7 @@ class Database:
         try:
             dotenv.load_dotenv(env_file, override=False)
             self.db_file = os.environ["SQLDB_PATH"]
-            self.assets_dir = os.environ["ASSET_PATH"]
+            self.graph_dir = os.environ["GRAPHS_PATH"]
             self.experiments_dir = os.environ["EXPERIMENTS_EVIDENCES_PATH"]
         except KeyError as e:
             self.logger.exception("Environment variable %s not found.", e.args[0])
@@ -198,8 +198,8 @@ class Database:
             self.logger.info("All conversations deleted successfully.")
 
             # 2. Clean up graphs in the data folder
-            if os.path.isdir(self.assets_dir):
-                for root, dirs, _ in os.walk(self.assets_dir, topdown=False):
+            if os.path.isdir(self.graph_dir):
+                for root, dirs, _ in os.walk(self.graph_dir, topdown=False):
                     for name in dirs:
                         dir_path = os.path.join(root, name)
                         shutil.rmtree(dir_path)
@@ -207,7 +207,7 @@ class Database:
                             f"Deleted directory and its contents: {dir_path}"
                         )
             else:
-                self.logger.warning(f"Assets folder does not exist: {self.assets_dir}")
+                self.logger.warning(f"Graph folder does not exist: {self.graph_dir}")
 
             # 3. Clean up JSON files in the experiments folder
             if os.path.isdir(self.experiments_dir):

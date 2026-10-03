@@ -6,6 +6,7 @@ from groq import Groq
 from log import Logger
 
 from Evaluation.Utils.dataset_manager import DatasetManager
+from Utils.prompt_manager import get_dataset_response_format_instructions
 from Database.data_entities import Claim, Answer, Experiment
 
 dotenv.load_dotenv("key.env", override=False)
@@ -20,12 +21,14 @@ client = Groq(api_key=GROQ_API_KEY)
 logger = Logger("ClosedBook-Baseline").get_logger()
 
 
-def get_closed_book_verdict(claim_text, prompt_instructions, metadata_context=""):
+def get_closed_book_verdict(
+    claim_text, response_format_instructions, metadata_context=""
+):
     """Asks the LLM to verify the claim using ONLY its internal weights, providing context if available."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY your internal knowledge. 
 
-    {prompt_instructions}
+    {response_format_instructions}
 
     CLAIM: {claim_text}
     {metadata_context}
@@ -51,8 +54,8 @@ def run_closed_book_baseline():
     use_meta = metadata["use_metadata"]
 
     # Tweak the instructions slightly since this baseline has no "provided evidence"
-    base_instructions = dataset_manager.get_prompt_instructions()
-    prompt_instructions = base_instructions.replace(
+    base_instructions = get_dataset_response_format_instructions(active_dataset)
+    response_format_instructions = base_instructions.replace(
         "citing the provided evidence", "based on your internal knowledge"
     )
 
@@ -113,13 +116,16 @@ def run_closed_book_baseline():
                 # --- GENERATION STEP ---
                 t0 = time.time()
                 query_result, tokens_used = get_closed_book_verdict(
-                    claim_text, prompt_instructions, metadata_context
+                    claim_text, response_format_instructions, metadata_context
                 )
                 latency_generation = time.time() - t0
 
                 # Verdict Parsing
                 try:
-                    if query_result and "VERDICT:" in query_result:
+                    if not query_result or not query_result.strip():
+                        predicted_label = "Error: Empty LLM Response"
+                        query_result = "The LLM failed to generate a response."
+                    elif "VERDICT:" in query_result and "REASONING:" in query_result:
                         predicted_label = (
                             query_result.split("REASONING:")[0]
                             .replace("VERDICT:", "")
@@ -160,6 +166,7 @@ def run_closed_book_baseline():
                 )
 
                 if predicted_label in {
+                    "Error: Empty LLM Response",
                     "Error: Unstructured Response",
                     "Parsing Error",
                 }:

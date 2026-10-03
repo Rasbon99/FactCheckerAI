@@ -5,6 +5,7 @@ import dotenv
 from log import Logger
 
 from Evaluation.Utils.dataset_manager import DatasetManager
+from Utils.prompt_manager import get_dataset_response_format_instructions
 from Database.data_entities import Experiment
 
 # Load environment variables
@@ -25,7 +26,9 @@ def run_experiment():
     metadata = dataset_manager.get_experiment_metadata(environment="open_web")
     use_meta = metadata["use_metadata"]
 
-    prompt_instructions = dataset_manager.get_prompt_instructions()
+    response_format_instructions = get_dataset_response_format_instructions(
+        metadata["dataset_name"]
+    )
 
     logger.info(
         f"Starting FoxAI GraphRAG (Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
@@ -58,7 +61,7 @@ def run_experiment():
             payload = {
                 "text": claim_text,
                 "search_query": search_query,
-                "prompt_instructions": prompt_instructions,
+                "response_format_instructions": response_format_instructions,
             }
 
             try:

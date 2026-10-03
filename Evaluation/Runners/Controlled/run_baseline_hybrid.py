@@ -14,13 +14,13 @@ from langchain_core.documents import Document
 from langchain.retrievers.document_compressors import EmbeddingsFilter
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain_community.retrievers import BM25Retriever
-from langchain_huggingface import HuggingFaceEmbeddings
 
 # --- Import Pipeline Components ---
 from Evaluation.Utils.dataset_manager import DatasetManager
+from Utils.prompt_manager import get_dataset_response_format_instructions
 from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
 from Database.data_entities import Claim, Answer, Experiment
-from Utils.embedding import get_embedding_model
+from Utils.embedding_handler import get_embedding_model
 
 dotenv.load_dotenv("key.env", override=False)
 
@@ -75,12 +75,12 @@ class SQLiteFTS5Retriever(BaseRetriever):
 # ====================================================================
 
 
-def get_hybrid_verdict(claim_text, retrieved_evidence, prompt_instructions):
+def get_hybrid_verdict(claim_text, retrieved_evidence, response_format_instructions):
     """Asks the LLM to verify the claim using the Hybrid RAG retrieved text."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
 
-    {prompt_instructions}
+    {response_format_instructions}
 
     EVIDENCE:
     {retrieved_evidence}
@@ -107,7 +107,9 @@ def run_hybrid_baseline():
     active_dataset = metadata["dataset_name"]
     use_meta = metadata["use_metadata"]
 
-    prompt_instructions = dataset_manager.get_prompt_instructions()
+    response_format_instructions = get_dataset_response_format_instructions(
+        active_dataset
+    )
 
     logger.info(
         f"Starting Baseline (HybridRAG Re-ranking) with {MAX_CLAIMS_TO_TEST} claims..."
@@ -123,7 +125,7 @@ def run_hybrid_baseline():
     logger.info(
         "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
     )
-    
+
     embeddings = get_embedding_model()
     embeddings_filter = EmbeddingsFilter(embeddings=embeddings, k=2)
 
@@ -146,6 +148,27 @@ def run_hybrid_baseline():
     failed_runs = 0
 
     try:
+        logger.info(
+            "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
+        )
+
+        embeddings = get_embedding_model()
+        embeddings_filter = EmbeddingsFilter(embeddings=embeddings, k=2)
+
+        hybrid_rag_retriever = None
+        averitec_retriever = None
+
+        if active_dataset == "FEVER":
+            wiki_db_path = os.getenv(
+                "FEVER_WIKIPEDIA_DB_PATH", "Datasets/FEVER/fever_wiki.db"
+            )
+            hybrid_rag_retriever = ContextualCompressionRetriever(
+                base_compressor=embeddings_filter,
+                base_retriever=SQLiteFTS5Retriever(db_path=wiki_db_path),
+            )
+        elif active_dataset == "AVERITEC":
+            averitec_retriever = AVeriTeCKnowledgeRetriever()
+
         claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
 
         for line_number, data in enumerate(claims_data):
@@ -239,7 +262,7 @@ def run_hybrid_baseline():
                 # --- THE GENERATION STEP ---
                 t0 = time.time()
                 query_result, tokens_used = get_hybrid_verdict(
-                    claim_text, combined_evidence, prompt_instructions
+                    claim_text, combined_evidence, response_format_instructions
                 )
                 latency_generation = time.time() - t0
 
