@@ -100,54 +100,31 @@ def get_hybrid_verdict(claim_text, retrieved_evidence, response_format_instructi
 
 
 def run_hybrid_baseline():
-    dataset_manager = DatasetManager()
-
-    # Using the new metadata function
-    metadata = dataset_manager.get_experiment_metadata(environment="controlled")
-    active_dataset = metadata["dataset_name"]
-    use_meta = metadata["use_metadata"]
-
-    response_format_instructions = get_dataset_response_format_instructions(
-        active_dataset
-    )
-
-    logger.info(
-        f"Starting Baseline (HybridRAG Re-ranking) with {MAX_CLAIMS_TO_TEST} claims..."
-    )
-    logger.info(f"Environment: {metadata['environment']}")
-    logger.info(f"Active Dataset: {active_dataset}")
-    logger.info(f"Experiment Type: {metadata['experiment_type']}")
-    logger.info(f"Using Metadata Super Query: {use_meta}")
-
-    # ---------------------------------------------------------
-    # 2. CONFIGURE THE RETRIEVAL PIPELINE BASED ON DATASET
-    # ---------------------------------------------------------
-    logger.info(
-        "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
-    )
-
-    embeddings = get_embedding_model()
-    embeddings_filter = EmbeddingsFilter(embeddings=embeddings, k=2)
-
-    hybrid_rag_retriever = None
-    averitec_retriever = None
-
-    if active_dataset == "FEVER":
-        wiki_db_path = os.getenv(
-            "FEVER_WIKIPEDIA_DB_PATH", "Datasets/FEVER/fever_wiki.db"
-        )
-        hybrid_rag_retriever = ContextualCompressionRetriever(
-            base_compressor=embeddings_filter,
-            base_retriever=SQLiteFTS5Retriever(db_path=wiki_db_path),
-        )
-    elif active_dataset == "AVERITEC":
-        averitec_retriever = AVeriTeCKnowledgeRetriever()
-    # ---------------------------------------------------------
-
     successful_runs = 0
     failed_runs = 0
 
     try:
+        dataset_manager = DatasetManager()
+
+        # Using the new metadata function
+        metadata = dataset_manager.get_experiment_metadata(
+            environment="controlled"
+        )
+        active_dataset = metadata["dataset_name"]
+        use_meta = metadata["use_metadata"]
+
+        response_format_instructions = get_dataset_response_format_instructions(
+            active_dataset
+        )
+
+        logger.info(
+            f"Starting Baseline (HybridRAG Re-ranking) with {MAX_CLAIMS_TO_TEST} claims..."
+        )
+        logger.info(f"Environment: {metadata['environment']}")
+        logger.info(f"Active Dataset: {active_dataset}")
+        logger.info(f"Experiment Type: {metadata['experiment_type']}")
+        logger.info(f"Using Metadata Super Query: {use_meta}")
+
         logger.info(
             "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
         )
@@ -172,6 +149,19 @@ def run_hybrid_baseline():
         claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
 
         for line_number, data in enumerate(claims_data):
+            claim_id = None
+            claim_text = ""
+            ground_truth = ""
+            search_query = ""
+            current_stage = "claim_setup"
+
+            latency_retrieval = 0.0
+            latency_generation = 0.0
+            tokens_used = 0
+
+            raw_sources = []
+            query_result = None
+
             try:
                 claim_text = data.get("claim", "")
                 ground_truth = data.get("label", "")
@@ -194,6 +184,8 @@ def run_hybrid_baseline():
                 )
 
                 # --- THE RETRIEVAL STEP ---
+                current_stage = "retrieval"
+
                 logger.info("Extracting and Re-ranking...")
                 t0 = time.time()
                 best_docs = []
@@ -260,6 +252,8 @@ def run_hybrid_baseline():
                     )
 
                 # --- THE GENERATION STEP ---
+                current_stage = "generation"
+
                 t0 = time.time()
                 query_result, tokens_used = get_hybrid_verdict(
                     claim_text, combined_evidence, response_format_instructions
@@ -267,21 +261,41 @@ def run_hybrid_baseline():
                 latency_generation = time.time() - t0
 
                 # --- 3. Verdict Parsing ---
+                current_stage = "parsing"
+
+                error_type = None
+                error_message = None
+                error_stage = None
+
                 try:
                     if not query_result or not query_result.strip():
-                        predicted_label = "Error: Empty LLM Response"
+                        predicted_label = "Error"
+                        error_type = "EmptyLLMResponse"
+                        error_message = "The LLM returned an empty response."
+                        error_stage = "parsing"
                         query_result = "The LLM failed to generate a response."
-                    elif "VERDICT:" in query_result:
+
+                    elif "VERDICT:" in query_result and "REASONING:" in query_result:
                         predicted_label = (
                             query_result.split("REASONING:")[0]
                             .replace("VERDICT:", "")
                             .strip()
                         )
+
                     else:
-                        predicted_label = "Error: Unstructured Response"
+                        predicted_label = "Error"
+                        error_type = "UnstructuredResponse"
+                        error_message = (
+                            "The LLM response did not contain both VERDICT and REASONING."
+                        )
+                        error_stage = "parsing"
+
                 except Exception as e:
                     logger.exception(f"Error parsing verdict: {e}")
-                    predicted_label = "Parsing Error"
+                    predicted_label = "Error"
+                    error_type = type(e).__name__
+                    error_message = str(e)
+                    error_stage = "parsing"
 
                 logger.info(f"Hybrid Verdict: {predicted_label}")
 
@@ -309,13 +323,16 @@ def run_hybrid_baseline():
                     dataset_name=metadata["dataset_name"],
                     experiment_type=metadata["experiment_type"],
                     use_metadata=use_meta,
+                    error_details=(
+                        f"Stage: {error_stage} | "
+                        f"Type: {error_type} | "
+                        f"Message: {error_message}"
+                        if error_type is not None
+                        else None
+                    ),
                 )
 
-                if predicted_label in {
-                    "Error: Empty LLM Response",
-                    "Error: Unstructured Response",
-                    "Parsing Error",
-                }:
+                if predicted_label == "Error":
                     failed_runs += 1
                 else:
                     successful_runs += 1
@@ -324,6 +341,50 @@ def run_hybrid_baseline():
                 logger.exception(
                     f"Error processing claim {line_number + 1}: {e}"
                 )
+
+                try:
+                    if claim_id is not None:
+                        Experiment(
+                            claim_id=claim_id,
+                            predicted_label="Error",
+                            ground_truth=ground_truth,
+                            latencies={
+                                "preprocessor": 0.0,
+                                "retrieval": latency_retrieval,
+                                "generation": latency_generation,
+                            },
+                            tokens={
+                                "preprocessor": 0,
+                                "retrieval": 0,
+                                "generation": tokens_used,
+                            },
+                            calls={
+                                "preprocessor": 0,
+                                "retrieval": 0,
+                                "generation": 1 if query_result is not None else 0,
+                            },
+                            evidence_data={
+                                "claim_text": claim_text,
+                                "search_query": search_query,
+                                "raw_sources": raw_sources,
+                                "query_result": query_result,
+                            },
+                            system_type="HybridRAG",
+                            environment=metadata["environment"],
+                            dataset_name=metadata["dataset_name"],
+                            experiment_type=metadata["experiment_type"],
+                            use_metadata=use_meta,
+                            error_details=(
+                                f"Stage: {current_stage} | "
+                                f"Type: {type(e).__name__} | "
+                                f"Message: {str(e)}"
+                            ),
+                        )
+                except Exception:
+                    logger.exception(
+                        f"Failed to save failed experiment for claim {line_number + 1}"
+                    )
+
                 failed_runs += 1
                 continue
 

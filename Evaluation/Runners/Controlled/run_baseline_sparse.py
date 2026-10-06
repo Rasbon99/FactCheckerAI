@@ -55,29 +55,34 @@ def get_bm25_verdict(claim_text, retrieved_evidence, response_format_instruction
 
 
 def run_sparse_baseline():
-    dataset_manager = DatasetManager()
-    metadata = dataset_manager.get_experiment_metadata(environment="controlled")
-    active_dataset = metadata["dataset_name"]
-    use_meta = metadata["use_metadata"]
-
-    response_format_instructions = get_dataset_response_format_instructions(
-        active_dataset
-    )
-
-    logger.info(f"Starting Baseline (Sparse/BM25) with {MAX_CLAIMS_TO_TEST} claims...")
-    logger.info(f"Environment: {metadata['environment']}")
-    logger.info(f"Active Dataset: {active_dataset}")
-    logger.info(f"Experiment Type: {metadata['experiment_type']}")
-    logger.info(f"Using Metadata Super Query: {use_meta}")
-
     wiki_conn = None
     wiki_cursor = None
     averitec_retriever = None
 
     successful_runs = 0
-    failed_runs = 0 
+    failed_runs = 0
 
     try:
+        dataset_manager = DatasetManager()
+
+        metadata = dataset_manager.get_experiment_metadata(
+            environment="controlled"
+        )
+        active_dataset = metadata["dataset_name"]
+        use_meta = metadata["use_metadata"]
+
+        response_format_instructions = get_dataset_response_format_instructions(
+            active_dataset
+        )
+
+        logger.info(
+            f"Starting Baseline (Sparse/BM25) with {MAX_CLAIMS_TO_TEST} claims..."
+        )
+        logger.info(f"Environment: {metadata['environment']}")
+        logger.info(f"Active Dataset: {active_dataset}")
+        logger.info(f"Experiment Type: {metadata['experiment_type']}")
+        logger.info(f"Using Metadata Super Query: {use_meta}")
+
         if active_dataset == "FEVER":
             wiki_db_path = os.getenv(
                 "FEVER_WIKIPEDIA_DB_PATH", "Datasets/FEVER/fever_wiki.db"
@@ -90,6 +95,19 @@ def run_sparse_baseline():
         claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
 
         for line_number, data in enumerate(claims_data):
+            claim_id = None
+            claim_text = ""
+            ground_truth = ""
+            search_query = ""
+            current_stage = "claim_setup"
+
+            latency_retrieval = 0.0
+            latency_generation = 0.0
+            toks = 0
+
+            raw_sources = []
+            query_result = None
+
             try:
                 claim_text = data.get("claim", "")
                 ground_truth = data.get("label", "")
@@ -111,6 +129,8 @@ def run_sparse_baseline():
                 )
 
                 # --- THE RETRIEVAL STEP (BM25) ---
+                current_stage = "retrieval"
+
                 t0 = time.time()
                 formatted_results = []
 
@@ -184,27 +204,49 @@ def run_sparse_baseline():
                     )
 
                 # --- THE GENERATION STEP ---
+                current_stage = "generation"
+
                 t0 = time.time()
                 query_result, toks = get_bm25_verdict(
                     claim_text, combined_evidence, response_format_instructions
                 )
                 latency_generation = time.time() - t0
 
+                current_stage = "parsing"
+
+                error_type = None
+                error_message = None
+                error_stage = None
+
                 try:
                     if not query_result or not query_result.strip():
-                        predicted_label = "Error: Empty LLM Response"
+                        predicted_label = "Error"
+                        error_type = "EmptyLLMResponse"
+                        error_message = "The LLM returned an empty response."
+                        error_stage = "parsing"
                         query_result = "The LLM failed to generate a response."
-                    elif "VERDICT:" in query_result:
+
+                    elif "VERDICT:" in query_result and "REASONING:" in query_result:
                         predicted_label = (
                             query_result.split("REASONING:")[0]
                             .replace("VERDICT:", "")
                             .strip()
                         )
+
                     else:
-                        predicted_label = "Error: Unstructured Response"
+                        predicted_label = "Error"
+                        error_type = "UnstructuredResponse"
+                        error_message = (
+                            "The LLM response did not contain both VERDICT and REASONING."
+                        )
+                        error_stage = "parsing"
+
                 except Exception as e:
                     logger.exception(f"Error parsing verdict: {e}")
-                    predicted_label = "Parsing Error"
+                    predicted_label = "Error"
+                    error_type = type(e).__name__
+                    error_message = str(e)
+                    error_stage = "parsing"
 
                 logger.info(f"BM25 Verdict: {predicted_label}")
 
@@ -232,22 +274,70 @@ def run_sparse_baseline():
                     dataset_name=metadata["dataset_name"],
                     experiment_type=metadata["experiment_type"],
                     use_metadata=use_meta,
+                    error_details=(
+                        f"Stage: {error_stage} | "
+                        f"Type: {error_type} | "
+                        f"Message: {error_message}"
+                        if error_type is not None
+                        else None
+                    ),
                 )
 
-                if predicted_label in {
-                    "Error: Empty LLM Response",
-                    "Error: Unstructured Response",
-                    "Parsing Error",
-                }:
+                if predicted_label == "Error":
                     failed_runs += 1
                 else:
                     successful_runs += 1
 
                 time.sleep(2)
+
             except Exception as e:
                 logger.exception(
                     f"Error processing claim {line_number + 1}: {e}"
                 )
+
+                try:
+                    if claim_id is not None:
+                        Experiment(
+                            claim_id=claim_id,
+                            predicted_label="Error",
+                            ground_truth=ground_truth,
+                            latencies={
+                                "preprocessor": 0.0,
+                                "retrieval": latency_retrieval,
+                                "generation": latency_generation,
+                            },
+                            tokens={
+                                "preprocessor": 0,
+                                "retrieval": 0,
+                                "generation": toks,
+                            },
+                            calls={
+                                "preprocessor": 0,
+                                "retrieval": 0,
+                                "generation": 1 if query_result is not None else 0,
+                            },
+                            evidence_data={
+                                "claim_text": claim_text,
+                                "search_query": search_query,
+                                "raw_sources": raw_sources,
+                                "query_result": query_result,
+                            },
+                            system_type="SparseRAG",
+                            environment=metadata["environment"],
+                            dataset_name=metadata["dataset_name"],
+                            experiment_type=metadata["experiment_type"],
+                            use_metadata=use_meta,
+                            error_details=(
+                                f"Stage: {current_stage} | "
+                                f"Type: {type(e).__name__} | "
+                                f"Message: {str(e)}"
+                            ),
+                        )
+                except Exception:
+                    logger.exception(
+                        f"Failed to save failed experiment for claim {line_number + 1}"
+                    )
+
                 failed_runs += 1
                 continue
 

@@ -77,6 +77,7 @@ def initialize_database_schema(db: Database | None = None):
             calls_retrieval INTEGER,
             calls_generation INTEGER,
             
+            error_details TEXT,
             evidence_log_path TEXT,
             FOREIGN KEY (claim_id) REFERENCES claims(id)
         )

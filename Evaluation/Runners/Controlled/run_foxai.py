@@ -50,47 +50,67 @@ def extract_perfect_evidence(evidence_data, wiki_cursor):
 
 
 def run_controlled_experiment():
-    dataset_manager = DatasetManager()
-
-    metadata = dataset_manager.get_experiment_metadata(environment="controlled")
-    active_dataset = metadata["dataset_name"]
-    use_meta = metadata["use_metadata"]
-
-    response_format_instructions = get_dataset_response_format_instructions(
-        active_dataset
-    )
-
-    logger.info(
-        f"Starting Controlled Experiment (FoxAI) with {MAX_CLAIMS_TO_TEST} claims..."
-    )
-    logger.info(f"Environment: {metadata['environment']}")
-    logger.info(f"Active Dataset: {active_dataset}")
-    logger.info(f"Experiment Type: {metadata['experiment_type']}")
-    logger.info(f"Using Metadata Super Query: {use_meta}")
-
     wiki_conn = None
     wiki_cursor = None
     averitec_retriever = None
-
-    if active_dataset == "FEVER":
-        wiki_db_path = os.getenv(
-            "FEVER_WIKIPEDIA_DB_PATH", "Datasets/FEVER/fever_wiki.db"
-        )
-        wiki_conn = sqlite3.connect(wiki_db_path)
-        wiki_cursor = wiki_conn.cursor()
-    elif active_dataset == "AVERITEC":
-        averitec_retriever = AVeriTeCKnowledgeRetriever()
-
-    preprocessor = Preprocessing_Pipeline()
-    rag = RAG_Pipeline()
 
     successful_runs = 0
     failed_runs = 0
 
     try:
-        claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
+        dataset_manager = DatasetManager()
+
+        metadata = dataset_manager.get_experiment_metadata(
+            environment="controlled"
+        )
+        active_dataset = metadata["dataset_name"]
+        use_meta = metadata["use_metadata"]
+
+        response_format_instructions = get_dataset_response_format_instructions(
+            active_dataset
+        )
+
+        logger.info(
+            f"Starting Controlled Experiment (FoxAI) with {MAX_CLAIMS_TO_TEST} claims..."
+        )
+        logger.info(f"Environment: {metadata['environment']}")
+        logger.info(f"Active Dataset: {active_dataset}")
+        logger.info(f"Experiment Type: {metadata['experiment_type']}")
+        logger.info(f"Using Metadata Super Query: {use_meta}")
+
+        if active_dataset == "FEVER":
+            wiki_db_path = os.getenv(
+                "FEVER_WIKIPEDIA_DB_PATH",
+                "Datasets/FEVER/fever_wiki.db",
+            )
+            wiki_conn = sqlite3.connect(wiki_db_path)
+            wiki_cursor = wiki_conn.cursor()
+
+        elif active_dataset == "AVERITEC":
+            averitec_retriever = AVeriTeCKnowledgeRetriever()
+
+        preprocessor = Preprocessing_Pipeline()
+        rag = RAG_Pipeline()
+
+        claims_data = dataset_manager.load_data(
+            max_claims=MAX_CLAIMS_TO_TEST
+        )
 
         for line_number, data in enumerate(claims_data):
+            claim = None
+            claim_id = None
+            claim_text = ""
+            ground_truth = ""
+            search_query = ""
+            current_stage = "claim_setup"
+
+            latencies = {}
+            tokens = {}
+            calls = {}
+
+            mock_srcs = []
+            query_result = None
+
             try:
                 claim_text = data.get("claim", "")
                 ground_truth = data.get("label", "")
@@ -109,6 +129,8 @@ def run_controlled_experiment():
                 if search_query != claim_text:
                     logger.info(f"Enriched Search Query: {search_query}")
                 logger.info(f"Ground Truth: {ground_truth}")
+
+                current_stage = "evidence_retrieval"
 
                 # --- Extract Evidence Dynamically ---
                 perfect_evidence = ""
@@ -147,10 +169,6 @@ def run_controlled_experiment():
                     )
 
                 logger.info(f"Perfect Evidence Retrieved: {perfect_evidence[:100]}...")
-
-                latencies = {}
-                tokens = {}
-                calls = {}
 
                 # --- THE SHORT-CIRCUIT ---
                 if not perfect_evidence:
@@ -200,6 +218,8 @@ def run_controlled_experiment():
                 # --- NORMAL PIPELINE ---
                 claim_id = str(uuid.uuid4())
 
+                current_stage = "preprocessing"
+
                 # 1. Preprocessing
                 t0 = time.time()
                 claim_title, prep_claim_metrics = preprocessor.run_claim_pipe(claim_text)
@@ -212,6 +232,8 @@ def run_controlled_experiment():
                 calls["preprocessor"] = prep_claim_metrics.get("calls", 0)
 
                 claim = Claim(claim_text, claim_title, claim_id=claim_id)
+
+                current_stage = "retrieval"
 
                 # 2. Retrieval (Mock Scraper)
                 t0 = time.time()
@@ -244,7 +266,7 @@ def run_controlled_experiment():
                     logger.info(
                         "NER extracted 0 entities. Short-circuiting to prevent Neo4j crash."
                     )
-                    predicted_label = "Error: No Entities"
+                    predicted_label = "Error"
                     query_result = f"VERDICT: {nei_label}\nREASONING: Evidence was provided, but the NER model failed to extract any entities to build a graph."
                     Answer(claim_id=claim.id, answer=query_result, graphs_folder=None)
 
@@ -265,9 +287,16 @@ def run_controlled_experiment():
                         dataset_name=metadata["dataset_name"],
                         experiment_type=metadata["experiment_type"],
                         use_metadata=use_meta,
+                        error_details=(
+                            "Stage: retrieval | "
+                            "Type: NoEntities | "
+                            "Message: NER extracted 0 entities."
+                        ),
                     )
                     failed_runs += 1
                     continue
+
+                current_stage = "generation"
 
                 # 3. GraphRAG Generation
                 t0 = time.time()
@@ -277,6 +306,12 @@ def run_controlled_experiment():
                 latencies["generation"] = time.time() - t0
                 tokens["generation"] = t_usage.get("llm_total", t_usage.get("total", 0))
                 calls["generation"] = t_usage.get("llm_calls", t_usage.get("calls", 0))
+
+                current_stage = "parsing"
+
+                error_type = None
+                error_message = None
+                error_stage = None
 
                 # 4. Verdict Parsing
                 try:
@@ -289,19 +324,34 @@ def run_controlled_experiment():
                         query_result = str(query_result)
 
                     if not query_result or not query_result.strip():
-                        predicted_label = "Error: Empty LLM Response"
+                        predicted_label = "Error"
                         query_result = "The LLM failed to generate a response."
-                    elif "VERDICT:" in query_result:
+
+                        error_type = "EmptyLLMResponse"
+                        error_message = "The LLM returned an empty response."
+                        error_stage = current_stage
+
+                    elif "VERDICT:" in query_result and "REASONING:" in query_result:
                         predicted_label = (
                             query_result.split("REASONING:")[0]
                             .replace("VERDICT:", "")
                             .strip()
                         )
+
                     else:
-                        predicted_label = "Error: Unstructured Response"
+                        predicted_label = "Error"
+
+                        error_type = "UnstructuredResponse"
+                        error_message = "The LLM response did not contain both VERDICT and REASONING."
+                        error_stage = current_stage
+
                 except Exception as e:
                     logger.exception(f"Error parsing verdict: {e}")
-                    predicted_label = "Parsing Error"
+                    predicted_label = "Error"
+
+                    error_type = type(e).__name__
+                    error_message = str(e)
+                    error_stage = current_stage
 
                 logger.info(f"FoxAI Verdict: {predicted_label}")
 
@@ -325,13 +375,16 @@ def run_controlled_experiment():
                     dataset_name=metadata["dataset_name"],
                     experiment_type=metadata["experiment_type"],
                     use_metadata=use_meta,
+                    error_details=(
+                        f"Stage: {error_stage} | "
+                        f"Type: {error_type} | "
+                        f"Message: {error_message}"
+                        if error_type is not None
+                        else None
+                    ),
                 )
 
-                if predicted_label in {
-                    "Error: Empty LLM Response",
-                    "Error: Unstructured Response",
-                    "Parsing Error",
-                }:
+                if predicted_label == "Error":
                     failed_runs += 1
                 else:
                     successful_runs += 1
@@ -343,6 +396,39 @@ def run_controlled_experiment():
                 logger.exception(
                     f"Error processing claim {line_number + 1}: {e}"
                 )
+
+                try:
+                    Experiment(
+                        claim_id=claim.id if claim is not None else None,
+                        predicted_label="Error",
+                        ground_truth=ground_truth,
+                        latencies=latencies,
+                        tokens=tokens,
+                        calls=calls,
+                        evidence_data={
+                            "claim_text": claim_text,
+                            "search_query": search_query,
+                            "raw_sources": mock_srcs,
+                            "query_result": query_result,
+                        },
+                        system_type="FoxAI-GraphRAG",
+                        environment=metadata["environment"],
+                        dataset_name=metadata["dataset_name"],
+                        experiment_type=metadata["experiment_type"],
+                        use_metadata=use_meta,
+                        error_details=(
+                            f"Stage: {current_stage} | "
+                            f"Type: {type(e).__name__} | "
+                            f"Message: {str(e)}"
+                        ),
+                    )
+
+                except Exception as experiment_error:
+                    logger.exception(
+                        f"Failed to save failed experiment for claim "
+                        f"{line_number + 1}: {experiment_error}"
+                    )
+
                 failed_runs += 1
                 continue
 

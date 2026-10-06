@@ -50,6 +50,12 @@ class Preprocessing_Pipeline:
             token_data["calls"] += 1
             token_data["total"] += title_tokens
 
+            if not claim_title:
+                self.logger.warning(
+                    "Failed to generate search query. Falling back to raw claim."
+                )
+                claim_title = claim
+
             self.logger.info("Claim preprocessing completed.")
             return claim_title, token_data
 

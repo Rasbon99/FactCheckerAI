@@ -32,6 +32,7 @@ class InputText(BaseModel):
     text: str
     search_query: Optional[str] = None
     response_format_instructions: Optional[str] = None
+    preserve_failed_claim: bool = False
 
 
 @backend_app.post("/run_pipeline")
@@ -50,8 +51,11 @@ def process_text(input_text: InputText):
     latencies = {}
     tokens = {}
     calls = {}
+    current_stage = "setup"
 
     # --- 1. Preprocessing ---
+    current_stage = "preprocessing"
+
     t0 = time.time()
 
     claim_title, prep_claim_metrics = preprocessor.run_claim_pipe(text)
@@ -74,6 +78,8 @@ def process_text(input_text: InputText):
         )
 
         # --- 2. Retrieval (Scraper + Preprocessor) ---
+        current_stage = "retrieval"
+
         t0 = time.time()
         sources, scraper_metrics = scraper.search_and_extract(
             target_search_query, num_results=10
@@ -92,6 +98,8 @@ def process_text(input_text: InputText):
         )
 
         # --- 3. GraphRAG ---
+        current_stage = "generation"
+
         t0 = time.time()
         query_result, graphs_folder, t_usage = rag.run_pipeline(
             preprocessed_sources,
@@ -105,21 +113,30 @@ def process_text(input_text: InputText):
         calls["generation"] = t_usage.get("llm_calls", t_usage.get("calls", 0))
 
         # --- 4. Verdict Parsing ---
+        current_stage = "parsing"
+
         if not isinstance(query_result, str) or not query_result.strip():
             raise RuntimeError("GraphRAG returned an empty response.")
 
         # If it's a strict experiment prompt, it will have the tags
-        if "VERDICT:" in query_result and "REASONING:" in query_result:
+        if input_text.response_format_instructions:
+            if "VERDICT:" not in query_result or "REASONING:" not in query_result:
+                raise RuntimeError("GraphRAG returned an unstructured response.")
+
             predicted_label = (
-                query_result.split("REASONING:")[0].replace("VERDICT:", "").strip()
+                query_result.split("REASONING:")[0]
+                .replace("VERDICT:", "")
+                .strip()
             )
             # --- 5. Answer Entity (Experiment Mode) ---
             reasoning = query_result.split("REASONING:", 1)[1].strip()
 
         else:
-            predicted_label = "Unstructured Response (UI Mode)"
+            predicted_label = None
             # --- 5. Answer Entity (UI Mode) ---
             reasoning = query_result.strip()
+
+        current_stage = "database_logging"
 
         answer = Answer(claim.id, reasoning, graphs_folder)
 
@@ -141,8 +158,8 @@ def process_text(input_text: InputText):
             "evidence_data": evidence_data,
         }
 
-    except Exception:
-        if claim is not None:
+    except Exception as e:
+        if claim is not None and not input_text.preserve_failed_claim:
             try:
                 claim.clear_database()
             except Exception as cleanup_error:
@@ -160,6 +177,22 @@ def process_text(input_text: InputText):
                     f"Failed to clean up graph folder '{graph_folder}' "
                     f"after pipeline error: {graph_cleanup_error}"
                 )
+
+        if input_text.preserve_failed_claim:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "claim_id": claim_id,
+                    "stage": current_stage,
+                    "type": type(e).__name__,
+                    "message": str(e),
+                    "metrics": {
+                        "latencies": latencies,
+                        "tokens": tokens,
+                        "calls": calls,
+                    },
+                },
+            )
 
         raise
 

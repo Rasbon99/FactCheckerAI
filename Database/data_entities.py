@@ -176,6 +176,7 @@ class Experiment:
         dataset_name="User-Query",
         experiment_type="standard",
         use_metadata=False,
+        error_details=None,
         experiment_id=None,
         db=None,
     ):
@@ -191,6 +192,7 @@ class Experiment:
         self.dataset_name = dataset_name
         self.experiment_type = experiment_type
         self.use_metadata = use_metadata
+        self.error_details = error_details
 
         self.latencies = latencies
         self.tokens = tokens
@@ -222,8 +224,8 @@ class Experiment:
                 latency_preprocessor, latency_retrieval, latency_generation, 
                 tokens_preprocessor, tokens_retrieval, tokens_generation,
                 calls_preprocessor, calls_retrieval, calls_generation,
-                evidence_log_path) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                error_details, evidence_log_path)  
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 self.id,
                 self.claim_id,
@@ -243,6 +245,7 @@ class Experiment:
                 self.calls.get("preprocessor", 0),
                 self.calls.get("retrieval", 0),
                 self.calls.get("generation", 0),
+                self.error_details,
                 self.evidence_log_path,
             ),
         )

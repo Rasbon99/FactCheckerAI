@@ -38,6 +38,10 @@ class UniversalHuggingFaceEmbeddings(HuggingFaceEmbeddings):
 
 @lru_cache(maxsize=1)
 def get_embedding_model():
+    """
+    Utility function to instantly initialize and cache the embedding model
+    in memory. It dynamically reads the active model from the environment.
+    """
     model_name = os.getenv("EMBEDDING_MODEL_NAME")
     cache_dir = os.getenv("EMBEDDING_CACHE_DIR")
 

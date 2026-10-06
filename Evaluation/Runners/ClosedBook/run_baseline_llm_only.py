@@ -75,6 +75,16 @@ def run_closed_book_baseline():
         claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
 
         for line_number, data in enumerate(claims_data):
+            claim_id = None
+            claim_text = ""
+            ground_truth = ""
+            metadata_context = ""
+            current_stage = "claim_setup"
+
+            latency_generation = 0.0
+            tokens_used = 0
+            query_result = None
+
             try:
                 claim_text = data.get("claim", "")
                 ground_truth = data.get("label", "")
@@ -114,6 +124,8 @@ def run_closed_book_baseline():
                 )
 
                 # --- GENERATION STEP ---
+                current_stage = "generation"
+
                 t0 = time.time()
                 query_result, tokens_used = get_closed_book_verdict(
                     claim_text, response_format_instructions, metadata_context
@@ -121,23 +133,45 @@ def run_closed_book_baseline():
                 latency_generation = time.time() - t0
 
                 # Verdict Parsing
+                current_stage = "parsing"
+
+                error_type = None
+                error_message = None
+                error_stage = None
+
                 try:
                     if not query_result or not query_result.strip():
-                        predicted_label = "Error: Empty LLM Response"
+                        predicted_label = "Error"
+                        error_type = "EmptyLLMResponse"
+                        error_message = "The LLM returned an empty response."
+                        error_stage = "parsing"
                         query_result = "The LLM failed to generate a response."
+
                     elif "VERDICT:" in query_result and "REASONING:" in query_result:
                         predicted_label = (
                             query_result.split("REASONING:")[0]
                             .replace("VERDICT:", "")
                             .strip()
                         )
+
                     else:
-                        predicted_label = "Error: Unstructured Response"
+                        predicted_label = "Error"
+                        error_type = "UnstructuredResponse"
+                        error_message = (
+                            "The LLM response did not contain both VERDICT and REASONING."
+                        )
+                        error_stage = "parsing"
+
                 except Exception as e:
                     logger.exception(f"Error parsing verdict: {e}")
-                    predicted_label = "Parsing Error"
+                    predicted_label = "Error"
+                    error_type = type(e).__name__
+                    error_message = str(e)
+                    error_stage = "parsing"
 
                 logger.info(f"Closed-Book Verdict: {predicted_label}")
+
+                current_stage = "database_logging"
 
                 Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
 
@@ -151,8 +185,16 @@ def run_closed_book_baseline():
                         "retrieval": 0.0,
                         "generation": latency_generation,
                     },
-                    tokens={"preprocessor": 0, "retrieval": 0, "generation": tokens_used},
-                    calls={"preprocessor": 0, "retrieval": 0, "generation": 1},
+                    tokens={
+                        "preprocessor": 0,
+                        "retrieval": 0,
+                        "generation": tokens_used,
+                    },
+                    calls={
+                        "preprocessor": 0,
+                        "retrieval": 0,
+                        "generation": 1,
+                    },
                     evidence_data={
                         "claim_text": claim_text,
                         "raw_sources": [],
@@ -163,13 +205,16 @@ def run_closed_book_baseline():
                     dataset_name=metadata["dataset_name"],
                     experiment_type=metadata["experiment_type"],
                     use_metadata=use_meta,
+                    error_details=(
+                        f"Stage: {error_stage} | "
+                        f"Type: {error_type} | "
+                        f"Message: {error_message}"
+                        if error_type is not None
+                        else None
+                    ),
                 )
 
-                if predicted_label in {
-                    "Error: Empty LLM Response",
-                    "Error: Unstructured Response",
-                    "Parsing Error",
-                }:
+                if predicted_label == "Error":
                     failed_runs += 1
                 else:
                     successful_runs += 1
@@ -180,6 +225,49 @@ def run_closed_book_baseline():
                 logger.exception(
                     f"Error processing claim {line_number + 1}: {e}"
                 )
+
+                try:
+                    if claim_id is not None:
+                        Experiment(
+                            claim_id=claim_id,
+                            predicted_label="Error",
+                            ground_truth=ground_truth,
+                            latencies={
+                                "preprocessor": 0.0,
+                                "retrieval": 0.0,
+                                "generation": latency_generation,
+                            },
+                            tokens={
+                                "preprocessor": 0,
+                                "retrieval": 0,
+                                "generation": tokens_used,
+                            },
+                            calls={
+                                "preprocessor": 0,
+                                "retrieval": 0,
+                                "generation": 1 if query_result is not None else 0,
+                            },
+                            evidence_data={
+                                "claim_text": claim_text,
+                                "raw_sources": [],
+                                "query_result": query_result,
+                            },
+                            system_type="LLM-Only",
+                            environment=metadata["environment"],
+                            dataset_name=metadata["dataset_name"],
+                            experiment_type=metadata["experiment_type"],
+                            use_metadata=use_meta,
+                            error_details=(
+                                f"Stage: {current_stage} | "
+                                f"Type: {type(e).__name__} | "
+                                f"Message: {str(e)}"
+                            ),
+                        )
+                except Exception:
+                    logger.exception(
+                        f"Failed to save failed experiment for claim {line_number + 1}"
+                    )
+
                 failed_runs += 1
                 continue
 
