@@ -35,18 +35,19 @@ class GraphManager:
         self.neo4j_password = os.environ["NEO4J_PASSWORD"]
 
         # Initialize graph connection
-        self.graph = Neo4jGraph(
-            url=self.neo4j_url,
-            username=self.neo4j_username,
-            password=self.neo4j_password,
-        )
-
         try:
+            self.graph = Neo4jGraph(
+                url=self.neo4j_url,
+                username=self.neo4j_username,
+                password=self.neo4j_password,
+            )
+
             self.graph.query("RETURN 1")
             self.logger.info("Successfully connected to Neo4j.")
+
         except Exception as e:
-            self.logger.error(f"Error during Neo4j connection: {e}")
-            raise ConnectionError(f"Error during Neo4j connection: {e}")
+            self.logger.exception(f"Error during Neo4j connection: {e}")
+            raise ConnectionError(f"Error during Neo4j connection: {e}") from e
 
     def reset_data(self):
         """
@@ -83,7 +84,8 @@ class GraphManager:
             self.logger.info("Schema refreshed successfully.")
 
         except Exception as e:
-            self.logger.error(f"Error during data reset: {e}")
+            self.logger.exception(f"Error during data reset: {e}")
+            raise
 
     def load_data(self, data):
         """
@@ -125,7 +127,8 @@ class GraphManager:
             elapsed_time = time.time() - start_time
             self.logger.info(f"Loading completed in {elapsed_time:.2f} seconds.")
         except Exception as e:
-            self.logger.error(f"Error during data loading: {e}")
+            self.logger.exception(f"Error during data loading: {e}")
+            raise
 
         self.graph.refresh_schema()
 
@@ -380,4 +383,5 @@ class GraphManager:
 
             self.logger.info("Graphs generated and saved successfully.")
         except Exception as e:
-            self.logger.error(f"Error during graph extraction and saving: {e}")
+            self.logger.exception(f"Error during graph extraction and saving: {e}")
+            raise

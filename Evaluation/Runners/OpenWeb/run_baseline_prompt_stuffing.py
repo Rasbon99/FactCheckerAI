@@ -7,7 +7,7 @@ from langchain_core.messages import HumanMessage
 from log import Logger
 
 from Evaluation.Utils.dataset_manager import DatasetManager
-from Utils.prompt_manager import get_dataset_prompt_instructions
+from Utils.prompt_manager import get_dataset_response_format_instructions
 from WebScraper.scraper import Scraper
 from Database.data_entities import Claim, Answer, Experiment
 
@@ -23,15 +23,17 @@ load_models([model_alias])
 # Configuration
 logger = Logger("PromptStuffing-OpenWeb").get_logger()
 
+MAX_CLAIMS_TO_TEST = 5
+
 
 def get_prompt_stuffing_verdict(
-    claim_text, massive_evidence_string, prompt_instructions
+    claim_text, massive_evidence_string, response_format_instructions
 ):
     """Asks the LLM to verify the claim using the massive wall of scraped text."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
 
-    {prompt_instructions}
+    {response_format_instructions}
 
     EVIDENCE:
     {massive_evidence_string}
@@ -64,7 +66,9 @@ def run_prompt_stuffing_baseline_openweb():
     active_dataset = metadata["dataset_name"]
     use_meta = metadata["use_metadata"]
 
-    prompt_instructions = get_dataset_prompt_instructions(active_dataset)
+    response_format_instructions = get_dataset_response_format_instructions(
+        active_dataset
+    )
 
     logger.info("Starting Baseline (Prompt Stuffing - Open Web)...")
     logger.info(f"Environment: {metadata['environment']}")
@@ -73,143 +77,244 @@ def run_prompt_stuffing_baseline_openweb():
     logger.info(f"Using Metadata Super Query: {use_meta}")
 
     successful_runs = 0
+    failed_runs = 0
 
     try:
         claims_data = dataset_manager.load_data()
 
         for line_number, data in enumerate(claims_data):
-            scraper = Scraper()
+            claim_id = None
+            claim_text = ""
+            ground_truth = ""
+            search_query = ""
+            current_stage = "claim_setup"
 
-            claim_text = data.get("claim", "")
-            ground_truth = data.get("label", "")
+            latency_retrieval = 0.0
+            latency_generation = 0.0
+            tokens_retrieval = 0
+            tokens_used = 0
+            calls_retrieval = 0
 
-            search_query = claim_text
-            if active_dataset == "AVERITEC" and use_meta:
-                search_query = dataset_manager.build_search_query(data)
+            raw_scraped_sources = []
+            scraper_metrics = {}
+            best_evidence = ""
+            query_result = None
 
-            logger.info(f"[{line_number + 1}] Claim: {claim_text}")
-            if search_query != claim_text:
-                logger.info(f"Enriched Search Query: {search_query}")
+            try:
+                scraper = Scraper()
 
-            claim_id = str(uuid.uuid4())
+                claim_text = data.get("claim", "")
+                ground_truth = data.get("label", "")
 
-            Claim(
-                text=claim_text,
-                title="[PromptStuff] " + claim_text[:30] + "...",
-                summary="Tested by stuffing all scraped web pages directly into the prompt.",
-                claim_id=claim_id,
-            )
+                search_query = claim_text
+                if active_dataset == "AVERITEC" and use_meta:
+                    search_query = dataset_manager.build_search_query(data)
 
-            # --- 1. Retrieval (Scraper) ---
-            t0 = time.time()
-            raw_scraped_sources, scraper_metrics = scraper.search_and_extract(
-                search_query, num_results=10
-            )
+                logger.info(
+                    f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}"
+                )
+                if search_query != claim_text:
+                    logger.info(f"Enriched Search Query: {search_query}")
 
-            combined_evidence = ""
-            for src in raw_scraped_sources:
-                combined_evidence += (
-                    f"\n--- Source: {src.get('url')} ---\n{src.get('body', '')}\n"
+                claim_id = str(uuid.uuid4())
+
+                Claim(
+                    text=claim_text,
+                    title="[PromptStuff] " + claim_text[:30] + "...",
+                    claim_id=claim_id,
                 )
 
-            if not combined_evidence.strip():
-                best_evidence = "No relevant articles could be scraped."
-            else:
-                # --- API SAFETY VALVE FOR PROMPT STUFFING ---
-                MAX_CHARS = 20000
-                if len(combined_evidence) > MAX_CHARS:
-                    logger.warning(
-                        f"Evidence massive ({len(combined_evidence)} chars). Truncating to {MAX_CHARS} to survive context limits."
+                # --- 1. Retrieval (Scraper) ---
+                current_stage = "retrieval"
+
+                t0 = time.time()
+                raw_scraped_sources, scraper_metrics = scraper.search_and_extract(
+                    search_query, num_results=10
+                )
+
+                combined_evidence = ""
+                for src in raw_scraped_sources:
+                    combined_evidence += (
+                        f"\n--- Source: {src.get('url')} ---\n{src.get('body', '')}\n"
                     )
-                    best_evidence = (
-                        combined_evidence[:MAX_CHARS]
-                        + "\n...[EVIDENCE TRUNCATED DUE TO CONTEXT LIMITS]..."
-                    )
+
+                if not combined_evidence.strip():
+                    best_evidence = "No relevant articles could be scraped."
                 else:
-                    best_evidence = combined_evidence
+                    # --- API SAFETY VALVE FOR PROMPT STUFFING ---
+                    MAX_CHARS = 20000
+                    if len(combined_evidence) > MAX_CHARS:
+                        logger.warning(
+                            f"Evidence massive ({len(combined_evidence)} chars). Truncating to {MAX_CHARS} to survive API limits."
+                        )
+                        best_evidence = (
+                            combined_evidence[:MAX_CHARS]
+                            + "\n...[EVIDENCE TRUNCATED DUE TO CONTEXT LIMITS]..."
+                        )
+                    else:
+                        best_evidence = combined_evidence
 
-            latency_retrieval = time.time() - t0
-            tokens_retrieval = scraper_metrics.get("total", 0)
-            calls_retrieval = scraper_metrics.get("calls", 0)
+                latency_retrieval = time.time() - t0
+                tokens_retrieval = scraper_metrics.get("total", 0)
+                calls_retrieval = scraper_metrics.get("calls", 0)
 
-            # --- 2. Generation (The LLM Call) ---
-            t0 = time.time()
-            query_result, tokens_used = get_prompt_stuffing_verdict(
-                claim_text, best_evidence, prompt_instructions
-            )
-            latency_generation = time.time() - t0
+                # --- 2. Generation (The LLM Call) ---
+                current_stage = "generation"
 
-            # --- 3. Verdict Parsing ---
-            try:
-                # Ensure query_result is a string for the parser
-                if isinstance(query_result, list):
-                    query_result = "\n".join(
-                        item if isinstance(item, str) else str(item)
-                        for item in query_result
-                    )
-                elif query_result is not None and not isinstance(query_result, str):
-                    query_result = str(query_result)
+                t0 = time.time()
+                query_result, tokens_used = get_prompt_stuffing_verdict(
+                    claim_text, best_evidence, response_format_instructions
+                )
+                latency_generation = time.time() - t0
 
-                if not query_result or not query_result.strip():
-                    predicted_label = "Error: Empty LLM Response"
-                    query_result = "The LLM failed to generate a response."
-                elif "VERDICT:" in query_result:
-                    predicted_label = (
-                        query_result.split("REASONING:")[0]
-                        .replace("VERDICT:", "")
-                        .strip()
-                    )
+                # --- 3. Verdict Parsing ---
+                current_stage = "parsing"
+
+                error_type = None
+                error_message = None
+                error_stage = None
+
+                try:
+                    if not query_result or not query_result.strip():
+                        predicted_label = "Error"
+                        error_type = "EmptyLLMResponse"
+                        error_message = "The LLM returned an empty response."
+                        error_stage = "parsing"
+                        query_result = "The LLM failed to generate a response."
+
+                    elif "VERDICT:" in query_result and "REASONING:" in query_result:
+                        predicted_label = (
+                            query_result.split("REASONING:")[0]
+                            .replace("VERDICT:", "")
+                            .strip()
+                        )
+
+                    else:
+                        predicted_label = "Error"
+                        error_type = "UnstructuredResponse"
+                        error_message = "The LLM response did not contain both VERDICT and REASONING."
+                        error_stage = "parsing"
+
+                except Exception as e:
+                    logger.exception(f"Error parsing verdict: {e}")
+                    predicted_label = "Error"
+                    error_type = type(e).__name__
+                    error_message = str(e)
+                    error_stage = "parsing"
+
+                logger.info(f"Prompt Stuffing Verdict: {predicted_label}")
+
+                current_stage = "database_logging"
+
+                Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
+
+                # --- 4. Log to DB ---
+                Experiment(
+                    claim_id=claim_id,
+                    predicted_label=predicted_label,
+                    ground_truth=ground_truth,
+                    latencies={
+                        "preprocessor": 0.0,
+                        "retrieval": latency_retrieval,
+                        "generation": latency_generation,
+                    },
+                    tokens={
+                        "preprocessor": 0,
+                        "retrieval": tokens_retrieval,
+                        "generation": tokens_used,
+                    },
+                    calls={
+                        "preprocessor": 0,
+                        "retrieval": calls_retrieval,
+                        "generation": 1,
+                    },
+                    evidence_data={
+                        "claim_text": claim_text,
+                        "raw_sources": raw_scraped_sources,
+                        "best_evidence": best_evidence,
+                        "query_result": query_result,
+                    },
+                    system_type="PromptStuffing",
+                    environment=metadata["environment"],
+                    dataset_name=metadata["dataset_name"],
+                    experiment_type=metadata["experiment_type"],
+                    use_metadata=use_meta,
+                    error_details=(
+                        f"Stage: {error_stage} | "
+                        f"Type: {error_type} | "
+                        f"Message: {error_message}"
+                        if error_type is not None
+                        else None
+                    ),
+                )
+
+                if predicted_label == "Error":
+                    failed_runs += 1
                 else:
-                    predicted_label = "Error: Unstructured Response"
-            except Exception:
-                predicted_label = "Parsing Error"
+                    successful_runs += 1
 
-            logger.info(f"Prompt Stuffing Verdict: {predicted_label}")
+                logger.info(
+                    "Sleeping for 15 seconds to respect DuckDuckGo rate limits..."
+                )
+                time.sleep(15)
 
-            Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
+            except Exception as e:
+                logger.exception(f"Error processing claim {line_number + 1}: {e}")
 
-            # --- 4. Log to DB ---
-            Experiment(
-                claim_id=claim_id,
-                predicted_label=predicted_label,
-                ground_truth=ground_truth,
-                latencies={
-                    "preprocessor": 0.0,
-                    "retrieval": latency_retrieval,
-                    "generation": latency_generation,
-                },
-                tokens={
-                    "preprocessor": 0,
-                    "retrieval": tokens_retrieval,
-                    "generation": tokens_used,
-                },
-                calls={
-                    "preprocessor": 0,
-                    "retrieval": calls_retrieval,
-                    "generation": 1,
-                },
-                evidence_data={
-                    "claim_text": claim_text,
-                    "raw_sources": raw_scraped_sources,
-                    "best_evidence": best_evidence,
-                    "query_result": query_result,
-                },
-                system_type="PromptStuffing",
-                environment=metadata["environment"],
-                dataset_name=metadata["dataset_name"],
-                experiment_type=metadata["experiment_type"],
-                use_metadata=use_meta,
-            )
+                try:
+                    if claim_id is not None:
+                        Experiment(
+                            claim_id=claim_id,
+                            predicted_label="Error",
+                            ground_truth=ground_truth,
+                            latencies={
+                                "preprocessor": 0.0,
+                                "retrieval": latency_retrieval,
+                                "generation": latency_generation,
+                            },
+                            tokens={
+                                "preprocessor": 0,
+                                "retrieval": tokens_retrieval,
+                                "generation": tokens_used,
+                            },
+                            calls={
+                                "preprocessor": 0,
+                                "retrieval": calls_retrieval,
+                                "generation": 1 if query_result is not None else 0,
+                            },
+                            evidence_data={
+                                "claim_text": claim_text,
+                                "search_query": search_query,
+                                "raw_sources": raw_scraped_sources,
+                                "best_evidence": best_evidence,
+                                "query_result": query_result,
+                            },
+                            system_type="PromptStuffing",
+                            environment=metadata["environment"],
+                            dataset_name=metadata["dataset_name"],
+                            experiment_type=metadata["experiment_type"],
+                            use_metadata=use_meta,
+                            error_details=(
+                                f"Stage: {current_stage} | "
+                                f"Type: {type(e).__name__} | "
+                                f"Message: {str(e)}"
+                            ),
+                        )
+                except Exception:
+                    logger.exception(
+                        f"Failed to save failed experiment for claim {line_number + 1}"
+                    )
 
-            successful_runs += 1
-            logger.info("Sleeping for 15 seconds to respect DuckDuckGo rate limits...")
-            time.sleep(15)
+                failed_runs += 1
+                continue
 
     except Exception as e:
-        logger.error(f"{e}")
+        logger.exception(f"Fatal error during experiment: {e}")
 
     logger.info("=" * 20)
     logger.info("PROMPT STUFFING (OPEN WEB) COMPLETE!")
+    logger.info(f"Successfully processed: {successful_runs}")
+    logger.info(f"Failed processing: {failed_runs}")
     logger.info("=" * 20)
 
 

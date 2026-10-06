@@ -1,9 +1,9 @@
 import json
 import os
 import dotenv
-from llamacpp_client import ChatLlamaCppServer
-from langchain_core.messages import SystemMessage, HumanMessage
 from collections import defaultdict
+from langchain_core.messages import SystemMessage, HumanMessage
+from llamacpp_client import ChatLlamaCppServer
 
 from log import Logger
 
@@ -17,12 +17,11 @@ class NER:
             env_file (str, optional): The path to the environment file containing configuration. Default is "key.env".
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
+        dotenv.load_dotenv(env_file, override=False)
         self.model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
 
-        dotenv.load_dotenv(env_file, override=False)
-
     def extract_entities_and_topic(
-        self, text, max_tokens=1024, temperature=0.5, stop=None
+        self, text, max_tokens=1024, temperature=0.0, stop=None
     ):
         """
         Extracts entities and the main topic from the given text using the llama.cpp server.
@@ -30,39 +29,43 @@ class NER:
         Args:
             text (str): The text from which entities and the topic will be extracted.
             max_tokens (int, optional): The maximum number of tokens for the response. Default is 1024.
-            temperature (float, optional): Controls randomness in the model output. Default is 0.5.
+            temperature (float, optional): Controls randomness in the model output. Default is 0.0.
             stop (list, optional): A list of stop sequences for the model to terminate at. Default is None.
 
         Returns:
-            tuple: (dict containing topic/entities or None, tokens_used)
+            tuple: (dict containing topic/entities, tokens_used)
         """
         self.logger.info("Starting entity and topic extraction process.")
-        tokens = 0  # Initialize early so it isn't lost during an exception
+        tokens = 0
 
         try:
             client = ChatLlamaCppServer(
-                model=self.model_alias, temperature=temperature, max_tokens=max_tokens
+                model=self.model_alias,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
 
             messages = [
                 SystemMessage(
-                    content="""you are an NER model that extracts entities and the topic from a text.\n 
-                    The output must be strictly formatted as: {\"topic\": \"Technology\", \"entities\": [\"Elon Musk\", \"SpaceX\", \"Tesla\", \"Paris\"]}. No prose, no markdown formatting."""
+                    content="""You are an NER model that extracts entities and the topic from a text.
+                                The output MUST be a valid JSON object strictly formatted as:
+                                {"topic": "Technology", "entities": ["Elon Musk", "SpaceX", "Tesla", "Paris"]}.
+                                Output ONLY the JSON object. No prose, no preamble, no markdown formatting."""
                 ),
                 HumanMessage(content=text),
             ]
 
             response = client.invoke(messages, stop=stop)
-
             self.logger.info("llama.cpp API call successful.")
+
             content = response.content
-            if content is None:
-                self.logger.error("API response content is None")
-                return None, 0
+            if not content:
+                raise RuntimeError("API response content is None")
+
             result = content if isinstance(content, str) else json.dumps(content)
             result = result.strip()
 
-            # Sanitize raw markdown block wrapper if injected by the model
+            # Sanitize markdown code fences if wrapped by the model
             if result.startswith("```"):
                 result = result.strip("```json").strip("```").strip()
 
@@ -76,10 +79,9 @@ class NER:
 
             return json.loads(result), tokens
 
-        except (json.JSONDecodeError, Exception) as e:
-            self.logger.error("Error extracting topic and entities: %s", e)
-            # Return the tokens even if JSON parsing failed!
-            return None, tokens
+        except Exception as e:
+            self.logger.exception("Error extracting topic and entities: %s", e)
+            raise
 
     def find_similar_entities_globally(
         self, entities, max_tokens=1024, temperature=0.0, stop=None
@@ -96,29 +98,32 @@ class NER:
         self.logger.debug("Finding similar entities globally...")
         tokens = 0
 
-        try:
-            input_entities = ", ".join(entities)
+        if not entities:
+            return {}, 0
 
+        try:
             client = ChatLlamaCppServer(
-                model=self.model_alias, temperature=temperature, max_tokens=max_tokens
+                model=self.model_alias,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
 
-            messages = [
-                SystemMessage(
-                    content=f"""Please normalize or unify the following entities: {input_entities}. 
-                                    For each entity, return a single unified version. 
-                                    If an entity has multiple valid representations, variations, synonyms, or acronyms, select the most common or widely recognized form. 
-                                    Ensure the unified versions are returned in the same order as the input, separated by commas, and the total number of unified entities matches the number of input entities. 
-                                    If any entity is already unified or does not require normalization, return it as is. 
-                                    Do not include any extra information, notes, or context.
-                                    Example: 
-                                        Input: ['United States', 'USA', 'US', 'U.S.'] Output: United States, United States, United States, United States"""
-                )
-            ]
+            system_prompt = f"""Please normalize or unify the following list of entities:
+                {json.dumps(entities)}
+
+                You must output a single JSON object where the keys are the EXACT original entity names,
+                and the values are the single unified version of that entity.
+                If an entity has multiple valid representations, variations, synonyms, or acronyms, select the most common or widely recognized form.
+                If an entity is already unified or does not require normalization, map it to itself.
+                Do not include any extra information, preamble, notes, or markdown formatting. Output ONLY the JSON object.
+
+                Example output format:
+                {{"U.S.A.": "United States", "USA": "United States", "Apple Inc": "Apple", "Elon Musk": "Elon Musk"}}"""
+
+            messages = [SystemMessage(content=system_prompt)]
 
             response = client.invoke(messages, stop=stop)
 
-            # Extraction from response
             response_content = response.content
             tokens = (
                 response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
@@ -128,45 +133,36 @@ class NER:
             self.logger.debug(f"Response content: {response_content}")
 
             if not response_content:
-                self.logger.error("API response content is None")
-                return {entity: [entity] for entity in entities}, tokens
+                raise RuntimeError("API response content is None")
 
-            # Normalize structured responses before cleaning list-like output.
-            content_text = (
+            result_text = (
                 response_content
                 if isinstance(response_content, str)
                 else json.dumps(response_content)
-            )
+            ).strip()
 
-            # Clean brackets and quotes to prevent Python list hallucination from breaking the split
-            cleaned_content = (
-                content_text.replace("[", "")
-                .replace("]", "")
-                .replace("'", "")
-                .replace('"', "")
-            )
-            unified_entities_list = [ue.strip() for ue in cleaned_content.split(",")]
+            # Sanitize markdown code fences if wrapped by the model
+            if result_text.startswith("```"):
+                result_text = result_text.strip("```json").strip("```").strip()
 
-            if len(unified_entities_list) != len(entities):
-                raise ValueError(
-                    "The number of unified entities does not match the number of input entities."
-                )
-
-            unified_mapping = {
-                entities[i]: unified_entities_list[i] for i in range(len(entities))
-            }
+            unified_mapping = json.loads(result_text)
 
             entity_groups = defaultdict(list)
-            for entity, unified in unified_mapping.items():
-                entity_groups[unified].append(entity)
+            for original_entity, unified_entity in unified_mapping.items():
+                if original_entity in entities:
+                    entity_groups[unified_entity].append(original_entity)
+
+            # Failsafe: catch any entities the model omitted from the dictionary keys
+            for original_entity in entities:
+                if original_entity not in unified_mapping:
+                    entity_groups[original_entity].append(original_entity)
 
             self.logger.debug(f"Grouped entities globally: {dict(entity_groups)}")
-            return entity_groups, tokens
+            return dict(entity_groups), tokens
 
         except Exception as e:
-            self.logger.error(f"Error in global entity similarity analysis: {e}")
-            # Fallback: return each entity as its own group, but SAVE THE TOKENS!
-            return {entity: [entity] for entity in entities}, tokens
+            self.logger.exception(f"Error in global entity similarity analysis: {e}")
+            raise
 
     def merge_entities(self, sources):
         """
