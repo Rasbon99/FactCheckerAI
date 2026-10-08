@@ -102,8 +102,8 @@ class Summarizer:
             messages = [
                 SystemMessage(
                     content="""You are a summarizer, be specific. Don't use lists or bullet points. 
-Provide only the string without specifying that it is a summary.
-Translate in English."""
+                    Provide only the string without specifying that it is a summary.
+                    Translate in English."""
                 ),
                 HumanMessage(content=text),
             ]
