@@ -45,9 +45,10 @@ class Scraper:
                 f"Loaded {len(unreliable_domains)} strictly untrustworthy (Low/Very Low) domains from Iffy Index."
             )
         except Exception as e:
-            self.logger.warning(
-                f"Could not load Iffy Index CSV at {filepath}. Filter disabled. Error: {e}"
+            self.logger.exception(
+                f"Could not load Iffy Index CSV at {filepath}: {e}"
             )
+            raise
         return unreliable_domains
 
     def extract_context(self, url):
@@ -105,15 +106,15 @@ class Scraper:
             return {"title": title, "site": site, "url": url, "body": body}
 
         except requests.Timeout:
-            self.logger.error(f"Timeout error for URL '{url}'")
+            self.logger.warning(f"Timeout error for URL '{url}'")
             return {"title": None, "site": None, "url": url, "body": None}
 
         except requests.RequestException as e:
-            self.logger.error(f"Request error for URL '{url}': {e}")
+            self.logger.warning(f"Request error for URL '{url}': {e}")
             return {"title": None, "site": None, "url": url, "body": None}
 
         except Exception as e:
-            self.logger.error(
+            self.logger.exception(
                 f"Unexpected error while extracting body from URL '{url}': {e}"
             )
             return {"title": None, "site": None, "url": url, "body": None}
@@ -147,7 +148,7 @@ class Scraper:
             else:
                 return True  # Assume allowed if robots.txt is missing/inaccessible
         except Exception as e:
-            # If the timeout hits or connection fails, assume allowed (or log it)
+            self.logger.warning(f"Could not check robots.txt for '{url}': {e}")
             return True
 
     def search_and_extract(
@@ -200,7 +201,7 @@ class Scraper:
                 with DDGS() as fresh_ddg:
                     # Note: We wrap it in list() because newer versions of DDGS return a generator
                     results = list(
-                        fresh_ddg.text(query, max_results=num_results, backend="lite")
+                        fresh_ddg.text(query, max_results=num_results, backend="google")
                     )
 
                 if not results:  # If there are no results, log and return empty list
@@ -294,12 +295,17 @@ class Scraper:
                 return filtered_results, token_data
 
             except Exception as e:
-                self.logger.error(
+                self.logger.exception(
                     f"Error during search and extract for query '{query}': {e}"
                 )
 
                 # Check for rate limit error
-                if "Ratelimit" in str(e):
+                error_message = str(e).lower()
+                if (
+                    "rate limit" in error_message
+                    or "rate_limit" in error_message
+                    or "ratelimit" in error_message
+                ):
                     retries += 1
                     if retries < max_retries:
                         self.logger.warning(
@@ -308,9 +314,9 @@ class Scraper:
                         time.sleep(30)
                     else:
                         self.logger.error("Max retries reached. Aborting.")
-                        raise e
+                        raise
                 else:
-                    raise e
+                    raise
 
         # Make sure that it returns something even if there are no results or if it fails after retries
         return [], token_data
@@ -370,6 +376,9 @@ class Scraper:
                 content = response.choices[0].message.content
                 result = content.strip() if content else ""
 
+                if result not in {"Correlated", "Not Correlated"}:
+                    raise ValueError(f"Unexpected correlation response: {result}")
+
                 token_data["calls"] += 1
                 token_data["total"] += (
                     response.usage.total_tokens if response.usage else 0
@@ -388,7 +397,8 @@ class Scraper:
 
             except Exception as e:
                 # Log errors for debugging purposes
-                self.logger.error(f"Error processing source: {source}. Error: {e}")
+                self.logger.exception(f"Error processing source: {source}. Error: {e}")
+                raise
 
         # Log the number of correlated sources found
         self.logger.info(f"Number of correlated sources: {len(correlated_sources)}")

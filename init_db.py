@@ -20,8 +20,7 @@ def initialize_database_schema(db: Database | None = None):
         CREATE TABLE IF NOT EXISTS claims (
             id TEXT PRIMARY KEY,
             text TEXT,
-            title TEXT,
-            summary TEXT
+            title TEXT
         )
     """)
 
@@ -78,6 +77,7 @@ def initialize_database_schema(db: Database | None = None):
             calls_retrieval INTEGER,
             calls_generation INTEGER,
             
+            error_details TEXT,
             evidence_log_path TEXT,
             FOREIGN KEY (claim_id) REFERENCES claims(id)
         )
@@ -87,5 +87,9 @@ def initialize_database_schema(db: Database | None = None):
 
 
 if __name__ == "__main__":
-    initialize_database_schema()
-    logger.info("Database tables verified.")
+    try:
+        initialize_database_schema()
+        logger.info("Database tables verified.")
+    except Exception as e:
+        logger.exception(f"Database initialization failed: {e}")
+        raise

@@ -51,16 +51,18 @@ class Logger:
 
             # File handler (rotating)
             file_handler = RotatingFileHandler(
-                log_file, maxBytes=max_bytes, backupCount=backup_count
+                log_file, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8"
             )
             file_handler.setFormatter(formatter)
             file_handler.setLevel(logging.DEBUG)
 
             # Console handler with UTF-8 encoding and error handling
+            if hasattr(sys.stdout, "reconfigure"):
+                getattr(sys.stdout, "reconfigure")(encoding="utf-8", errors="replace")
+
             console_handler = logging.StreamHandler(sys.stdout)
             console_handler.setFormatter(formatter)
             console_handler.setLevel(logging.DEBUG)
-            console_handler.setStream(open(sys.stdout.fileno(), mode='w', encoding='utf-8', errors='replace'))
 
             # Adding handlers to logger
             self.logger.addHandler(file_handler)

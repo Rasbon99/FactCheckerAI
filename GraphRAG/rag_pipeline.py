@@ -64,7 +64,7 @@ class RAG_Pipeline:
             self.graph_manager.load_data(data)
             self.logger.info("Data loaded successfully.")
         except Exception as e:
-            self.logger.error(f"Error during data loading: {e}")
+            self.logger.exception(f"Error during data loading: {e}")
             raise
 
     def generate_and_save_graphs(self, output_folder):
@@ -91,7 +91,8 @@ class RAG_Pipeline:
                 path_graph_topics, path_graph_entities, path_graph_sites
             )
         except Exception as e:
-            self.logger.error(f"Error during graph generation: {e}")
+            self.logger.exception(f"Error during graph generation: {e}")
+            raise
 
     def query_similarity(self, query, response_format_instructions=None):
         """
@@ -121,8 +122,8 @@ class RAG_Pipeline:
             self.logger.info("Similarity query completed.")
             return result, token_data
         except Exception as e:
-            self.logger.error(f"Error during similarity query execution: {e}")
-            return None, {"total": 0, "calls": 0}
+            self.logger.exception(f"Error during similarity query execution: {e}")
+            raise
 
     def run_pipeline(
         self,
@@ -179,7 +180,7 @@ class RAG_Pipeline:
 
         except Exception as e:
             total_time = time.time() - start_time
-            self.logger.error(
+            self.logger.exception(
                 f"Error during pipeline execution (total time: {total_time:.2f} seconds): {e}"
             )
-            return None, None, {"total": 0, "calls": 0}
+            raise

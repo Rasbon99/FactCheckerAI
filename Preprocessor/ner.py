@@ -33,7 +33,7 @@ class NER:
             stop (list, optional): A list of stop sequences for the model to terminate at. Default is None.
 
         Returns:
-            tuple: (dict containing topic/entities or None, tokens_used)
+            tuple: (dict containing topic/entities, tokens_used)
         """
         self.logger.info("Starting entity and topic extraction process.")
         tokens = 0
@@ -44,7 +44,7 @@ class NER:
                     {
                         "role": "system",
                         "content": """You are an NER model that extracts entities and the topic from a text.
-                        The output MUST be a valid JSON object strictly formatted as: 
+                        The output MUST be a valid JSON object strictly formatted as:
                         {"topic": "Technology", "entities": ["Elon Musk", "SpaceX", "Tesla", "Paris"]}""",
                     },
                     {"role": "user", "content": text},
@@ -61,17 +61,16 @@ class NER:
 
             content = response.choices[0].message.content
             if not content:
-                self.logger.error("API response content is None")
-                return None, tokens
+                raise RuntimeError("API response content is None")
 
             result = content.strip()
             self.logger.debug("Raw API response: %s", result)
 
             return json.loads(result), tokens
 
-        except (json.JSONDecodeError, Exception) as e:
-            self.logger.error("Error extracting topic and entities: %s", e)
-            return None, tokens
+        except Exception as e:
+            self.logger.exception("Error extracting topic and entities: %s", e)
+            raise
 
     def find_similar_entities_globally(
         self, entities, max_tokens=1024, temperature=0.0, stop=None
@@ -91,13 +90,12 @@ class NER:
         try:
             system_prompt = f"""Please normalize or unify the following list of entities:
             {json.dumps(entities)}
-            
-            You must output a single JSON object where the keys are the EXACT original entity names, 
+
+            You must output a single JSON object where the keys are the EXACT original entity names,
             and the values are the single unified version of that entity.
             If an entity has multiple valid representations or acronyms, select the most common form.
             If an entity is already unified, map it to itself.
             Do not include any extra information. Output ONLY the JSON object.
-            
             Example output format:
             {{"U.S.A.": "United States", "USA": "United States", "Apple Inc": "Apple", "Elon Musk": "Elon Musk"}}"""
 
@@ -115,8 +113,7 @@ class NER:
             self.logger.debug(f"Response content: {response_content}")
 
             if not response_content:
-                self.logger.error("API response content is None")
-                return {entity: [entity] for entity in entities}, tokens
+                raise RuntimeError("API response content is None")
 
             unified_mapping = json.loads(response_content)
 
@@ -135,8 +132,8 @@ class NER:
             return dict(entity_groups), tokens
 
         except Exception as e:
-            self.logger.error(f"Error in global entity similarity analysis: {e}")
-            return {entity: [entity] for entity in entities}, tokens
+            self.logger.exception(f"Error in global entity similarity analysis: {e}")
+            raise
 
     def merge_entities(self, sources):
         """

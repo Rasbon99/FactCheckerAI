@@ -31,14 +31,14 @@ class Preprocessing_Pipeline:
 
     def run_claim_pipe(self, claim, max_lenght=150):
         """
-        Processes a claim by generating a search title and a summary.
+        Processes a claim by generating a search title.
 
         Args:
             claim (str): The claim text to preprocess.
             max_lenght (int, optional): The maximum length for the summary. Default is 150.
 
         Returns:
-            tuple: ((claim_title, claim_summary), token_data)
+            tuple: (claim_title, token_data)
         """
         self.logger.info("Starting claim preprocessing...")
         token_data = {"total": 0, "calls": 0}
@@ -50,17 +50,17 @@ class Preprocessing_Pipeline:
             token_data["calls"] += 1
             token_data["total"] += title_tokens
 
-            claim_summary, summary_tokens = self.summarizer.generate_summary(
-                claim, max_lenght
-            )
-            token_data["calls"] += 1
-            token_data["total"] += summary_tokens
+            if not claim_title:
+                self.logger.warning(
+                    "Failed to generate search query. Falling back to raw claim."
+                )
+                claim_title = claim
 
             self.logger.info("Claim preprocessing completed.")
-            return (claim_title, claim_summary), token_data
+            return claim_title, token_data
 
         self.logger.info("Claim preprocessing completed.")
-        return (claim, claim), token_data
+        return claim, token_data
 
     def run_sources_pipe(self, sources, max_lenght=1024):
         """
@@ -74,6 +74,10 @@ class Preprocessing_Pipeline:
             tuple: (list of preprocessed sources, token_data)
         """
         self.logger.info("Starting sources preprocessing...")
+
+        if not sources:
+            raise ValueError("No sources available for preprocessing.")
+
         token_data = {"total": 0, "calls": 0}
 
         if self.config.get("summarize", True):
@@ -95,9 +99,6 @@ class Preprocessing_Pipeline:
                 )
                 token_data["calls"] += 1
                 token_data["total"] += tokens
-
-                if topic_and_entities is None:
-                    topic_and_entities = {"topic": None, "entities": []}
 
                 source["topic"] = topic_and_entities["topic"]
                 source["entities"] = topic_and_entities["entities"]

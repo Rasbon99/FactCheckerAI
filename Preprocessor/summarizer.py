@@ -40,7 +40,7 @@ class Summarizer:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an AI designed to rephrase a claim into a concise, specific, and highly searchable query. Focus on preserving all critical details such as names, dates, locations, or key terms, but avoid unnecessary words. Provide only the text without any additional formatting only add at the beginning !g",
+                        "content": "You are an AI designed to rephrase a claim into a concise, specific, and highly searchable query. Focus on preserving all critical details such as names, dates, locations, or key terms, but avoid unnecessary words. Provide only the text without any additional formatting.",
                     },
                     {"role": "user", "content": text},
                 ],
@@ -52,7 +52,7 @@ class Summarizer:
 
             summary = response.choices[0].message.content
             if not summary:
-                return None, 0
+                raise RuntimeError("Empty claim title returned by the model.")
 
             summary = summary.strip()
             tokens = response.usage.total_tokens if response.usage else 0
@@ -61,9 +61,9 @@ class Summarizer:
             return summary, tokens
 
         except Exception as e:
-            self.logger.error("Error generating summary: %s", e)
-            return None, 0
-
+            self.logger.exception("Error generating claim title: %s", e)
+            raise
+        
     def generate_summary(self, text, max_tokens=1024, temperature=0.5, stop=None):
         """
         Generates a general summary for the given text.
@@ -96,12 +96,12 @@ class Summarizer:
             tokens = response.usage.total_tokens if response.usage else 0
 
             if not summary:
-                return None, 0
+                raise RuntimeError("Empty source summary returned by the model.")
             return summary.strip(), tokens
 
         except Exception as e:
-            self.logger.error("Error generating text summary: %s", e)
-            return None, 0
+            self.logger.exception("Error generating text summary: %s", e)
+            raise
 
     def summarize_texts(
         self,
@@ -153,8 +153,8 @@ class Summarizer:
                     summaries.append(None)
 
             except Exception as e:
-                self.logger.error("Error summarizing text %d: %s", index + 1, e)
-                summaries.append(None)
+                self.logger.exception("Error summarizing text %d: %s", index + 1, e)
+                raise
 
         self.logger.info(
             "Batch summarization completed. Total tokens: %d", total_tokens_used

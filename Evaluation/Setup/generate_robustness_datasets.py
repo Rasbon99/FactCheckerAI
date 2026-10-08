@@ -173,7 +173,7 @@ if __name__ == "__main__":
                 f"All 3 robustness datasets are ready and safely stored in {target_log_dir}"
             )
         except Exception as e:
-            logger.error(f"Failed to generate datasets for {dataset_name}: {e}")
+            logger.exception(f"Failed to generate datasets for {dataset_name}: {e}")
 
     logger.info("=" * 40)
     logger.info("ROBUSTNESS GENERATION COMPLETE!")
