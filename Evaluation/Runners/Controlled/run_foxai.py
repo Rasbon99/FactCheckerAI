@@ -7,7 +7,7 @@ from llamacpp_client import load_models, set_alias_map
 from log import Logger
 
 from Evaluation.Utils.dataset_manager import DatasetManager
-from Utils.prompt_manager import get_dataset_prompt_instructions
+from Utils.prompt_manager import get_dataset_response_format_instructions
 from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
 from Preprocessor.preprocessing_pipeline import Preprocessing_Pipeline
 from GraphRAG.rag_pipeline import RAG_Pipeline
@@ -57,200 +57,321 @@ def extract_perfect_evidence(evidence_data, wiki_cursor):
 
 
 def run_controlled_experiment():
-    dataset_manager = DatasetManager()
-
-    metadata = dataset_manager.get_experiment_metadata(environment="controlled")
-    active_dataset = metadata["dataset_name"]
-    use_meta = metadata["use_metadata"]
-
-    prompt_instructions = get_dataset_prompt_instructions(active_dataset)
-
-    logger.info("Starting Controlled Experiment (FoxAI)...")
-    logger.info(f"Environment: {metadata['environment']}")
-    logger.info(f"Active Dataset: {active_dataset}")
-    logger.info(f"Experiment Type: {metadata['experiment_type']}")
-    logger.info(f"Using Metadata Super Query: {use_meta}")
-
     wiki_conn = None
     wiki_cursor = None
     averitec_retriever = None
 
-    if active_dataset == "FEVER":
-        wiki_db_path = os.getenv(
-            "FEVER_WIKIPEDIA_DB_PATH", "Datasets/FEVER/fever_wiki.db"
-        )
-        wiki_conn = sqlite3.connect(wiki_db_path)
-        wiki_cursor = wiki_conn.cursor()
-    elif active_dataset == "AVERITEC":
-        averitec_retriever = AVeriTeCKnowledgeRetriever()
-
-    preprocessor = Preprocessing_Pipeline()
-    rag = RAG_Pipeline()
-
     successful_runs = 0
+    failed_runs = 0
 
     try:
+        dataset_manager = DatasetManager()
+
+        metadata = dataset_manager.get_experiment_metadata(environment="controlled")
+        active_dataset = metadata["dataset_name"]
+        use_meta = metadata["use_metadata"]
+
+        response_format_instructions = get_dataset_response_format_instructions(
+            active_dataset
+        )
+
+        logger.info(f"Starting Controlled Experiment (FoxAI)...")
+        logger.info(f"Environment: {metadata['environment']}")
+        logger.info(f"Active Dataset: {active_dataset}")
+        logger.info(f"Experiment Type: {metadata['experiment_type']}")
+        logger.info(f"Using Metadata Super Query: {use_meta}")
+
+        if active_dataset == "FEVER":
+            wiki_db_path = os.getenv(
+                "FEVER_WIKIPEDIA_DB_PATH",
+                "Datasets/FEVER/fever_wiki.db",
+            )
+            wiki_conn = sqlite3.connect(wiki_db_path)
+            wiki_cursor = wiki_conn.cursor()
+
+        elif active_dataset == "AVERITEC":
+            averitec_retriever = AVeriTeCKnowledgeRetriever()
+
+        preprocessor = Preprocessing_Pipeline()
+        rag = RAG_Pipeline()
+
         claims_data = dataset_manager.load_data()
 
         for line_number, data in enumerate(claims_data):
-            claim_text = data.get("claim", "")
-            ground_truth = data.get("label", "")
-
-            search_query = claim_text
-            if active_dataset == "AVERITEC" and use_meta:
-                search_query = dataset_manager.build_search_query(data)
-
-            nei_label = (
-                "NOT ENOUGH INFO"
-                if active_dataset == "FEVER"
-                else "Not Enough Evidence"
-            )
-
-            logger.info(f"[{line_number + 1}] Claim: {claim_text}")
-            if search_query != claim_text:
-                logger.info(f"Enriched Search Query: {search_query}")
-            logger.info(f"Ground Truth: {ground_truth}")
-
-            # --- Extract Evidence Dynamically ---
-            perfect_evidence = ""
-            if active_dataset == "FEVER":
-                evidence_data = data.get("evidence", [])
-                logger.info(f"Raw Evidence Array from FEVER: {evidence_data}")
-                perfect_evidence = extract_perfect_evidence(evidence_data, wiki_cursor)
-
-            elif active_dataset == "AVERITEC" and averitec_retriever is not None:
-                claim_id_internal = data.get("internal_id")
-                all_sentences = averitec_retriever.get_evidence_for_claim(
-                    claim_id_internal
-                )
-
-                if "noisy_ids" in data and all_sentences is not None:
-                    for n_id in data["noisy_ids"]:
-                        noisy_sentences = averitec_retriever.get_evidence_for_claim(
-                            n_id
-                        )
-                        if noisy_sentences:
-                            all_sentences.extend(noisy_sentences)
-
-                if all_sentences:
-                    from rank_bm25 import BM25Okapi
-
-                    tokenized_corpus = [s.lower().split() for s in all_sentences]
-                    bm25 = BM25Okapi(tokenized_corpus)
-                    tokenized_query = search_query.lower().split()
-
-                    top_sentences = bm25.get_top_n(tokenized_query, all_sentences, n=30)
-                    perfect_evidence = " ".join(top_sentences)
-
-            if not perfect_evidence and ground_truth != nei_label:
-                logger.warning(
-                    "Could not find evidence in knowledge base for this claim."
-                )
-
-            logger.info(f"Perfect Evidence Retrieved: {perfect_evidence[:100]}...")
+            claim = None
+            claim_id = None
+            claim_text = ""
+            ground_truth = ""
+            search_query = ""
+            current_stage = "claim_setup"
 
             latencies = {}
             tokens = {}
             calls = {}
 
-            # --- THE SHORT-CIRCUIT ---
-            if not perfect_evidence:
-                logger.info(f"No evidence available. Short-circuiting to {nei_label}.")
+            mock_srcs = []
+            query_result = None
+
+            try:
+                claim_text = data.get("claim", "")
+                ground_truth = data.get("label", "")
+
+                search_query = claim_text
+                if active_dataset == "AVERITEC" and use_meta:
+                    search_query = dataset_manager.build_search_query(data)
+
+                nei_label = (
+                    "NOT ENOUGH INFO"
+                    if active_dataset == "FEVER"
+                    else "Not Enough Evidence"
+                )
+
+                logger.info(f"[{line_number + 1}] Claim: {claim_text}")
+                if search_query != claim_text:
+                    logger.info(f"Enriched Search Query: {search_query}")
+                logger.info(f"Ground Truth: {ground_truth}")
+
+                current_stage = "evidence_retrieval"
+
+                # --- Extract Evidence Dynamically ---
+                perfect_evidence = ""
+                if active_dataset == "FEVER":
+                    evidence_data = data.get("evidence", [])
+                    logger.info(f"Raw Evidence Array from FEVER: {evidence_data}")
+                    perfect_evidence = extract_perfect_evidence(
+                        evidence_data, wiki_cursor
+                    )
+
+                elif active_dataset == "AVERITEC" and averitec_retriever is not None:
+                    claim_id_internal = data.get("internal_id")
+                    all_sentences = averitec_retriever.get_evidence_for_claim(
+                        claim_id_internal
+                    )
+
+                    if "noisy_ids" in data and all_sentences is not None:
+                        for n_id in data["noisy_ids"]:
+                            noisy_sentences = averitec_retriever.get_evidence_for_claim(
+                                n_id
+                            )
+                            if noisy_sentences:
+                                all_sentences.extend(noisy_sentences)
+
+                    if all_sentences:
+                        from rank_bm25 import BM25Okapi
+
+                        tokenized_corpus = [s.lower().split() for s in all_sentences]
+                        bm25 = BM25Okapi(tokenized_corpus)
+                        tokenized_query = search_query.lower().split()
+
+                        top_sentences = bm25.get_top_n(
+                            tokenized_query, all_sentences, n=30
+                        )
+                        perfect_evidence = " ".join(top_sentences)
+
+                if not perfect_evidence and ground_truth != nei_label:
+                    logger.warning(
+                        "Could not find evidence in knowledge base for this claim."
+                    )
+
+                logger.info(f"Perfect Evidence Retrieved: {perfect_evidence[:100]}...")
+
+                # --- THE SHORT-CIRCUIT ---
+                if not perfect_evidence:
+                    logger.info(
+                        f"No evidence available. Short-circuiting to {nei_label}."
+                    )
+                    claim_id = str(uuid.uuid4())
+
+                    Claim(
+                        text=claim_text,
+                        title="[NEI] " + claim_text[:30] + "...",
+                        claim_id=claim_id,
+                    )
+
+                    predicted_label = nei_label
+                    query_result = f"VERDICT: {nei_label}\nREASONING: No evidence provided by the dataset."
+
+                    Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
+
+                    Experiment(
+                        claim_id=claim_id,
+                        predicted_label=predicted_label,
+                        ground_truth=ground_truth,
+                        latencies={
+                            "preprocessor": 0.0,
+                            "retrieval": 0.0,
+                            "generation": 0.0,
+                        },
+                        tokens={"preprocessor": 0, "retrieval": 0, "generation": 0},
+                        calls={"preprocessor": 0, "retrieval": 0, "generation": 0},
+                        evidence_data={
+                            "claim_text": claim_text,
+                            "raw_sources": [],
+                            "query_result": query_result,
+                        },
+                        system_type="FoxAI-GraphRAG",
+                        environment=metadata["environment"],
+                        dataset_name=metadata["dataset_name"],
+                        experiment_type=metadata["experiment_type"],
+                        use_metadata=use_meta,
+                    )
+
+                    successful_runs += 1
+
+                    logger.info("Sleeping for 5 seconds before next claim...")
+                    time.sleep(5)
+                    continue
+
+                # --- NORMAL PIPELINE ---
                 claim_id = str(uuid.uuid4())
 
-                Claim(
-                    text=claim_text,
-                    title="[NEI] " + claim_text[:30] + "...",
-                    summary="Short-circuited due to lack of evidence.",
-                    claim_id=claim_id,
+                current_stage = "preprocessing"
+
+                # 1. Preprocessing
+                t0 = time.time()
+                claim_title, prep_claim_metrics = preprocessor.run_claim_pipe(
+                    claim_text
                 )
 
-                predicted_label = nei_label
-                query_result = f"VERDICT: {nei_label}\nREASONING: No evidence provided by the dataset."
+                if not claim_title:
+                    raise RuntimeError("Claim preprocessing returned an empty title.")
 
-                Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
+                latencies["preprocessor"] = time.time() - t0
+                tokens["preprocessor"] = prep_claim_metrics.get("total", 0)
+                calls["preprocessor"] = prep_claim_metrics.get("calls", 0)
 
-                Experiment(
-                    claim_id=claim_id,
-                    predicted_label=predicted_label,
-                    ground_truth=ground_truth,
-                    latencies={
-                        "preprocessor": 0.0,
-                        "retrieval": 0.0,
-                        "generation": 0.0,
-                    },
-                    tokens={"preprocessor": 0, "retrieval": 0, "generation": 0},
-                    calls={"preprocessor": 0, "retrieval": 0, "generation": 0},
-                    evidence_data={
-                        "claim_text": claim_text,
-                        "raw_sources": [],
-                        "query_result": query_result,
-                    },
-                    system_type="FoxAI-GraphRAG",
-                    environment=metadata["environment"],
-                    dataset_name=metadata["dataset_name"],
-                    experiment_type=metadata["experiment_type"],
-                    use_metadata=use_meta,
+                claim = Claim(claim_text, claim_title, claim_id=claim_id)
+
+                current_stage = "retrieval"
+
+                # 2. Retrieval (Mock Scraper)
+                t0 = time.time()
+                mock_srcs = [
+                    {
+                        "title": f"{active_dataset} Perfect Evidence",
+                        "url": "Local_DB",
+                        "site": "Dataset",
+                        "body": perfect_evidence,
+                    }
+                ]
+                preprocessed_sources, prep_metrics = preprocessor.run_sources_pipe(
+                    mock_srcs
+                )
+                latencies["retrieval"] = time.time() - t0
+                tokens["retrieval"] = prep_metrics.get("total", 0)
+                calls["retrieval"] = prep_metrics.get("calls", 0)
+
+                claim.add_sources(preprocessed_sources)
+
+                # Safety Check: Entities
+                has_entities = False
+                for src in preprocessed_sources:
+                    entities = src.get("entities")
+                    if entities is not None and entities != "[]" and len(entities) > 0:
+                        has_entities = True
+                        break
+
+                if not has_entities:
+                    logger.info(
+                        "NER extracted 0 entities. Short-circuiting to prevent Neo4j crash."
+                    )
+                    predicted_label = "Error"
+                    query_result = f"VERDICT: {nei_label}\nREASONING: Evidence was provided, but the NER model failed to extract any entities to build a graph."
+                    Answer(claim_id=claim.id, answer=query_result, graphs_folder=None)
+
+                    Experiment(
+                        claim_id=claim_id,
+                        predicted_label=predicted_label,
+                        ground_truth=ground_truth,
+                        latencies=latencies,
+                        tokens=tokens,
+                        calls=calls,
+                        evidence_data={
+                            "claim_text": claim_text,
+                            "raw_sources": mock_srcs,
+                            "query_result": query_result,
+                        },
+                        system_type="FoxAI-GraphRAG",
+                        environment=metadata["environment"],
+                        dataset_name=metadata["dataset_name"],
+                        experiment_type=metadata["experiment_type"],
+                        use_metadata=use_meta,
+                        error_details=(
+                            "Stage: retrieval | "
+                            "Type: NoEntities | "
+                            "Message: NER extracted 0 entities."
+                        ),
+                    )
+                    failed_runs += 1
+                    continue
+
+                current_stage = "generation"
+
+                # 3. GraphRAG Generation
+                t0 = time.time()
+                query_result, graphs_folder, t_usage = rag.run_pipeline(
+                    preprocessed_sources,
+                    claim.text,
+                    claim.id,
+                    response_format_instructions,
+                )
+                latencies["generation"] = time.time() - t0
+                tokens["generation"] = t_usage.get("llm_total", t_usage.get("total", 0))
+                calls["generation"] = t_usage.get("llm_calls", t_usage.get("calls", 0))
+
+                current_stage = "parsing"
+
+                error_type = None
+                error_message = None
+                error_stage = None
+
+                # 4. Verdict Parsing
+                try:
+                    if isinstance(query_result, list):
+                        query_result = "\n".join(
+                            item if isinstance(item, str) else str(item)
+                            for item in query_result
+                        )
+                    elif query_result is not None and not isinstance(query_result, str):
+                        query_result = str(query_result)
+
+                    if not query_result or not query_result.strip():
+                        predicted_label = "Error"
+                        query_result = "The LLM failed to generate a response."
+
+                        error_type = "EmptyLLMResponse"
+                        error_message = "The LLM returned an empty response."
+                        error_stage = current_stage
+
+                    elif "VERDICT:" in query_result and "REASONING:" in query_result:
+                        predicted_label = (
+                            query_result.split("REASONING:")[0]
+                            .replace("VERDICT:", "")
+                            .strip()
+                        )
+
+                    else:
+                        predicted_label = "Error"
+
+                        error_type = "UnstructuredResponse"
+                        error_message = "The LLM response did not contain both VERDICT and REASONING."
+                        error_stage = current_stage
+
+                except Exception as e:
+                    logger.exception(f"Error parsing verdict: {e}")
+                    predicted_label = "Error"
+
+                    error_type = type(e).__name__
+                    error_message = str(e)
+                    error_stage = current_stage
+
+                logger.info(f"FoxAI Verdict: {predicted_label}")
+
+                Answer(
+                    claim_id=claim.id, answer=query_result, graphs_folder=graphs_folder
                 )
 
-                successful_runs += 1
-                continue
-
-            # --- NORMAL PIPELINE ---
-            claim_id = str(uuid.uuid4())
-
-            # 1. Preprocessing
-            t0 = time.time()
-            prep_data, prep_claim_metrics = preprocessor.run_claim_pipe(claim_text)
-            claim_title, claim_summary = prep_data
-
-            # SAFETY FALLBACK: If LLM fails to summarize, use the raw claim text
-            if not claim_title:
-                claim_title = f"!g {claim_text[:50]}..."
-            if not claim_summary:
-                claim_summary = claim_text
-
-            latencies["preprocessor"] = time.time() - t0
-            tokens["preprocessor"] = prep_claim_metrics.get("total", 0)
-            calls["preprocessor"] = prep_claim_metrics.get("calls", 0)
-
-            claim = Claim(claim_text, claim_title, claim_summary, claim_id=claim_id)
-
-            # 2. Retrieval (Mock Scraper)
-            t0 = time.time()
-            mock_srcs = [
-                {
-                    "title": f"{active_dataset} Perfect Evidence",
-                    "url": "Local_DB",
-                    "site": "Dataset",
-                    "body": perfect_evidence,
-                }
-            ]
-            preprocessed_sources, prep_metrics = preprocessor.run_sources_pipe(
-                mock_srcs
-            )
-            latencies["retrieval"] = time.time() - t0
-            tokens["retrieval"] = prep_metrics.get("total", 0)
-            calls["retrieval"] = prep_metrics.get("calls", 0)
-
-            claim.add_sources(preprocessed_sources)
-
-            # Safety Check: Entities
-            has_entities = False
-            for src in preprocessed_sources:
-                entities = src.get("entities")
-                if entities is not None and entities != "[]" and len(entities) > 0:
-                    has_entities = True
-                    break
-
-            if not has_entities:
-                logger.info(
-                    "NER extracted 0 entities. Short-circuiting to prevent Neo4j crash."
-                )
-                predicted_label = "Error: No Entities"
-                query_result = f"VERDICT: {nei_label}\nREASONING: Evidence was provided, but the NER model failed to extract any entities to build a graph."
-                Answer(claim_id=claim.id, answer=query_result, graphs_folder=None)
-
+                # 5. Log Experiment Metrics
                 Experiment(
                     claim_id=claim_id,
                     predicted_label=predicted_label,
@@ -268,75 +389,65 @@ def run_controlled_experiment():
                     dataset_name=metadata["dataset_name"],
                     experiment_type=metadata["experiment_type"],
                     use_metadata=use_meta,
+                    error_details=(
+                        f"Stage: {error_stage} | "
+                        f"Type: {error_type} | "
+                        f"Message: {error_message}"
+                        if error_type is not None
+                        else None
+                    ),
                 )
-                successful_runs += 1
+
+                if predicted_label == "Error":
+                    failed_runs += 1
+                else:
+                    successful_runs += 1
+
+                logger.info("Sleeping for 5 seconds before next claim...")
+                time.sleep(5)
+
+            except Exception as e:
+                logger.exception(f"Error processing claim {line_number + 1}: {e}")
+
+                try:
+                    Experiment(
+                        claim_id=claim.id if claim is not None else None,
+                        predicted_label="Error",
+                        ground_truth=ground_truth,
+                        latencies=latencies,
+                        tokens=tokens,
+                        calls=calls,
+                        evidence_data={
+                            "claim_text": claim_text,
+                            "search_query": search_query,
+                            "raw_sources": mock_srcs,
+                            "query_result": query_result,
+                        },
+                        system_type="FoxAI-GraphRAG",
+                        environment=metadata["environment"],
+                        dataset_name=metadata["dataset_name"],
+                        experiment_type=metadata["experiment_type"],
+                        use_metadata=use_meta,
+                        error_details=(
+                            f"Stage: {current_stage} | "
+                            f"Type: {type(e).__name__} | "
+                            f"Message: {str(e)}"
+                        ),
+                    )
+
+                except Exception as experiment_error:
+                    logger.exception(
+                        f"Failed to save failed experiment for claim "
+                        f"{line_number + 1}: {experiment_error}"
+                    )
+
+                failed_runs += 1
                 continue
 
-            # 3. GraphRAG Generation
-            t0 = time.time()
-            query_result, graphs_folder, t_usage = rag.run_pipeline(
-                preprocessed_sources, claim.text, claim.id, prompt_instructions
-            )
-            latencies["generation"] = time.time() - t0
-            tokens["generation"] = t_usage.get("llm_total", t_usage.get("total", 0))
-            calls["generation"] = t_usage.get("llm_calls", t_usage.get("calls", 0))
-
-            # 4. Verdict Parsing
-            try:
-                # Ensure query_result is a string for the parser
-                if isinstance(query_result, list):
-                    query_result = "\n".join(
-                        item if isinstance(item, str) else str(item)
-                        for item in query_result
-                    )
-                elif query_result is not None and not isinstance(query_result, str):
-                    query_result = str(query_result)
-
-                if not query_result or not query_result.strip():
-                    predicted_label = "Error: Empty LLM Response"
-                    query_result = "The LLM failed to generate a response."
-                elif "VERDICT:" in query_result:
-                    predicted_label = (
-                        query_result.split("REASONING:")[0]
-                        .replace("VERDICT:", "")
-                        .strip()
-                    )
-                else:
-                    predicted_label = "Error: Unstructured Response"
-            except Exception:
-                predicted_label = "Parsing Error"
-
-            logger.info(f"FoxAI Verdict: {predicted_label}")
-
-            Answer(claim_id=claim.id, answer=query_result, graphs_folder=graphs_folder)
-
-            # 5. Log Experiment Metrics
-            Experiment(
-                claim_id=claim_id,
-                predicted_label=predicted_label,
-                ground_truth=ground_truth,
-                latencies=latencies,
-                tokens=tokens,
-                calls=calls,
-                evidence_data={
-                    "claim_text": claim_text,
-                    "raw_sources": mock_srcs,
-                    "query_result": query_result,
-                },
-                system_type="FoxAI-GraphRAG",
-                environment=metadata["environment"],
-                dataset_name=metadata["dataset_name"],
-                experiment_type=metadata["experiment_type"],
-                use_metadata=use_meta,
-            )
-
-            successful_runs += 1
-
-            logger.info("Sleeping for 5 seconds before next claim...")
-            time.sleep(5)
-
     except FileNotFoundError as e:
-        logger.error(f"Could not find dataset files. {e}")
+        logger.exception(f"Could not find dataset files. {e}")
+    except Exception as e:
+        logger.exception(f"Fatal error during controlled experiment: {e}")
     finally:
         if wiki_conn:
             wiki_conn.close()
@@ -344,6 +455,7 @@ def run_controlled_experiment():
     logger.info("=" * 20)
     logger.info("CONTROLLED EXPERIMENT COMPLETE!")
     logger.info(f"Successfully processed: {successful_runs}")
+    logger.info(f"Failed processing: {failed_runs}")
     logger.info("=" * 20)
 
 

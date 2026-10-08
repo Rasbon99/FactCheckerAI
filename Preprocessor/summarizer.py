@@ -14,16 +14,9 @@ class Summarizer:
 
         Args:
             env_file (str, optional): The environment file containing the configuration. Default is "key.env".
-            model (str, optional): The model to use for summarization. If not provided, defaults to the model set in the environment.
 
         Attributes:
             model_alias (str): The specified model alias for llama.cpp.
-
-        Returns:
-            None
-
-        Raises:
-            KeyError: If the environment variables cannot be found.
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
         dotenv.load_dotenv(env_file, override=True)
@@ -52,9 +45,7 @@ class Summarizer:
 
             messages = [
                 SystemMessage(
-                    content="""You are an AI designed to rephrase a claim into a concise, specific, and highly searchable query. 
-                                                    Focus on preserving all critical details such as names, dates, locations, or key terms, but avoid unnecessary words. 
-                                                    Provide only the text without any additional formatting"""
+                    content="""You are an AI designed to rephrase a claim into a concise, specific, and highly searchable query. Focus on preserving all critical details such as names, dates, locations, or key terms, but avoid unnecessary words. Provide only the text without any additional formatting."""
                 ),
                 HumanMessage(content=text),
             ]
@@ -62,17 +53,10 @@ class Summarizer:
             response = client.invoke(messages, stop=stop)
             summary = response.content
 
-            if summary is None:
-                return None, 0
+            if not summary:
+                raise RuntimeError("Empty claim title returned by the model.")
 
             # Normalize possible list/dict responses into a single string
-            if isinstance(summary, list):
-                summary = " ".join(
-                    item if isinstance(item, str) else str(item) for item in summary
-                )
-            elif isinstance(summary, dict):
-                summary = str(summary)
-                # Normalize possible list/dict responses into a single string
             if isinstance(summary, list):
                 summary = " ".join(
                     item if isinstance(item, str) else str(item) for item in summary
@@ -90,14 +74,12 @@ class Summarizer:
             )
 
             self.logger.info("Summarization completed successfully.")
-            self.logger.info("Generated scraping summary: %s...", summary[:1000])
-
             self.logger.info("Generated scraping summary: %s...", summary[:100])
             return summary, tokens
 
         except Exception as e:
-            self.logger.error("Error generating summary: %s", e)
-            return None, 0
+            self.logger.exception("Error generating claim title: %s", e)
+            raise
 
     def generate_summary(self, text, max_tokens=1024, temperature=0.5, stop=None):
         """
@@ -112,36 +94,43 @@ class Summarizer:
         Returns:
             tuple: (summary_string, total_tokens_used)
         """
-        client = ChatLlamaCppServer(
-            model=self.model_alias, temperature=temperature, max_tokens=max_tokens
-        )
-
-        messages = [
-            SystemMessage(
-                content="""You are a summarizer, be specific. Don't use lists or bullet points. 
-                                                Provide only the string without specifying that it is a summary.
-                                                Translate in English."""
-            ),
-            HumanMessage(content=text),
-        ]
-
-        response = client.invoke(messages, stop=stop)
-        summary = response.content
-        tokens = (
-            response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
-            if hasattr(response, "response_metadata")
-            else 0
-        )
-
-        if summary is None:
-            return None, 0
-
-        if isinstance(summary, list):
-            summary = " ".join(
-                item if isinstance(item, str) else str(item) for item in summary
+        try:
+            client = ChatLlamaCppServer(
+                model=self.model_alias, temperature=temperature, max_tokens=max_tokens
             )
 
-        return summary.strip(), tokens
+            messages = [
+                SystemMessage(
+                    content="""You are a summarizer, be specific. Don't use lists or bullet points. 
+Provide only the string without specifying that it is a summary.
+Translate in English."""
+                ),
+                HumanMessage(content=text),
+            ]
+
+            response = client.invoke(messages, stop=stop)
+            summary = response.content
+            tokens = (
+                response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
+                if hasattr(response, "response_metadata")
+                else 0
+            )
+
+            if not summary:
+                raise RuntimeError("Empty source summary returned by the model.")
+
+            if isinstance(summary, list):
+                summary = " ".join(
+                    item if isinstance(item, str) else str(item) for item in summary
+                )
+            elif isinstance(summary, dict):
+                summary = str(summary)
+
+            return summary.strip(), tokens
+
+        except Exception as e:
+            self.logger.exception("Error generating text summary: %s", e)
+            raise
 
     def summarize_texts(
         self,
@@ -193,8 +182,8 @@ class Summarizer:
                     summaries.append(None)
 
             except Exception as e:
-                self.logger.error("Error summarizing text %d: %s", index + 1, e)
-                summaries.append(None)
+                self.logger.exception("Error summarizing text %d: %s", index + 1, e)
+                raise
 
         self.logger.info(
             "Batch summarization completed. Total tokens: %d", total_tokens_used

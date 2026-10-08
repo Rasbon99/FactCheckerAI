@@ -24,7 +24,7 @@ def calculate_effectiveness():
         # 2. Use our existing fetch_all method
         rows = db.fetch_all(query)
     except Exception as e:
-        logger.error(f"Failed to fetch data: {e}")
+        logger.exception(f"Failed to fetch data: {e}")
         return
 
     if not rows:

@@ -64,7 +64,7 @@ class RAG_Pipeline:
             self.graph_manager.load_data(data)
             self.logger.info("Data loaded successfully.")
         except Exception as e:
-            self.logger.error(f"Error during data loading: {e}")
+            self.logger.exception(f"Error during data loading: {e}")
             raise
 
     def generate_and_save_graphs(self, output_folder):
@@ -91,15 +91,16 @@ class RAG_Pipeline:
                 path_graph_topics, path_graph_entities, path_graph_sites
             )
         except Exception as e:
-            self.logger.error(f"Error during graph generation: {e}")
+            self.logger.exception(f"Error during graph generation: {e}")
+            raise
 
-    def query_similarity(self, query, prompt_instructions=None):
+    def query_similarity(self, query, response_format_instructions=None):
         """
         Executes a similarity query using the QueryEngine and tracks LLM usage metrics.
 
         Args:
             query (str): The raw claim text to be used for graph retrieval.
-            prompt_instructions (str, optional): Custom instructions for the LLM prompt.
+            response_format_instructions (str, optional): Instructions for structured model output.
 
         Returns:
             tuple: A tuple containing:
@@ -116,20 +117,20 @@ class RAG_Pipeline:
         self.logger.info("Starting similarity query...")
         try:
             result, token_data = self.query_engine.query_similarity(
-                query, prompt_instructions
+                query, response_format_instructions
             )
             self.logger.info("Similarity query completed.")
             return result, token_data
         except Exception as e:
-            self.logger.error(f"Error during similarity query execution: {e}")
-            return None, {"total": 0, "calls": 0}
+            self.logger.exception(f"Error during similarity query execution: {e}")
+            raise
 
     def run_pipeline(
         self,
         data,
         claim,
         claim_id,
-        prompt_instructions=None,
+        response_format_instructions=None,
     ):
         """
         Executes the entire RAG pipeline: data loading, graph generation, and fact-checking.
@@ -138,7 +139,7 @@ class RAG_Pipeline:
             data (list): List of dictionaries containing the scraped article data.
             claim (str): The specific claim text to be verified.
             claim_id (str): The unique ID of the claim, used to organize graph assets.
-            prompt_instructions (str, optional): Custom instructions for the LLM prompt.
+            response_format_instructions (str, optional): Instructions for structured model output.
 
         Returns:
             tuple: A tuple containing:
@@ -166,7 +167,8 @@ class RAG_Pipeline:
 
             # Step 3: Execute the similarity query directly with whatever instructions were passed
             result, token_data = self.query_similarity(
-                query=claim, prompt_instructions=prompt_instructions
+                query=claim,
+                response_format_instructions=response_format_instructions,
             )
 
             total_time = time.time() - start_time
@@ -178,7 +180,7 @@ class RAG_Pipeline:
 
         except Exception as e:
             total_time = time.time() - start_time
-            self.logger.error(
+            self.logger.exception(
                 f"Error during pipeline execution (total time: {total_time:.2f} seconds): {e}"
             )
-            return None, None, {"total": 0, "calls": 0}
+            raise

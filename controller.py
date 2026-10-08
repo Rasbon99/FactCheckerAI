@@ -84,13 +84,22 @@ class Controller:
             )
             if response.status_code != 200:
                 self.logger.error(f"Error from backend: {response.text}")
-                raise HTTPException(
-                    status_code=response.status_code, detail=response.text
-                )
+                try:
+                    detail = response.json().get("detail", response.text)
+                except ValueError:
+                    detail = response.text
+                raise HTTPException(status_code=response.status_code, detail=detail)
+
             return {"status_code": response.status_code, "response": response.json()}
+
+        except HTTPException:
+            raise
+        except requests.RequestException as e:
+            self.logger.exception(f"Error calling run_pipeline: {e}")
+            raise HTTPException(status_code=503, detail=str(e)) from e
         except Exception as e:
-            self.logger.error(f"Error calling run_pipeline: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            self.logger.exception(f"Error calling run_pipeline: {e}")
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     def clean_conversations(self):
         """
@@ -106,14 +115,23 @@ class Controller:
             response = requests.post(f"{self.backend_server_url}/delete_db")
             if response.status_code != 200:
                 self.logger.error(f"Error from backend on delete_db: {response.text}")
-                raise HTTPException(
-                    status_code=response.status_code, detail=response.text
-                )
+                try:
+                    detail = response.json().get("detail", response.text)
+                except ValueError:
+                    detail = response.text
+                raise HTTPException(status_code=response.status_code, detail=detail)
+
             # Return an empty response
             return {}
+
+        except HTTPException:
+            raise
+        except requests.RequestException as e:
+            self.logger.exception(f"Error calling delete_db: {e}")
+            raise HTTPException(status_code=503, detail=str(e)) from e
         except Exception as e:
-            self.logger.error(f"Error calling delete_db: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            self.logger.exception(f"Error calling delete_db: {e}")
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     def get_conversation(self):
         """
@@ -129,18 +147,27 @@ class Controller:
             response = requests.get(f"{self.backend_server_url}/get_history")
             if response.status_code != 200:
                 self.logger.error(f"Error from backend on get_history: {response.text}")
-                raise HTTPException(
-                    status_code=response.status_code, detail=response.text
-                )
+                try:
+                    detail = response.json().get("detail", response.text)
+                except ValueError:
+                    detail = response.text
+                raise HTTPException(status_code=response.status_code, detail=detail)
+
             # Return an empty response
             response = {
                 "status_code": response.status_code,
                 "response": response.json(),
             }
             return response
+
+        except HTTPException:
+            raise
+        except requests.RequestException as e:
+            self.logger.exception(f"Error calling get_history: {e}")
+            raise HTTPException(status_code=503, detail=str(e)) from e
         except Exception as e:
-            self.logger.error(f"Error calling get_history: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            self.logger.exception(f"Error calling get_history: {e}")
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # Create an instance of Controller and retrieve the FastAPI app
