@@ -1,5 +1,4 @@
 import os
-import json
 import time
 import uuid
 import dotenv
@@ -10,23 +9,20 @@ from log import Logger
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.vectorstores import InMemoryVectorStore
-from langchain_ollama import OllamaEmbeddings
 
 # --- Import Pipeline Components ---
-from Evaluation.Utils.experiment_tracker import ExperimentTracker
 from Evaluation.Utils.dataset_manager import DatasetManager
+from Utils.prompt_manager import get_dataset_response_format_instructions
 from WebScraper.scraper import Scraper
-from Database.data_entities import Claim, Answer
+from Database.data_entities import Claim, Answer, Experiment
+from Utils.embedding_handler import get_embedding_model
 
 # Load environment variables
-dotenv.load_dotenv("key.env", override=True)
+dotenv.load_dotenv("key.env", override=False)
 
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
-logger = Logger("Hybrid-OpenWeb").get_logger()
-
-# --- CONFIGURATION FLAG ---
-USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
+logger = Logger("HybridRAG-OpenWeb").get_logger()
 
 # Initialize Groq Client
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -35,14 +31,13 @@ client = Groq(api_key=GROQ_API_KEY)
 
 
 def get_hybrid_rag_verdict(
-    claim_text, best_evidence_string, prompt_instructions, nei_label
+    claim_text, best_evidence_string, response_format_instructions
 ):
     """Asks the LLM to verify the claim using ONLY the top chunks found by Hybrid RAG (BM25 + Dense Embeddings)."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
-    If the evidence does not contain enough information to make a definitive decision, answer exactly: {nei_label}.
 
-    {prompt_instructions}
+    {response_format_instructions}
 
     EVIDENCE:
     {best_evidence_string}
@@ -63,160 +58,277 @@ def get_hybrid_rag_verdict(
 
 
 def run_hybrid_rag_baseline_openweb():
-    # Initialize the Smart Dataset Manager
     dataset_manager = DatasetManager()
-    active_dataset = dataset_manager.active_dataset
-    tracker_env_name = dataset_manager.get_tracker_dataset_name("open-web")
-    prompt_instructions = dataset_manager.get_prompt_instructions()
-    nei_label = (
-        "NOT ENOUGH INFO" if active_dataset == "FEVER" else "Not Enough Evidence"
+    metadata = dataset_manager.get_experiment_metadata(environment="open_web")
+    active_dataset = metadata["dataset_name"]
+    use_meta = metadata["use_metadata"]
+
+    response_format_instructions = get_dataset_response_format_instructions(
+        active_dataset
     )
 
     logger.info(
-        f"Starting Baseline Hybrid RAG (Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
+        f"Starting Baseline (HybridRAG - Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
     )
+    logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {active_dataset}")
-    logger.info(f"Using Metadata Super Query: {USE_METADATA}")
-
-    logger.info("Loading Ollama Embeddings (This takes a few seconds)...")
-    embeddings = OllamaEmbeddings(model="nomic-embed-text")
+    logger.info(f"Experiment Type: {metadata['experiment_type']}")
+    logger.info(f"Using Metadata Super Query: {use_meta}")
 
     successful_runs = 0
+    failed_runs = 0
 
     try:
+        logger.info(
+            "Loading Hugging Face Embeddings natively (This takes a few seconds)..."
+        )
+        embeddings = get_embedding_model()
+
         claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
 
         for line_number, data in enumerate(claims_data):
-            # 1. Instantiate Scraper inside the loop to avoid DuckDuckGo session bans
-            scraper = Scraper()
+            claim_id = None
+            claim_text = ""
+            ground_truth = ""
+            search_query = ""
+            current_stage = "claim_setup"
 
-            claim_text = data.get("claim", "")
-            ground_truth = data.get("label", "")
+            latency_retrieval = 0.0
+            latency_generation = 0.0
+            tokens_retrieval = 0
+            tokens_used = 0
+            calls_retrieval = 0
 
-            # --- CONDITIONAL METADATA QUERY ---
-            search_query = claim_text
-            if active_dataset == "AVERITEC" and USE_METADATA:
-                search_query = dataset_manager.build_search_query(data)
+            raw_scraped_sources = []
+            scraper_metrics = {}
+            best_evidence = ""
+            query_result = None
 
-            logger.info(f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}")
-            if search_query != claim_text:
-                logger.info(f"Enriched Search Query: {search_query}")
+            try:
+                scraper = Scraper()
 
-            claim_id = str(uuid.uuid4())
-            tracker = ExperimentTracker(
-                claim_id=claim_id,
-                ground_truth=ground_truth,
-                system_type="Baseline-Hybrid",
-                dataset_setting=tracker_env_name,
-            )
+                claim_text = data.get("claim", "")
+                ground_truth = data.get("label", "")
 
-            Claim(
-                text=claim_text,
-                title="[Hybrid] " + claim_text[:30] + "...",
-                summary="Tested by scoring scraped pages using LangChain Hybrid RAG (BM25 + Dense Embeddings).",
-                claim_id=claim_id,
-            )
+                search_query = claim_text
+                if active_dataset == "AVERITEC" and use_meta:
+                    search_query = dataset_manager.build_search_query(data)
 
-            # --- 1. Retrieval & Filtering (Scraper + LangChain Dense RAG) ---
-            def run_retrieval():
-                # Pass the enriched query to the scraper
+                logger.info(
+                    f"[{line_number + 1}/{MAX_CLAIMS_TO_TEST}] Claim: {claim_text}"
+                )
+                if search_query != claim_text:
+                    logger.info(f"Enriched Search Query: {search_query}")
+
+                claim_id = str(uuid.uuid4())
+
+                Claim(
+                    text=claim_text,
+                    title="[Hybrid] " + claim_text[:30] + "...",
+                    claim_id=claim_id,
+                )
+
+                # --- 1. Retrieval & Filtering (Scraper + LangChain Dense RAG) ---
+                current_stage = "retrieval"
+
+                t0 = time.time()
+
                 raw_scraped_sources, scraper_metrics = scraper.search_and_extract(
                     search_query, num_results=10
                 )
 
                 if not raw_scraped_sources:
-                    return "No relevant articles could be scraped.", scraper_metrics
-
-                # Step A: Convert raw scraped dictionaries into LangChain Documents
-                docs = []
-                for src in raw_scraped_sources:
-                    body_text = src.get("body", "")
-                    if body_text.strip():
-                        docs.append(
-                            Document(
-                                page_content=body_text,
-                                metadata={"source": src.get("url", "Unknown URL")},
+                    best_evidence = "No relevant articles could be scraped."
+                else:
+                    docs = []
+                    for src in raw_scraped_sources:
+                        body_text = src.get("body", "")
+                        if body_text.strip():
+                            docs.append(
+                                Document(
+                                    page_content=body_text,
+                                    metadata={"source": src.get("url", "Unknown URL")},
+                                )
                             )
+
+                    logger.info(
+                        f"Scraped {len(docs)} pages. Chunking and embedding natively..."
+                    )
+
+                    text_splitter = RecursiveCharacterTextSplitter(
+                        chunk_size=1000, chunk_overlap=100
+                    )
+                    splits = text_splitter.split_documents(docs)
+
+                    vectorstore = InMemoryVectorStore.from_documents(splits, embeddings)
+                    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+                    top_docs = retriever.invoke(search_query)
+
+                    best_evidence = ""
+                    for i, doc in enumerate(top_docs):
+                        best_evidence += f"\n--- MATCH {i+1} (Source: {doc.metadata['source']}) ---\n{doc.page_content}\n"
+
+                latency_retrieval = time.time() - t0
+                tokens_retrieval = scraper_metrics.get("total", 0)
+                calls_retrieval = scraper_metrics.get("calls", 0)
+
+                # --- 2. Generation (The LLM Call) ---
+                current_stage = "generation"
+
+                t0 = time.time()
+                query_result, tokens_used = get_hybrid_rag_verdict(
+                    claim_text, best_evidence, response_format_instructions
+                )
+                latency_generation = time.time() - t0
+
+                # --- 3. Verdict Parsing ---
+                current_stage = "parsing"
+
+                error_type = None
+                error_message = None
+                error_stage = None
+
+                try:
+                    if not query_result or not query_result.strip():
+                        predicted_label = "Error"
+                        error_type = "EmptyLLMResponse"
+                        error_message = "The LLM returned an empty response."
+                        error_stage = "parsing"
+                        query_result = "The LLM failed to generate a response."
+
+                    elif "VERDICT:" in query_result and "REASONING:" in query_result:
+                        predicted_label = (
+                            query_result.split("REASONING:")[0]
+                            .replace("VERDICT:", "")
+                            .strip()
                         )
 
-                logger.info(
-                    f"Scraped {len(docs)} pages. Chunking and embedding with Ollama..."
+                    else:
+                        predicted_label = "Error"
+                        error_type = "UnstructuredResponse"
+                        error_message = "The LLM response did not contain both VERDICT and REASONING."
+                        error_stage = "parsing"
+
+                except Exception as e:
+                    logger.exception(f"Error parsing verdict: {e}")
+                    predicted_label = "Error"
+                    error_type = type(e).__name__
+                    error_message = str(e)
+                    error_stage = "parsing"
+
+                logger.info(f"Hybrid RAG Verdict: {predicted_label}")
+
+                current_stage = "database_logging"
+
+                Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
+
+                # --- 4. Log to DB ---
+                Experiment(
+                    claim_id=claim_id,
+                    predicted_label=predicted_label,
+                    ground_truth=ground_truth,
+                    latencies={
+                        "preprocessor": 0.0,
+                        "retrieval": latency_retrieval,
+                        "generation": latency_generation,
+                    },
+                    tokens={
+                        "preprocessor": 0,
+                        "retrieval": tokens_retrieval,
+                        "generation": tokens_used,
+                    },
+                    calls={
+                        "preprocessor": 0,
+                        "retrieval": calls_retrieval,
+                        "generation": 1,
+                    },
+                    evidence_data={
+                        "claim_text": claim_text,
+                        "raw_sources": raw_scraped_sources,
+                        "hybrid_evidence": best_evidence,
+                        "query_result": query_result,
+                    },
+                    system_type="HybridRAG",
+                    environment=metadata["environment"],
+                    dataset_name=metadata["dataset_name"],
+                    experiment_type=metadata["experiment_type"],
+                    use_metadata=use_meta,
+                    error_details=(
+                        f"Stage: {error_stage} | "
+                        f"Type: {error_type} | "
+                        f"Message: {error_message}"
+                        if error_type is not None
+                        else None
+                    ),
                 )
 
-                # Step B: Split the massive pages into clean, overlapping paragraphs
-                text_splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=1000, chunk_overlap=100
-                )
-                splits = text_splitter.split_documents(docs)
-
-                # Step C: Embed the chunks and store them in a temporary local vector space
-                vectorstore = InMemoryVectorStore.from_documents(splits, embeddings)
-
-                # Step D: Perform the semantic search using the ENRICHED query
-                retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-                top_docs = retriever.invoke(search_query)
-
-                # Step E: Format the winning chunks into a single evidence string
-                best_evidence = ""
-                for i, doc in enumerate(top_docs):
-                    best_evidence += f"\n--- MATCH {i+1} (Source: {doc.metadata['source']}) ---\n{doc.page_content}\n"
-
-                return best_evidence, scraper_metrics
-
-            best_evidence = tracker.run_stage("retrieval", run_retrieval)
-
-            if isinstance(best_evidence, tuple):
-                best_evidence = best_evidence[0]
-
-            # --- 2. Generation (The LLM Call) ---
-            def run_llm():
-                # Strictly pass the unedited claim_text to the generator
-                res_text, toks = get_hybrid_rag_verdict(
-                    claim_text, best_evidence, prompt_instructions, nei_label
-                )
-                return res_text, {"total": toks, "calls": 1}
-
-            query_result = tracker.run_stage("generation", run_llm)
-
-            if isinstance(query_result, tuple):
-                query_result = query_result[0]
-
-            # --- 3. Verdict Parsing ---
-            try:
-                if query_result and "VERDICT:" in query_result:
-                    predicted_label = (
-                        query_result.split("REASONING:")[0]
-                        .replace("VERDICT:", "")
-                        .strip()
-                    )
+                if predicted_label == "Error":
+                    failed_runs += 1
                 else:
-                    predicted_label = "Error: Unstructured Response"
-            except Exception:
-                predicted_label = "Parsing Error"
+                    successful_runs += 1
 
-            logger.info(f"Hybrid RAG Verdict: {predicted_label}")
+                logger.info(
+                    "Sleeping for 15 seconds to respect DuckDuckGo rate limits..."
+                )
+                time.sleep(15)
 
-            Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
+            except Exception as e:
+                logger.exception(f"Error processing claim {line_number + 1}: {e}")
 
-            # --- 4. Log to DB ---
-            tracker.finalize(
-                predicted_label,
-                {
-                    "claim_text": claim_text,
-                    "hybrid_evidence": best_evidence,
-                    "query_result": query_result,
-                },
-            )
+                try:
+                    if claim_id is not None:
+                        Experiment(
+                            claim_id=claim_id,
+                            predicted_label="Error",
+                            ground_truth=ground_truth,
+                            latencies={
+                                "preprocessor": 0.0,
+                                "retrieval": latency_retrieval,
+                                "generation": latency_generation,
+                            },
+                            tokens={
+                                "preprocessor": 0,
+                                "retrieval": tokens_retrieval,
+                                "generation": tokens_used,
+                            },
+                            calls={
+                                "preprocessor": 0,
+                                "retrieval": calls_retrieval,
+                                "generation": 1 if query_result is not None else 0,
+                            },
+                            evidence_data={
+                                "claim_text": claim_text,
+                                "search_query": search_query,
+                                "raw_sources": raw_scraped_sources,
+                                "hybrid_evidence": best_evidence,
+                                "query_result": query_result,
+                            },
+                            system_type="HybridRAG",
+                            environment=metadata["environment"],
+                            dataset_name=metadata["dataset_name"],
+                            experiment_type=metadata["experiment_type"],
+                            use_metadata=use_meta,
+                            error_details=(
+                                f"Stage: {current_stage} | "
+                                f"Type: {type(e).__name__} | "
+                                f"Message: {str(e)}"
+                            ),
+                        )
+                except Exception:
+                    logger.exception(
+                        f"Failed to save failed experiment for claim {line_number + 1}"
+                    )
 
-            successful_runs += 1
-            logger.info("Sleeping for 15 seconds to respect DuckDuckGo rate limits...")
-            time.sleep(15)
+                failed_runs += 1
+                continue
 
     except Exception as e:
-        logger.error(f"{e}")
+        logger.exception(f"Fatal error during experiment: {e}")
 
     logger.info("=" * 20)
     logger.info("HYBRID RAG (OPEN WEB) COMPLETE!")
+    logger.info(f"Successfully processed: {successful_runs}")
+    logger.info(f"Failed processing: {failed_runs}")
     logger.info("=" * 20)
 
 

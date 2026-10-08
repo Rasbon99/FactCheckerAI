@@ -3,6 +3,7 @@ import time
 import uuid
 import dotenv
 from groq import Groq
+from rank_bm25 import BM25Okapi
 from log import Logger
 
 from Evaluation.Utils.dataset_manager import DatasetManager
@@ -14,7 +15,7 @@ dotenv.load_dotenv("key.env", override=False)
 
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
-logger = Logger("PromptStuffing-OpenWeb").get_logger()
+logger = Logger("SparseRAG-OpenWeb").get_logger()
 
 # Initialize Groq Client
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -22,17 +23,25 @@ GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
 client = Groq(api_key=GROQ_API_KEY)
 
 
-def get_prompt_stuffing_verdict(
-    claim_text, massive_evidence_string, response_format_instructions
-):
-    """Asks the LLM to verify the claim using the massive wall of scraped text."""
+def simple_chunker(text, chunk_word_size=150):
+    """Breaks massive web pages into smaller paragraph-sized chunks for BM25 to analyze."""
+    words = text.split()
+    chunks = []
+    for i in range(0, len(words), chunk_word_size):
+        chunk = " ".join(words[i : i + chunk_word_size])
+        chunks.append(chunk)
+    return chunks
+
+
+def get_bm25_verdict(claim_text, best_evidence_string, response_format_instructions):
+    """Asks the LLM to verify the claim using ONLY the top chunks found by BM25."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
 
     {response_format_instructions}
 
     EVIDENCE:
-    {massive_evidence_string}
+    {best_evidence_string}
 
     CLAIM: {claim_text}
     """
@@ -49,7 +58,7 @@ def get_prompt_stuffing_verdict(
     return result_text, tokens_used
 
 
-def run_prompt_stuffing_baseline_openweb():
+def run_sparse_baseline_openweb():
     dataset_manager = DatasetManager()
     metadata = dataset_manager.get_experiment_metadata(environment="open_web")
     active_dataset = metadata["dataset_name"]
@@ -60,7 +69,7 @@ def run_prompt_stuffing_baseline_openweb():
     )
 
     logger.info(
-        f"Starting Baseline (Prompt Stuffing - Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
+        f"Starting Baseline (SparseRAG - Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
     )
     logger.info(f"Environment: {metadata['environment']}")
     logger.info(f"Active Dataset: {active_dataset}")
@@ -111,11 +120,11 @@ def run_prompt_stuffing_baseline_openweb():
 
                 Claim(
                     text=claim_text,
-                    title="[PromptStuff] " + claim_text[:30] + "...",
+                    title="[Sparse] " + claim_text[:30] + "...",
                     claim_id=claim_id,
                 )
 
-                # --- 1. Retrieval (Scraper) ---
+                # --- 1. Retrieval & Filtering (Scraper + BM25) ---
                 current_stage = "retrieval"
 
                 t0 = time.time()
@@ -123,27 +132,25 @@ def run_prompt_stuffing_baseline_openweb():
                     search_query, num_results=10
                 )
 
-                combined_evidence = ""
-                for src in raw_scraped_sources:
-                    combined_evidence += (
-                        f"\n--- Source: {src.get('url')} ---\n{src.get('body', '')}\n"
-                    )
+                logger.info(
+                    f"Scraped {len(raw_scraped_sources)} pages. Running BM25 math..."
+                )
 
-                if not combined_evidence.strip():
+                all_text = ""
+                for src in raw_scraped_sources:
+                    all_text += src.get("body", "") + " "
+
+                chunks = simple_chunker(all_text)
+
+                if not chunks:
                     best_evidence = "No relevant articles could be scraped."
                 else:
-                    # --- API SAFETY VALVE FOR PROMPT STUFFING ---
-                    MAX_CHARS = 20000
-                    if len(combined_evidence) > MAX_CHARS:
-                        logger.warning(
-                            f"Evidence massive ({len(combined_evidence)} chars). Truncating to {MAX_CHARS} to survive API limits."
-                        )
-                        best_evidence = (
-                            combined_evidence[:MAX_CHARS]
-                            + "\n...[EVIDENCE TRUNCATED DUE TO CONTEXT LIMITS]..."
-                        )
-                    else:
-                        best_evidence = combined_evidence
+                    tokenized_corpus = [chunk.lower().split() for chunk in chunks]
+                    bm25 = BM25Okapi(tokenized_corpus)
+                    tokenized_query = search_query.lower().split()
+
+                    top_3_chunks = bm25.get_top_n(tokenized_query, chunks, n=3)
+                    best_evidence = "\n--- BM25 TOP MATCH ---\n".join(top_3_chunks)
 
                 latency_retrieval = time.time() - t0
                 tokens_retrieval = scraper_metrics.get("total", 0)
@@ -153,7 +160,7 @@ def run_prompt_stuffing_baseline_openweb():
                 current_stage = "generation"
 
                 t0 = time.time()
-                query_result, tokens_used = get_prompt_stuffing_verdict(
+                query_result, tokens_used = get_bm25_verdict(
                     claim_text, best_evidence, response_format_instructions
                 )
                 latency_generation = time.time() - t0
@@ -193,7 +200,7 @@ def run_prompt_stuffing_baseline_openweb():
                     error_message = str(e)
                     error_stage = "parsing"
 
-                logger.info(f"Prompt Stuffing Verdict: {predicted_label}")
+                logger.info(f"Sparse Verdict: {predicted_label}")
 
                 current_stage = "database_logging"
 
@@ -222,10 +229,10 @@ def run_prompt_stuffing_baseline_openweb():
                     evidence_data={
                         "claim_text": claim_text,
                         "raw_sources": raw_scraped_sources,
-                        "best_evidence": best_evidence,
+                        "bm25_evidence": best_evidence,
                         "query_result": query_result,
                     },
-                    system_type="PromptStuffing",
+                    system_type="SparseRAG",
                     environment=metadata["environment"],
                     dataset_name=metadata["dataset_name"],
                     experiment_type=metadata["experiment_type"],
@@ -277,10 +284,10 @@ def run_prompt_stuffing_baseline_openweb():
                                 "claim_text": claim_text,
                                 "search_query": search_query,
                                 "raw_sources": raw_scraped_sources,
-                                "best_evidence": best_evidence,
+                                "bm25_evidence": best_evidence,
                                 "query_result": query_result,
                             },
-                            system_type="PromptStuffing",
+                            system_type="SparseRAG",
                             environment=metadata["environment"],
                             dataset_name=metadata["dataset_name"],
                             experiment_type=metadata["experiment_type"],
@@ -303,11 +310,11 @@ def run_prompt_stuffing_baseline_openweb():
         logger.exception(f"Fatal error during experiment: {e}")
 
     logger.info("=" * 20)
-    logger.info("PROMPT STUFFING (OPEN WEB) COMPLETE!")
+    logger.info("SPARSE (OPEN WEB) COMPLETE!")
     logger.info(f"Successfully processed: {successful_runs}")
     logger.info(f"Failed processing: {failed_runs}")
     logger.info("=" * 20)
 
 
 if __name__ == "__main__":
-    run_prompt_stuffing_baseline_openweb()
+    run_sparse_baseline_openweb()

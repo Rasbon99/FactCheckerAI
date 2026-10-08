@@ -1,38 +1,43 @@
 import os
+import sqlite3
 import time
 import uuid
+import re
 import dotenv
 from groq import Groq
 from log import Logger
 
 from Evaluation.Utils.dataset_manager import DatasetManager
 from Utils.prompt_manager import get_dataset_response_format_instructions
-from WebScraper.scraper import Scraper
+from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
 from Database.data_entities import Claim, Answer, Experiment
+from rank_bm25 import BM25Okapi
 
 dotenv.load_dotenv("key.env", override=False)
 
 # Configuration
 MAX_CLAIMS_TO_TEST = 5
-logger = Logger("PromptStuffing-OpenWeb").get_logger()
 
-# Initialize Groq Client
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
 client = Groq(api_key=GROQ_API_KEY)
+logger = Logger("SparseRAG-Controlled").get_logger()
 
 
-def get_prompt_stuffing_verdict(
-    claim_text, massive_evidence_string, response_format_instructions
-):
-    """Asks the LLM to verify the claim using the massive wall of scraped text."""
+def clean_query_for_fts(text):
+    """Removes punctuation that breaks SQLite FTS syntax."""
+    return re.sub(r"[^a-zA-Z0-9\s]", "", text).strip()
+
+
+def get_bm25_verdict(claim_text, retrieved_evidence, response_format_instructions):
+    """Asks the LLM to verify the claim using the BM25 retrieved text."""
     prompt = f"""You are a strict fact-checking AI.
     Verify the following claim using ONLY the provided evidence. 
 
     {response_format_instructions}
 
     EVIDENCE:
-    {massive_evidence_string}
+    {retrieved_evidence}
 
     CLAIM: {claim_text}
     """
@@ -43,34 +48,48 @@ def get_prompt_stuffing_verdict(
         max_tokens=200,
     )
 
-    result_text = response.choices[0].message.content
-    tokens_used = response.usage.total_tokens if response.usage else 0
-
-    return result_text, tokens_used
-
-
-def run_prompt_stuffing_baseline_openweb():
-    dataset_manager = DatasetManager()
-    metadata = dataset_manager.get_experiment_metadata(environment="open_web")
-    active_dataset = metadata["dataset_name"]
-    use_meta = metadata["use_metadata"]
-
-    response_format_instructions = get_dataset_response_format_instructions(
-        active_dataset
+    return (
+        response.choices[0].message.content,
+        response.usage.total_tokens if response.usage else 0,
     )
 
-    logger.info(
-        f"Starting Baseline (Prompt Stuffing - Open Web) with {MAX_CLAIMS_TO_TEST} claims..."
-    )
-    logger.info(f"Environment: {metadata['environment']}")
-    logger.info(f"Active Dataset: {active_dataset}")
-    logger.info(f"Experiment Type: {metadata['experiment_type']}")
-    logger.info(f"Using Metadata Super Query: {use_meta}")
+
+def run_sparse_baseline():
+    wiki_conn = None
+    wiki_cursor = None
+    averitec_retriever = None
 
     successful_runs = 0
     failed_runs = 0
 
     try:
+        dataset_manager = DatasetManager()
+
+        metadata = dataset_manager.get_experiment_metadata(environment="controlled")
+        active_dataset = metadata["dataset_name"]
+        use_meta = metadata["use_metadata"]
+
+        response_format_instructions = get_dataset_response_format_instructions(
+            active_dataset
+        )
+
+        logger.info(
+            f"Starting Baseline (Sparse/BM25) with {MAX_CLAIMS_TO_TEST} claims..."
+        )
+        logger.info(f"Environment: {metadata['environment']}")
+        logger.info(f"Active Dataset: {active_dataset}")
+        logger.info(f"Experiment Type: {metadata['experiment_type']}")
+        logger.info(f"Using Metadata Super Query: {use_meta}")
+
+        if active_dataset == "FEVER":
+            wiki_db_path = os.getenv(
+                "FEVER_WIKIPEDIA_DB_PATH", "Datasets/FEVER/fever_wiki.db"
+            )
+            wiki_conn = sqlite3.connect(wiki_db_path)
+            wiki_cursor = wiki_conn.cursor()
+        elif active_dataset == "AVERITEC":
+            averitec_retriever = AVeriTeCKnowledgeRetriever()
+
         claims_data = dataset_manager.load_data(max_claims=MAX_CLAIMS_TO_TEST)
 
         for line_number, data in enumerate(claims_data):
@@ -82,18 +101,12 @@ def run_prompt_stuffing_baseline_openweb():
 
             latency_retrieval = 0.0
             latency_generation = 0.0
-            tokens_retrieval = 0
-            tokens_used = 0
-            calls_retrieval = 0
+            toks = 0
 
-            raw_scraped_sources = []
-            scraper_metrics = {}
-            best_evidence = ""
+            raw_sources = []
             query_result = None
 
             try:
-                scraper = Scraper()
-
                 claim_text = data.get("claim", "")
                 ground_truth = data.get("label", "")
 
@@ -111,54 +124,96 @@ def run_prompt_stuffing_baseline_openweb():
 
                 Claim(
                     text=claim_text,
-                    title="[PromptStuff] " + claim_text[:30] + "...",
+                    title="[Sparse] " + claim_text[:30] + "...",
                     claim_id=claim_id,
                 )
 
-                # --- 1. Retrieval (Scraper) ---
+                # --- THE RETRIEVAL STEP (BM25) ---
                 current_stage = "retrieval"
 
                 t0 = time.time()
-                raw_scraped_sources, scraper_metrics = scraper.search_and_extract(
-                    search_query, num_results=10
-                )
+                formatted_results = []
 
-                combined_evidence = ""
-                for src in raw_scraped_sources:
-                    combined_evidence += (
-                        f"\n--- Source: {src.get('url')} ---\n{src.get('body', '')}\n"
-                    )
-
-                if not combined_evidence.strip():
-                    best_evidence = "No relevant articles could be scraped."
-                else:
-                    # --- API SAFETY VALVE FOR PROMPT STUFFING ---
-                    MAX_CHARS = 20000
-                    if len(combined_evidence) > MAX_CHARS:
-                        logger.warning(
-                            f"Evidence massive ({len(combined_evidence)} chars). Truncating to {MAX_CHARS} to survive API limits."
-                        )
-                        best_evidence = (
-                            combined_evidence[:MAX_CHARS]
-                            + "\n...[EVIDENCE TRUNCATED DUE TO CONTEXT LIMITS]..."
+                if active_dataset == "FEVER":
+                    if wiki_cursor is None:
+                        raise RuntimeError(
+                            "wiki_cursor is None: cannot query FEVER database"
                         )
                     else:
-                        best_evidence = combined_evidence
+                        clean_claim = clean_query_for_fts(search_query)
+                        wiki_cursor.execute(
+                            """
+                            SELECT page_id, lines FROM wiki_fts 
+                            WHERE wiki_fts MATCH ? 
+                            ORDER BY rank 
+                            LIMIT 2
+                            """,
+                            (clean_claim,),
+                        )
+
+                        for row in wiki_cursor.fetchall():
+                            formatted_results.append(
+                                {"title": row[0], "snippet": row[1][:1500]}
+                            )
+
+                elif active_dataset == "AVERITEC":
+                    claim_id_internal = data.get("internal_id")
+                    if averitec_retriever is None:
+                        raise RuntimeError(
+                            "averitec_retriever is None: cannot query AVERITEC database"
+                        )
+                    else:
+                        sentences = averitec_retriever.get_evidence_for_claim(
+                            claim_id_internal
+                        )
+
+                        if "noisy_ids" in data and sentences is not None:
+                            for n_id in data["noisy_ids"]:
+                                noisy_sentences = (
+                                    averitec_retriever.get_evidence_for_claim(n_id)
+                                )
+                                if noisy_sentences:
+                                    sentences.extend(noisy_sentences)
+
+                    if sentences:
+                        tokenized_corpus = [s.lower().split() for s in sentences]
+                        bm25 = BM25Okapi(tokenized_corpus)
+                        tokenized_query = search_query.lower().split()
+                        top_sentences = bm25.get_top_n(tokenized_query, sentences, n=2)
+
+                        for i, sentence in enumerate(top_sentences):
+                            formatted_results.append(
+                                {
+                                    "title": f"AVeriTeC Store ID: {claim_id_internal} (Rank {i+1})",
+                                    "snippet": sentence,
+                                }
+                            )
 
                 latency_retrieval = time.time() - t0
-                tokens_retrieval = scraper_metrics.get("total", 0)
-                calls_retrieval = scraper_metrics.get("calls", 0)
 
-                # --- 2. Generation (The LLM Call) ---
+                combined_evidence = ""
+                raw_sources = []
+
+                for res in formatted_results:
+                    combined_evidence += (
+                        f"\n--- Source: {res['title']} ---\n{res['snippet']}...\n"
+                    )
+                    raw_sources.append(res)
+
+                if not combined_evidence:
+                    combined_evidence = (
+                        f"No relevant evidence found in the {active_dataset} database."
+                    )
+
+                # --- THE GENERATION STEP ---
                 current_stage = "generation"
 
                 t0 = time.time()
-                query_result, tokens_used = get_prompt_stuffing_verdict(
-                    claim_text, best_evidence, response_format_instructions
+                query_result, toks = get_bm25_verdict(
+                    claim_text, combined_evidence, response_format_instructions
                 )
                 latency_generation = time.time() - t0
 
-                # --- 3. Verdict Parsing ---
                 current_stage = "parsing"
 
                 error_type = None
@@ -193,13 +248,11 @@ def run_prompt_stuffing_baseline_openweb():
                     error_message = str(e)
                     error_stage = "parsing"
 
-                logger.info(f"Prompt Stuffing Verdict: {predicted_label}")
-
-                current_stage = "database_logging"
+                logger.info(f"BM25 Verdict: {predicted_label}")
 
                 Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
 
-                # --- 4. Log to DB ---
+                # --- LOG TO EXPERIMENTS DATABASE ---
                 Experiment(
                     claim_id=claim_id,
                     predicted_label=predicted_label,
@@ -209,23 +262,14 @@ def run_prompt_stuffing_baseline_openweb():
                         "retrieval": latency_retrieval,
                         "generation": latency_generation,
                     },
-                    tokens={
-                        "preprocessor": 0,
-                        "retrieval": tokens_retrieval,
-                        "generation": tokens_used,
-                    },
-                    calls={
-                        "preprocessor": 0,
-                        "retrieval": calls_retrieval,
-                        "generation": 1,
-                    },
+                    tokens={"preprocessor": 0, "retrieval": 0, "generation": toks},
+                    calls={"preprocessor": 0, "retrieval": 0, "generation": 1},
                     evidence_data={
                         "claim_text": claim_text,
-                        "raw_sources": raw_scraped_sources,
-                        "best_evidence": best_evidence,
+                        "raw_sources": raw_sources,
                         "query_result": query_result,
                     },
-                    system_type="PromptStuffing",
+                    system_type="SparseRAG",
                     environment=metadata["environment"],
                     dataset_name=metadata["dataset_name"],
                     experiment_type=metadata["experiment_type"],
@@ -244,10 +288,7 @@ def run_prompt_stuffing_baseline_openweb():
                 else:
                     successful_runs += 1
 
-                logger.info(
-                    "Sleeping for 15 seconds to respect DuckDuckGo rate limits..."
-                )
-                time.sleep(15)
+                time.sleep(2)
 
             except Exception as e:
                 logger.exception(f"Error processing claim {line_number + 1}: {e}")
@@ -265,22 +306,21 @@ def run_prompt_stuffing_baseline_openweb():
                             },
                             tokens={
                                 "preprocessor": 0,
-                                "retrieval": tokens_retrieval,
-                                "generation": tokens_used,
+                                "retrieval": 0,
+                                "generation": toks,
                             },
                             calls={
                                 "preprocessor": 0,
-                                "retrieval": calls_retrieval,
+                                "retrieval": 0,
                                 "generation": 1 if query_result is not None else 0,
                             },
                             evidence_data={
                                 "claim_text": claim_text,
                                 "search_query": search_query,
-                                "raw_sources": raw_scraped_sources,
-                                "best_evidence": best_evidence,
+                                "raw_sources": raw_sources,
                                 "query_result": query_result,
                             },
-                            system_type="PromptStuffing",
+                            system_type="SparseRAG",
                             environment=metadata["environment"],
                             dataset_name=metadata["dataset_name"],
                             experiment_type=metadata["experiment_type"],
@@ -301,13 +341,16 @@ def run_prompt_stuffing_baseline_openweb():
 
     except Exception as e:
         logger.exception(f"Fatal error during experiment: {e}")
+    finally:
+        if wiki_conn:
+            wiki_conn.close()
 
     logger.info("=" * 20)
-    logger.info("PROMPT STUFFING (OPEN WEB) COMPLETE!")
+    logger.info("SPARSE BASELINE COMPLETE!")
     logger.info(f"Successfully processed: {successful_runs}")
     logger.info(f"Failed processing: {failed_runs}")
     logger.info("=" * 20)
 
 
 if __name__ == "__main__":
-    run_prompt_stuffing_baseline_openweb()
+    run_sparse_baseline()

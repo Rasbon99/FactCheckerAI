@@ -10,20 +10,14 @@ from log import Logger
 class Preprocessing_Pipeline:
     def __init__(self, env_file="key.env", config=None):
         """
-        Initializes the preprocessing pipeline, setting up the necessary components like NER, Summarizer, and translation configuration.
+        Initializes the preprocessing pipeline, setting up the necessary components like NER, Summarizer, and configuration.
 
         Args:
-            env_file (str, optional): The environment file containing API keys. Default is "Pkey.env".
-            config (dict, optional): Configuration options for translation, summarization, and NER.
-                                      Default is {"translation": True, "summarize": True, "NER": True}.
-
-        Returns:
-            None
-
-        Raises:
-            KeyError: If the environment variables for the API keys cannot be found.
+            env_file (str, optional): The environment file containing API keys. Default is "key.env".
+            config (dict, optional): Configuration options for summarization and NER.
+                                      Default is {"summarize": True, "NER": True}.
         """
-        dotenv.load_dotenv(env_file, override=True)
+        dotenv.load_dotenv(env_file, override=False)
 
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.ner = NER()
@@ -37,20 +31,16 @@ class Preprocessing_Pipeline:
 
     def run_claim_pipe(self, claim, max_lenght=150):
         """
-        Processes a claim by translating it to English and summarizing it.
+        Processes a claim by generating a search title.
 
         Args:
             claim (str): The claim text to preprocess.
             max_lenght (int, optional): The maximum length for the summary. Default is 150.
 
         Returns:
-            str: The preprocessed claim, translated and/or summarized based on configuration.
-        Raises:
-            Exception: If there is an error during preprocessing (translation or summarization).
+            tuple: (claim_title, token_data)
         """
         self.logger.info("Starting claim preprocessing...")
-
-        # Initialize token tracking for this stage
         token_data = {"total": 0, "calls": 0}
 
         if self.config.get("summarize", True):
@@ -60,54 +50,47 @@ class Preprocessing_Pipeline:
             token_data["calls"] += 1
             token_data["total"] += title_tokens
 
-            claim_summary, summary_tokens = self.summarizer.generate_summary(
-                claim, max_lenght
-            )
-            token_data["calls"] += 1
-            token_data["total"] += summary_tokens
+            if not claim_title:
+                self.logger.warning(
+                    "Failed to generate search query. Falling back to raw claim."
+                )
+                claim_title = claim
 
             self.logger.info("Claim preprocessing completed.")
-
-            # Wrap the outputs in parentheses, and append the token_data!
-            return (claim_title, claim_summary), token_data
+            return claim_title, token_data
 
         self.logger.info("Claim preprocessing completed.")
-        return (claim, claim), token_data
+        return claim, token_data
 
     def run_sources_pipe(self, sources, max_lenght=1024):
         """
-        Processes a list of sources by translating and/or summarizing each source as required.
+        Processes a list of sources by summarizing each source and extracting entities/topics.
 
         Args:
             sources (list): A list of source objects (e.g., text articles) to preprocess.
+            max_lenght (int, optional): The maximum token length for the summary. Default is 1024.
 
         Returns:
-            list: A list of preprocessed sources, each being a string of translated and/or summarized text.
-        Raises:
-            NotImplementedError: If the implementation for sources preprocessing is not provided.
+            tuple: (list of preprocessed sources, token_data)
         """
         self.logger.info("Starting sources preprocessing...")
 
-        # Initialize token tracking for this stage
+        if not sources:
+            raise ValueError("No sources available for preprocessing.")
+
         token_data = {"total": 0, "calls": 0}
 
         if self.config.get("summarize", True):
-            summarize_result = self.summarizer.summarize_texts(
+            new_bodies, sum_tokens = self.summarizer.summarize_texts(
                 [d["body"] for d in sources], max_lenght
             )
 
-            # Safely handle the response whether it returns a tuple or just the list
-            if isinstance(summarize_result, tuple):
-                new_bodies, sum_tokens = summarize_result
-                token_data["total"] += sum_tokens
-            else:
-                new_bodies = summarize_result
+            token_data["total"] += sum_tokens
+            token_data["calls"] += len(sources)
 
-            token_data["calls"] += len(
-                sources
-            )  # Assuming one API call per source summarized
             for d, new_body in zip(sources, new_bodies):
-                d["body"] = new_body
+                if new_body:
+                    d["body"] = new_body
 
         if self.config.get("NER", True):
             for source in sources:
@@ -117,14 +100,11 @@ class Preprocessing_Pipeline:
                 token_data["calls"] += 1
                 token_data["total"] += tokens
 
-                if topic_and_entities is None:
-                    topic_and_entities = {"topic": None, "entities": []}
-
                 source["topic"] = topic_and_entities["topic"]
                 source["entities"] = topic_and_entities["entities"]
 
             sources, merge_tokens = self.ner.merge_entities(sources)
-            token_data["calls"] += 1  # Add 1 call for the final merge operation
+            token_data["calls"] += 1
             token_data["total"] += merge_tokens
 
         self.logger.info("Sources preprocessing completed.")
