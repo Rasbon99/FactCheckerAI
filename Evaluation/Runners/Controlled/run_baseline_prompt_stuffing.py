@@ -1,0 +1,384 @@
+import os
+import sqlite3
+import time
+import uuid
+import dotenv
+from llamacpp_client import ChatLlamaCppServer, load_models, set_alias_map
+from langchain_core.messages import HumanMessage
+from log import Logger
+
+from Evaluation.Utils.dataset_manager import DatasetManager
+from Utils.prompt_manager import get_dataset_response_format_instructions
+from Evaluation.Utils.averitec_retriever import AVeriTeCKnowledgeRetriever
+from Database.data_entities import Claim, Answer, Experiment
+
+# Load environment variables
+dotenv.load_dotenv("key.env", override=False)
+
+model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
+model_port = int(os.getenv("LLM_MODEL_PORT", "8080"))
+
+print(f"[Backend] Connecting to local llama.cpp server on port {model_port}...")
+set_alias_map({model_alias: model_port})
+load_models([model_alias])
+
+# Configuration
+USE_METADATA = os.getenv("AVERITEC_USE_METADATA") == "True"
+logger = Logger("PromptStuffing-Controlled").get_logger()
+
+
+def extract_perfect_evidence(evidence_data, wiki_cursor):
+    """
+    Parses the FEVER evidence JSON, queries the SQLite DB, and extracts the exact text.
+    """
+    extracted_text = ""
+
+    for evidence_set in evidence_data:
+        for ev in evidence_set:
+            page_id = ev[2]
+            sentence_num = str(ev[3])
+
+            if page_id is None:
+                continue
+
+            wiki_cursor.execute(
+                "SELECT lines FROM wiki_articles WHERE page_id = ?", (page_id,)
+            )
+            result = wiki_cursor.fetchone()
+
+            if result:
+                raw_lines = result[0]
+                sentences = raw_lines.split("\n")
+                for sentence in sentences:
+                    parts = sentence.split("\t")
+                    if parts[0] == sentence_num and len(parts) > 1:
+                        extracted_text += parts[1] + " "
+                        break
+
+    return extracted_text.strip()
+
+
+def get_prompt_stuffing_verdict(
+    claim_text, massive_evidence_string, response_format_instructions
+):
+    """Asks the LLM to verify the claim using the massive wall of retrieved text."""
+    prompt = f"""You are a strict fact-checking AI.
+    Verify the following claim using ONLY the provided evidence. 
+
+    {response_format_instructions}
+
+    EVIDENCE:
+    {massive_evidence_string}
+
+    CLAIM: {claim_text}
+    """
+
+    client = ChatLlamaCppServer(
+        model=model_alias,
+        temperature=0.0,
+        max_tokens=200,
+    )
+
+    messages = [HumanMessage(content=prompt)]
+    response = client.invoke(messages)
+
+    content = response.content
+    if isinstance(content, list):
+        content = "".join(
+            item if isinstance(item, str) else item.get("text", "")
+            for item in content
+            if isinstance(item, (str, dict))
+        )
+    elif not isinstance(content, str):
+        content = str(content)
+    tokens = (
+        response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
+        if hasattr(response, "response_metadata")
+        else 0
+    )
+
+    return content, tokens
+
+
+def run_prompt_stuffing_baseline_controlled():
+    wiki_conn = None
+    wiki_cursor = None
+    averitec_retriever = None
+
+    successful_runs = 0
+    failed_runs = 0
+
+    try:
+        dataset_manager = DatasetManager()
+
+        metadata = dataset_manager.get_experiment_metadata(environment="controlled")
+        active_dataset = metadata["dataset_name"]
+        use_meta = metadata["use_metadata"]
+
+        response_format_instructions = get_dataset_response_format_instructions(
+            active_dataset
+        )
+
+        logger.info(f"Starting Baseline (Prompt Stuffing - Controlled)...")
+        logger.info(f"Environment: {metadata['environment']}")
+        logger.info(f"Active Dataset: {active_dataset}")
+        logger.info(f"Experiment Type: {metadata['experiment_type']}")
+        logger.info(f"Using Metadata Super Query: {use_meta}")
+
+        if active_dataset == "FEVER":
+            wiki_db_path = os.getenv(
+                "FEVER_WIKIPEDIA_DB_PATH",
+                "Datasets/FEVER/fever_wiki.db",
+            )
+            wiki_conn = sqlite3.connect(wiki_db_path)
+            wiki_cursor = wiki_conn.cursor()
+
+        elif active_dataset == "AVERITEC":
+            averitec_retriever = AVeriTeCKnowledgeRetriever()
+
+        claims_data = dataset_manager.load_data()
+
+        for line_number, data in enumerate(claims_data):
+            claim_id = None
+            claim_text = ""
+            ground_truth = ""
+            search_query = ""
+            current_stage = "claim_setup"
+
+            latency_retrieval = 0.0
+            latency_generation = 0.0
+            tokens_used = 0
+
+            best_evidence = ""
+            query_result = None
+            try:
+                claim_text = data.get("claim", "")
+                ground_truth = data.get("label", "")
+
+                search_query = claim_text
+                if active_dataset == "AVERITEC" and use_meta:
+                    search_query = dataset_manager.build_search_query(data)
+
+                logger.info(f"[{line_number + 1}] Claim: {claim_text}")
+                if search_query != claim_text:
+                    logger.info(f"Enriched Search Query: {search_query}")
+                logger.info(f"Ground Truth: {ground_truth}")
+
+                claim_id = str(uuid.uuid4())
+
+                Claim(
+                    text=claim_text,
+                    title="[PromptStuff] " + claim_text[:30] + "...",
+                    claim_id=claim_id,
+                )
+
+                # --- 1. Retrieval (Database Extract) ---
+                current_stage = "retrieval"
+
+                t0 = time.time()
+                combined_evidence = ""
+
+                if active_dataset == "FEVER":
+                    evidence_data = data.get("evidence", [])
+                    combined_evidence = extract_perfect_evidence(
+                        evidence_data, wiki_cursor
+                    )
+
+                elif active_dataset == "AVERITEC" and averitec_retriever is not None:
+                    claim_id_internal = data.get("internal_id")
+                    all_sentences = averitec_retriever.get_evidence_for_claim(
+                        claim_id_internal
+                    )
+
+                    if "noisy_ids" in data and all_sentences is not None:
+                        for n_id in data["noisy_ids"]:
+                            noisy_sentences = averitec_retriever.get_evidence_for_claim(
+                                n_id
+                            )
+                            if noisy_sentences:
+                                all_sentences.extend(noisy_sentences)
+
+                    if all_sentences:
+                        # In prompt stuffing, we just dump EVERYTHING into the prompt
+                        combined_evidence = "\n".join(all_sentences)
+
+                if not combined_evidence.strip():
+                    best_evidence = (
+                        "No relevant evidence could be found in the dataset."
+                    )
+                else:
+                    # --- API SAFETY VALVE FOR PROMPT STUFFING ---
+                    MAX_CHARS = 20000
+                    if len(combined_evidence) > MAX_CHARS:
+                        logger.warning(
+                            f"Evidence massive ({len(combined_evidence)} chars). Truncating to {MAX_CHARS} to survive API limits."
+                        )
+                        best_evidence = (
+                            combined_evidence[:MAX_CHARS]
+                            + "\n...[EVIDENCE TRUNCATED DUE TO CONTEXT LIMITS]..."
+                        )
+                    else:
+                        best_evidence = combined_evidence
+
+                latency_retrieval = time.time() - t0
+
+                # --- 2. Generation (The LLM Call) ---
+                current_stage = "generation"
+
+                t0 = time.time()
+                query_result, tokens_used = get_prompt_stuffing_verdict(
+                    claim_text, best_evidence, response_format_instructions
+                )
+                latency_generation = time.time() - t0
+
+                # --- 3. Verdict Parsing ---
+                current_stage = "parsing"
+
+                error_type = None
+                error_message = None
+                error_stage = None
+
+                try:
+                    if not query_result or not query_result.strip():
+                        predicted_label = "Error"
+                        error_type = "EmptyLLMResponse"
+                        error_message = "The LLM returned an empty response."
+                        error_stage = "parsing"
+                        query_result = "The LLM failed to generate a response."
+
+                    elif "VERDICT:" in query_result and "REASONING:" in query_result:
+                        predicted_label = (
+                            query_result.split("REASONING:")[0]
+                            .replace("VERDICT:", "")
+                            .strip()
+                        )
+
+                    else:
+                        predicted_label = "Error"
+                        error_type = "UnstructuredResponse"
+                        error_message = "The LLM response did not contain both VERDICT and REASONING."
+                        error_stage = "parsing"
+
+                except Exception as e:
+                    logger.exception(f"Error parsing verdict: {e}")
+                    predicted_label = "Error"
+                    error_type = type(e).__name__
+                    error_message = str(e)
+                    error_stage = "parsing"
+
+                logger.info(f"Prompt Stuffing Verdict: {predicted_label}")
+
+                Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
+
+                # --- 4. Log to DB ---
+                Experiment(
+                    claim_id=claim_id,
+                    predicted_label=predicted_label,
+                    ground_truth=ground_truth,
+                    latencies={
+                        "preprocessor": 0.0,
+                        "retrieval": latency_retrieval,
+                        "generation": latency_generation,
+                    },
+                    tokens={
+                        "preprocessor": 0,
+                        "retrieval": 0,
+                        "generation": tokens_used,
+                    },
+                    calls={
+                        "preprocessor": 0,
+                        "retrieval": 0,
+                        "generation": 1,
+                    },
+                    evidence_data={
+                        "claim_text": claim_text,
+                        "raw_sources": [],
+                        "best_evidence": best_evidence,
+                        "query_result": query_result,
+                    },
+                    system_type="PromptStuffing",
+                    environment=metadata["environment"],
+                    dataset_name=metadata["dataset_name"],
+                    experiment_type=metadata["experiment_type"],
+                    use_metadata=use_meta,
+                    error_details=(
+                        f"Stage: {error_stage} | "
+                        f"Type: {error_type} | "
+                        f"Message: {error_message}"
+                        if error_type is not None
+                        else None
+                    ),
+                )
+
+                if predicted_label == "Error":
+                    failed_runs += 1
+                else:
+                    successful_runs += 1
+
+                time.sleep(2)
+
+            except Exception as e:
+                logger.exception(f"Error processing claim {line_number + 1}: {e}")
+
+                try:
+                    if claim_id is not None:
+                        Experiment(
+                            claim_id=claim_id,
+                            predicted_label="Error",
+                            ground_truth=ground_truth,
+                            latencies={
+                                "preprocessor": 0.0,
+                                "retrieval": latency_retrieval,
+                                "generation": latency_generation,
+                            },
+                            tokens={
+                                "preprocessor": 0,
+                                "retrieval": 0,
+                                "generation": tokens_used,
+                            },
+                            calls={
+                                "preprocessor": 0,
+                                "retrieval": 0,
+                                "generation": 1 if query_result is not None else 0,
+                            },
+                            evidence_data={
+                                "claim_text": claim_text,
+                                "search_query": search_query,
+                                "raw_sources": [],
+                                "best_evidence": best_evidence,
+                                "query_result": query_result,
+                            },
+                            system_type="PromptStuffing",
+                            environment=metadata["environment"],
+                            dataset_name=metadata["dataset_name"],
+                            experiment_type=metadata["experiment_type"],
+                            use_metadata=use_meta,
+                            error_details=(
+                                f"Stage: {current_stage} | "
+                                f"Type: {type(e).__name__} | "
+                                f"Message: {str(e)}"
+                            ),
+                        )
+                except Exception:
+                    logger.exception(
+                        f"Failed to save failed experiment for claim {line_number + 1}"
+                    )
+
+                failed_runs += 1
+                continue
+
+    except Exception as e:
+        logger.exception(f"Fatal error during experiment: {e}")
+    finally:
+        if wiki_conn:
+            wiki_conn.close()
+
+    logger.info("=" * 20)
+    logger.info("PROMPT STUFFING (CONTROLLED) COMPLETE!")
+    logger.info(f"Successfully processed: {successful_runs}")
+    logger.info(f"Failed processing: {failed_runs}")
+    logger.info("=" * 20)
+
+
+if __name__ == "__main__":
+    run_prompt_stuffing_baseline_controlled()

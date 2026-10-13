@@ -20,14 +20,13 @@ class Database:
         """
         self.logger = Logger(self.__class__.__name__).get_logger()
         try:
-            dotenv.load_dotenv(env_file, override=True)
+            dotenv.load_dotenv(env_file, override=False)
             self.db_file = os.environ["SQLDB_PATH"]
-            self.assets_dir = os.environ["ASSET_PATH"]
+            self.graph_dir = os.environ["GRAPHS_PATH"]
             self.experiments_dir = os.environ["EXPERIMENTS_EVIDENCES_PATH"]
         except KeyError as e:
-            self.logger.error("Environment variable SQLDB_PATH not found.")
-            raise e
-
+            self.logger.exception("Environment variable %s not found.", e.args[0])
+            raise
         db_dir = os.path.dirname(self.db_file)
         if db_dir and not os.path.exists(db_dir):
             os.makedirs(db_dir)
@@ -49,8 +48,8 @@ class Database:
             self.logger.info("Successfully connected to the database.")
             return self.conn
         except sqlite3.DatabaseError as e:
-            self.logger.error("Failed to connect to the database.")
-            raise e
+            self.logger.exception("Failed to connect to the database: %s", e)
+            raise 
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
@@ -68,8 +67,8 @@ class Database:
             try:
                 self.conn.close()
             except Exception as e:
-                self.logger.error("Error while closing the database connection.")
-                raise e
+                self.logger.exception("Error while closing the database connection: %s", e)
+                raise 
 
     def create_table(self, create_table_sql):
         """
@@ -88,8 +87,8 @@ class Database:
                 conn.commit()
             self.logger.info("Table created successfully.")
         except sqlite3.DatabaseError as e:
-            self.logger.error("Error creating table.")
-            raise e
+            self.logger.exception("Error creating table: %s", e)
+            raise
 
     def execute_query(self, query, params=()):
         """
@@ -102,10 +101,6 @@ class Database:
         Raises:
             sqlite3.DatabaseError: If there is an error during query execution.
         """
-        masked_params = [
-            param if not isinstance(param, (bytes, bytearray)) else "BLOB"
-            for param in params
-        ]
         self.logger.info("Executing query: %s", query)
 
         try:
@@ -115,8 +110,8 @@ class Database:
                 conn.commit()
             self.logger.info("Query executed successfully.")
         except sqlite3.DatabaseError as e:
-            self.logger.error("Error executing query.")
-            raise e
+            self.logger.exception("Error executing query: %s", e)
+            raise
 
     def fetch_all(self, query, params=()):
         """
@@ -143,8 +138,8 @@ class Database:
             self.logger.info("Fetched %d records.", len(result))
             return result
         except sqlite3.DatabaseError as e:
-            self.logger.error("Error fetching records.")
-            raise e
+            self.logger.exception("Error fetching records: %s", e)
+            raise
 
     def fetch_one(self, query, params=()):
         """
@@ -171,8 +166,8 @@ class Database:
             self.logger.info("Fetched one record.")
             return result
         except sqlite3.DatabaseError as e:
-            self.logger.error("Error fetching record.")
-            raise e
+            self.logger.exception("Error fetching record: %s", e)
+            raise
 
     def delete_all_conversations(self):
         """
@@ -195,39 +190,32 @@ class Database:
             # Deleting conversations from the database
             with self as conn:
                 cursor = conn.cursor()
-                cursor.execute("DELETE FROM claims;")
                 cursor.execute("DELETE FROM answers;")
                 cursor.execute("DELETE FROM sources;")
                 cursor.execute("DELETE FROM experiments;")
+                cursor.execute("DELETE FROM claims;")
                 conn.commit()
             self.logger.info("All conversations deleted successfully.")
 
             # 2. Clean up graphs in the data folder
-            if os.path.isdir(self.assets_dir):
-                for root, dirs, _ in os.walk(self.assets_dir, topdown=False):
+            if os.path.isdir(self.graph_dir):
+                for root, dirs, _ in os.walk(self.graph_dir, topdown=False):
                     for name in dirs:
                         dir_path = os.path.join(root, name)
-                        try:
-                            shutil.rmtree(dir_path)
-                            self.logger.info(
-                                f"Deleted directory and its contents: {dir_path}"
-                            )
-                        except OSError as e:
-                            self.logger.error(
-                                f"Error deleting directory {dir_path}: {e}"
-                            )
+                        shutil.rmtree(dir_path)
+                        self.logger.info(
+                            f"Deleted directory and its contents: {dir_path}"
+                        )
             else:
-                self.logger.warning(f"Assets folder does not exist: {self.assets_dir}")
+                self.logger.warning(f"Graph folder does not exist: {self.graph_dir}")
 
             # 3. Clean up JSON files in the experiments folder
             if os.path.isdir(self.experiments_dir):
                 for filename in os.listdir(self.experiments_dir):
                     file_path = os.path.join(self.experiments_dir, filename)
-                    try:
-                        if os.path.isfile(file_path):
-                            os.remove(file_path)
-                    except OSError as e:
-                        self.logger.error(f"Error deleting file {file_path}: {e}")
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+
                 self.logger.info(
                     f"Cleared all experiment logs in: {self.experiments_dir}"
                 )
@@ -237,11 +225,11 @@ class Database:
                 )
 
         except sqlite3.DatabaseError as e:
-            self.logger.error("Error deleting database rows.")
-            raise e
+            self.logger.exception("Error deleting database rows: %s", e)
+            raise
         except OSError as e:
-            self.logger.error("Error cleaning up files.")
-            raise e
+            self.logger.exception("Error cleaning up files: %s", e)
+            raise
 
     def get_history(self):
         """
@@ -275,7 +263,7 @@ class Database:
         rows = self.fetch_all(query)
 
         if not rows:
-            return {}
+            return []
 
         conversations = []
 

@@ -1,0 +1,326 @@
+import os
+import time
+import uuid
+import dotenv
+from llamacpp_client import ChatLlamaCppServer, load_models, set_alias_map
+from langchain_core.messages import HumanMessage
+from rank_bm25 import BM25Okapi
+from log import Logger
+
+from Evaluation.Utils.dataset_manager import DatasetManager
+from Utils.prompt_manager import get_dataset_response_format_instructions
+from WebScraper.scraper import Scraper
+from Database.data_entities import Claim, Answer, Experiment
+
+dotenv.load_dotenv("key.env", override=False)
+
+model_alias = os.getenv("LLM_MODEL_ALIAS", "meta-llama-3")
+model_port = int(os.getenv("LLM_MODEL_PORT", "8080"))
+
+print(f"[Backend] Connecting to local llama.cpp server on port {model_port}...")
+set_alias_map({model_alias: model_port})
+load_models([model_alias])
+
+# Configuration
+logger = Logger("SparseRAG-OpenWeb").get_logger()
+
+
+def simple_chunker(text, chunk_word_size=150):
+    """Breaks massive web pages into smaller paragraph-sized chunks for BM25 to analyze."""
+    words = text.split()
+    chunks = []
+    for i in range(0, len(words), chunk_word_size):
+        chunk = " ".join(words[i : i + chunk_word_size])
+        chunks.append(chunk)
+    return chunks
+
+
+def get_bm25_verdict(claim_text, best_evidence_string, response_format_instructions):
+    """Asks the LLM to verify the claim using ONLY the top chunks found by BM25."""
+    prompt = f"""You are a strict fact-checking AI.
+    Verify the following claim using ONLY the provided evidence. 
+
+    {response_format_instructions}
+
+    EVIDENCE:
+    {best_evidence_string}
+
+    CLAIM: {claim_text}
+    """
+
+    client = ChatLlamaCppServer(
+        model=model_alias,
+        temperature=0.0,
+        max_tokens=200,
+    )
+
+    messages = [HumanMessage(content=prompt)]
+    response = client.invoke(messages)
+
+    result_text = response.content
+    tokens_used = (
+        response.response_metadata.get("token_usage", {}).get("total_tokens", 0)
+        if hasattr(response, "response_metadata")
+        else 0
+    )
+
+    return result_text, tokens_used
+
+
+def run_sparse_baseline_openweb():
+    dataset_manager = DatasetManager()
+    metadata = dataset_manager.get_experiment_metadata(environment="open_web")
+    active_dataset = metadata["dataset_name"]
+    use_meta = metadata["use_metadata"]
+
+    response_format_instructions = get_dataset_response_format_instructions(
+        active_dataset
+    )
+
+    logger.info("Starting Baseline (SparseRAG - Open Web)...")
+    logger.info(f"Environment: {metadata['environment']}")
+    logger.info(f"Active Dataset: {active_dataset}")
+    logger.info(f"Experiment Type: {metadata['experiment_type']}")
+    logger.info(f"Using Metadata Super Query: {use_meta}")
+
+    successful_runs = 0
+    failed_runs = 0
+
+    try:
+        claims_data = dataset_manager.load_data()
+
+        for line_number, data in enumerate(claims_data):
+            claim_id = None
+            claim_text = ""
+            ground_truth = ""
+            search_query = ""
+            current_stage = "claim_setup"
+
+            latency_retrieval = 0.0
+            latency_generation = 0.0
+            tokens_retrieval = 0
+            tokens_used = 0
+            calls_retrieval = 0
+
+            raw_scraped_sources = []
+            scraper_metrics = {}
+            best_evidence = ""
+            query_result = None
+
+            try:
+                scraper = Scraper()
+
+                claim_text = data.get("claim", "")
+                ground_truth = data.get("label", "")
+
+                search_query = claim_text
+                if active_dataset == "AVERITEC" and use_meta:
+                    search_query = dataset_manager.build_search_query(data)
+
+                logger.info(f"[{line_number + 1}] Claim: {claim_text}")
+                if search_query != claim_text:
+                    logger.info(f"Enriched Search Query: {search_query}")
+
+                claim_id = str(uuid.uuid4())
+
+                Claim(
+                    text=claim_text,
+                    title="[Sparse] " + claim_text[:30] + "...",
+                    claim_id=claim_id,
+                )
+
+                # --- 1. Retrieval & Filtering (Scraper + BM25) ---
+                current_stage = "retrieval"
+
+                t0 = time.time()
+                raw_scraped_sources, scraper_metrics = scraper.search_and_extract(
+                    search_query, num_results=10
+                )
+
+                logger.info(
+                    f"Scraped {len(raw_scraped_sources)} pages. Running BM25 math..."
+                )
+
+                all_text = ""
+                for src in raw_scraped_sources:
+                    all_text += src.get("body", "") + " "
+
+                chunks = simple_chunker(all_text)
+
+                if not chunks:
+                    best_evidence = "No relevant articles could be scraped."
+                else:
+                    tokenized_corpus = [chunk.lower().split() for chunk in chunks]
+                    bm25 = BM25Okapi(tokenized_corpus)
+                    tokenized_query = search_query.lower().split()
+
+                    top_3_chunks = bm25.get_top_n(tokenized_query, chunks, n=3)
+                    best_evidence = "\n--- BM25 TOP MATCH ---\n".join(top_3_chunks)
+
+                latency_retrieval = time.time() - t0
+                tokens_retrieval = scraper_metrics.get("total", 0)
+                calls_retrieval = scraper_metrics.get("calls", 0)
+
+                # --- 2. Generation (The LLM Call) ---
+                current_stage = "generation"
+
+                t0 = time.time()
+                query_result, tokens_used = get_bm25_verdict(
+                    claim_text, best_evidence, response_format_instructions
+                )
+                latency_generation = time.time() - t0
+
+                # --- 3. Verdict Parsing ---
+                current_stage = "parsing"
+
+                error_type = None
+                error_message = None
+                error_stage = None
+
+                try:
+                    if not query_result or not str(query_result).strip():
+                        predicted_label = "Error"
+                        error_type = "EmptyLLMResponse"
+                        error_message = "The LLM returned an empty response."
+                        error_stage = "parsing"
+                        query_result = "The LLM failed to generate a response."
+
+                    elif "VERDICT:" in query_result and "REASONING:" in query_result:
+                        predicted_label = (
+                            str(query_result)
+                            .split("REASONING:")[0]
+                            .replace("VERDICT:", "")
+                            .strip()
+                        )
+
+                    else:
+                        predicted_label = "Error"
+                        error_type = "UnstructuredResponse"
+                        error_message = "The LLM response did not contain both VERDICT and REASONING."
+                        error_stage = "parsing"
+
+                except Exception as e:
+                    logger.exception(f"Error parsing verdict: {e}")
+                    predicted_label = "Error"
+                    error_type = type(e).__name__
+                    error_message = str(e)
+                    error_stage = "parsing"
+
+                logger.info(f"Sparse Verdict: {predicted_label}")
+
+                current_stage = "database_logging"
+
+                Answer(claim_id=claim_id, answer=query_result, graphs_folder=None)
+
+                # --- 4. Log to DB ---
+                Experiment(
+                    claim_id=claim_id,
+                    predicted_label=predicted_label,
+                    ground_truth=ground_truth,
+                    latencies={
+                        "preprocessor": 0.0,
+                        "retrieval": latency_retrieval,
+                        "generation": latency_generation,
+                    },
+                    tokens={
+                        "preprocessor": 0,
+                        "retrieval": tokens_retrieval,
+                        "generation": tokens_used,
+                    },
+                    calls={
+                        "preprocessor": 0,
+                        "retrieval": calls_retrieval,
+                        "generation": 1,
+                    },
+                    evidence_data={
+                        "claim_text": claim_text,
+                        "raw_sources": raw_scraped_sources,
+                        "bm25_evidence": best_evidence,
+                        "query_result": query_result,
+                    },
+                    system_type="SparseRAG",
+                    environment=metadata["environment"],
+                    dataset_name=metadata["dataset_name"],
+                    experiment_type=metadata["experiment_type"],
+                    use_metadata=use_meta,
+                    error_details=(
+                        f"Stage: {error_stage} | "
+                        f"Type: {error_type} | "
+                        f"Message: {error_message}"
+                        if error_type is not None
+                        else None
+                    ),
+                )
+
+                if predicted_label == "Error":
+                    failed_runs += 1
+                else:
+                    successful_runs += 1
+
+                logger.info(
+                    "Sleeping for 15 seconds to respect DuckDuckGo rate limits..."
+                )
+                time.sleep(15)
+
+            except Exception as e:
+                logger.exception(f"Error processing claim {line_number + 1}: {e}")
+
+                try:
+                    if claim_id is not None:
+                        Experiment(
+                            claim_id=claim_id,
+                            predicted_label="Error",
+                            ground_truth=ground_truth,
+                            latencies={
+                                "preprocessor": 0.0,
+                                "retrieval": latency_retrieval,
+                                "generation": latency_generation,
+                            },
+                            tokens={
+                                "preprocessor": 0,
+                                "retrieval": tokens_retrieval,
+                                "generation": tokens_used,
+                            },
+                            calls={
+                                "preprocessor": 0,
+                                "retrieval": calls_retrieval,
+                                "generation": 1 if query_result is not None else 0,
+                            },
+                            evidence_data={
+                                "claim_text": claim_text,
+                                "search_query": search_query,
+                                "raw_sources": raw_scraped_sources,
+                                "bm25_evidence": best_evidence,
+                                "query_result": query_result,
+                            },
+                            system_type="SparseRAG",
+                            environment=metadata["environment"],
+                            dataset_name=metadata["dataset_name"],
+                            experiment_type=metadata["experiment_type"],
+                            use_metadata=use_meta,
+                            error_details=(
+                                f"Stage: {current_stage} | "
+                                f"Type: {type(e).__name__} | "
+                                f"Message: {str(e)}"
+                            ),
+                        )
+                except Exception:
+                    logger.exception(
+                        f"Failed to save failed experiment for claim {line_number + 1}"
+                    )
+
+                failed_runs += 1
+                continue
+
+    except Exception as e:
+        logger.exception(f"Fatal error during experiment: {e}")
+
+    logger.info("=" * 20)
+    logger.info("SPARSE (OPEN WEB) COMPLETE!")
+    logger.info(f"Successfully processed: {successful_runs}")
+    logger.info(f"Failed processing: {failed_runs}")
+    logger.info("=" * 20)
+
+
+if __name__ == "__main__":
+    run_sparse_baseline_openweb()

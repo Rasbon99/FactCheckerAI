@@ -15,8 +15,11 @@ RUN apt-get update && apt-get install -y \
 # Copy the required files
 COPY requirements.txt .
 
-# Install Python dependencies without cache
+# 1. Upgrade pip
+# 2. FORCE install CPU-only PyTorch to prevent 3GB image bloat
+# 3. Install the rest of the requirements
 RUN pip install --upgrade pip \
+    && pip install torch --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements.txt
 
 # Copy all the code (after setting up .dockerignore)

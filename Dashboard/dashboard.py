@@ -23,13 +23,17 @@ class DashboardPipeline:
         Raises:
             Exception: If environment variables cannot be loaded or other initialization errors occur.
         """
-        dotenv.load_dotenv(env_file, override=True)
+        dotenv.load_dotenv(env_file, override=False)
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.logo = os.getenv("AI_IMAGE_UI", "assets/FOX_AI.png")
         self.controller_url = os.getenv("CONTROLLER_API_URL", "http://127.0.0.1:8003")
 
         # Load image into the sidebar
-        self.image_sidebar = Image.open(self.logo)
+        try:
+            self.image_sidebar = Image.open(self.logo)
+        except (FileNotFoundError, OSError) as e:
+            self.logger.exception(f"Failed to load dashboard logo '{self.logo}': {e}")
+            self.image_sidebar = None
 
         # Initialize session state
         self._initialize_session_state()
@@ -70,11 +74,28 @@ class DashboardPipeline:
         """
         try:
             response = requests.post(f"{self.controller_url}/clean_conversations")
-            response.raise_for_status()
-            st.sidebar.success("Chat history deleted successfully.")
-        except requests.exceptions.RequestException as e:
-            self._log_error(f"Error deleting chat history: {e}")
 
+            if response.status_code != 200:
+                try:
+                    detail = response.json().get("detail", response.text)
+                except ValueError:
+                    detail = response.text
+
+                self._log_error(f"Error deleting chat history: {detail}")
+                return False
+
+            st.sidebar.success("Chat history deleted successfully.")
+            return True
+
+        except requests.exceptions.RequestException as e:
+            self.logger.exception(f"Error deleting chat history: {e}")
+            st.error(f"Error connecting to the server: {e}")
+            return False
+        except Exception as e:
+            self.logger.exception(f"Unexpected error deleting chat history: {e}")
+            st.error(f"Unexpected error: {e}")
+            return False
+        
     def is_numeric_claim(self, claim_text):
         """
         Checks if the claim consists only of numeric characters.
@@ -98,19 +119,29 @@ class DashboardPipeline:
             requests.exceptions.RequestException: If there is an error in the POST request.
 
         Returns:
-            dict: A dictionary containing the response, including title, summary, query result, sources, and images.
+            dict: A dictionary containing the response, including title, query result, sources, and images.
         """
         with st.spinner("Processing claim..."):
             try:
                 response = requests.post(
                     f"{self.controller_url}/results", json={"text": claim}
                 )
-                response.raise_for_status()
+
+                if response.status_code != 200:
+                    try:
+                        detail = response.json().get("detail", response.text)
+                        if isinstance(detail, dict):
+                            detail = f"{detail.get('type', 'Error')}: {detail.get('message', detail)}"
+                    except ValueError:
+                        detail = response.text
+
+                    self._log_error(f"Pipeline error: {detail}")
+                    return None
+
                 data = response.json()
                 result = data.get("response", {})
 
                 claim_title = result.get("claim_title", "")
-                claim_summary = result.get("claim_summary", "")
                 query_result = result.get("query_result", "")
                 sources = [
                     {"title": src.get("title", ""), "url": src.get("url", "")}
@@ -120,13 +151,17 @@ class DashboardPipeline:
                 images = self._load_images_from_folder(result.get("graphs_folder", ""))
                 return {
                     "title": claim_title,
-                    "summary": claim_summary,
                     "response": query_result,
                     "sources": sources,
                     "images": images,
                 }
             except requests.exceptions.RequestException as e:
-                self._log_error(f"Error in POST request: {e}")
+                self.logger.exception(f"Error in POST request: {e}")
+                st.error(f"Error connecting to the server: {e}")
+                return None
+            except Exception as e:
+                self.logger.exception(f"Unexpected dashboard error: {e}")
+                st.error(f"Unexpected error: {e}")
                 return None
 
     def _load_images_from_folder(self, folder):
@@ -145,7 +180,8 @@ class DashboardPipeline:
                     img = Image.open(file)
                     images.append(img)
                 except Exception as e:
-                    self.logger.error(f"Error opening image {file}: {e}")
+                    self.logger.exception(f"Error opening image {file}: {e}")
+                    st.error(f"Error loading graph image: {os.path.basename(file)}")
         else:
             self.logger.warning(
                 f"Graphs folder does not exist or was not specified: {folder}"
@@ -170,10 +206,10 @@ class DashboardPipeline:
 
     def display_claim_response(self, response):
         """
-        Displays the response from the system regarding the user's claim, including title, summary, sources, and images.
+        Displays the response from the system regarding the user's claim, including title, sources, and images.
 
         Args:
-            response (dict): The response object containing claim title, summary, query result, sources, and images.
+            response (dict): The response object containing claim title, query result, sources, and images.
 
         Raises:
             Exception: If there is an error during the display of the claim response.
@@ -181,12 +217,8 @@ class DashboardPipeline:
         assistant_message = st.chat_message("assistant", avatar="🦊")
 
         # Styling for the title
-        title_html = f"<h2 style='color: rgba(0, 0, 0, 0.9); font-size: 1.5em; line-height: 1.4;'>{response['title'][2:]}</h2>"
+        title_html = f"<h2 style='color: rgba(0, 0, 0, 0.9); font-size: 1.5em; line-height: 1.4;'>{response['title']}</h2>"
         assistant_message.markdown(title_html, unsafe_allow_html=True)
-
-        # Styling for the summary
-        summary_html = f"<p style='color: rgba(0, 0, 0, 0.6); font-size: 1.1em; line-height: 1.6;'>{response['summary']}</p>"
-        assistant_message.markdown(summary_html, unsafe_allow_html=True)
 
         # Main response
         assistant_message.write(f"{response['response']}")
@@ -215,11 +247,25 @@ class DashboardPipeline:
         with st.spinner("Processing conversations..."):
             try:
                 response = requests.get(f"{self.controller_url}/conversations")
-                response.raise_for_status()
+
+                if response.status_code != 200:
+                    try:
+                        detail = response.json().get("detail", response.text)
+                    except ValueError:
+                        detail = response.text
+
+                    self._log_error(f"Error loading conversations: {detail}")
+                    return []
+
                 data = response.json()
                 return data.get("response", [])
             except requests.exceptions.RequestException as e:
-                self._log_error(f"Error in GET request: {e}")
+                self.logger.exception(f"Error in GET request: {e}")
+                st.error(f"Error connecting to the server: {e}")
+                return []
+            except Exception as e:
+                self.logger.exception(f"Unexpected error loading conversations: {e}")
+                st.error(f"Unexpected error: {e}")
                 return []
 
     def display_conversation(self, conversation):
@@ -270,7 +316,11 @@ class DashboardPipeline:
         if conversation.get("images"):
             cols = st.columns(len(conversation["images"]))
             for col, img in zip(cols, conversation["images"]):
-                col.image(img)
+                try:
+                    col.image(img)
+                except Exception as e:
+                    self.logger.exception(f"Error displaying history graph image {img}: {e}")
+                    st.error(f"Error loading graph image: {os.path.basename(img)}")
 
     def get_conversation_by_id(self, convo_id):
         """
@@ -291,7 +341,8 @@ class DashboardPipeline:
         Raises:
             Exception: If there is an error during the execution of the dashboard.
         """
-        st.image(self.image_sidebar)
+        if self.image_sidebar is not None:
+            st.image(self.image_sidebar)
 
         if st.session_state.view_mode == "chat":
             prompt = st.chat_input(max_chars=800, placeholder="Type your claim here...")
@@ -311,7 +362,8 @@ class DashboardPipeline:
                     if len(st.session_state.messages) > 1:
                         claim = st.session_state.messages[-1]["content"]
                         response = self.get_response(claim)
-                        self.display_claim_response(response)
+                        if response is not None:
+                            self.display_claim_response(response)
 
         else:
             if "selected_conversation" in st.session_state:
@@ -333,12 +385,11 @@ class DashboardPipeline:
 
             with col2:
                 if st.button("🗑️", key="del_chat", help="Delete Chat History"):
-                    # Supponiamo di avere definito una funzione per eliminare la cronologia
-                    self.delete_chat_history()
-                    st.session_state.view_mode = "chat"
-                    st.session_state.messages = []
-                    st.session_state.selected_conversation = None
-                    st.rerun()
+                    if self.delete_chat_history():
+                        st.session_state.view_mode = "chat"
+                        st.session_state.messages = []
+                        st.session_state.selected_conversation = None
+                        st.rerun()
 
             with col3:
                 if st.button("❌", key="exit_dash", help="Exit Dashboard"):

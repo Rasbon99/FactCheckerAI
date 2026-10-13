@@ -1,6 +1,8 @@
 import os
 import json
+from log import Logger
 
+logger = Logger("averitec_retriever").get_logger()
 
 class AVeriTeCKnowledgeRetriever:
     def __init__(self, knowledge_store_dir=None):
@@ -31,14 +33,16 @@ class AVeriTeCKnowledgeRetriever:
 
         # The file has a .json extension but is actually formatted as JSON Lines (.jsonl)
         with open(filepath, "r", encoding="utf-8") as file:
-            for line in file:
+            for line_number, line in enumerate(file, start=1):
                 try:
                     data = json.loads(line)
                     # Grab the array of scraped sentences
                     sentences = data.get("url2text", [])
                     all_sentences.extend(sentences)
-                except json.JSONDecodeError:
-                    # Safely ignore any weird invisible characters that break the parser
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        f"Invalid JSON in '{filepath}' at line {line_number}: {e}"
+                    )
                     continue
 
         return all_sentences

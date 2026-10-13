@@ -6,7 +6,7 @@ from log import Logger
 
 
 class Claim:
-    def __init__(self, text, title, summary, claim_id=None, db=None):
+    def __init__(self, text, title, claim_id=None, db=None):
         """
         Initializes a Claim object with text and optionally a provided claim ID.
         It will also save the claim to the database.
@@ -21,11 +21,9 @@ class Claim:
         self.logger = Logger(self.__class__.__name__).get_logger()
         self.db = db if db else Database()
 
-        # Use the provided claim_id, or generate a new one if None is passed
         self.id = claim_id if claim_id else str(uuid.uuid4())
         self.text = text
-        self.title = title[2:]
-        self.summary = summary
+        self.title = title
         self.logger.info("Creating claim with ID: %s", self.id)
         self.save_to_db()
 
@@ -39,8 +37,8 @@ class Claim:
         """
         self.logger.info("Saving claim to the database.")
         self.db.execute_query(
-            "INSERT INTO claims (id, text, title, summary) VALUES (?, ?, ?, ?)",
-            (self.id, self.text, self.title, self.summary),
+            "INSERT INTO claims (id, text, title) VALUES (?, ?, ?)",
+            (self.id, self.text, self.title),
         )
         self.logger.info("Claim with ID %s saved to the database.", self.id)
 
@@ -82,7 +80,6 @@ class Claim:
         """
         self.logger.info("Adding sources for claim ID %s.", self.id)
 
-        # Insert each source into the database
         for data in sources_data:
             self.db.execute_query(
                 """
@@ -112,9 +109,9 @@ class Claim:
             Exception: If there is an error during clearing the claim data from the database.
         """
         self.logger.info("Clearing claim data for claim ID %s.", self.id)
-        self.db.execute_query("DELETE FROM claims WHERE id = ?", (self.id,))
         self.db.execute_query("DELETE FROM sources WHERE claim_id = ?", (self.id,))
         self.db.execute_query("DELETE FROM answers WHERE claim_id = ?", (self.id,))
+        self.db.execute_query("DELETE FROM claims WHERE id = ?", (self.id,))
         self.logger.info("Claim data for claim ID %s cleared.", self.id)
 
     def has_answer(self):
@@ -175,7 +172,11 @@ class Experiment:
         calls,
         evidence_data,
         system_type="FoxAI-GraphRAG",
-        dataset_setting="User-Query",
+        environment="open_web",
+        dataset_name="User-Query",
+        experiment_type="standard",
+        use_metadata=False,
+        error_details=None,
         experiment_id=None,
         db=None,
     ):
@@ -187,27 +188,27 @@ class Experiment:
         self.ground_truth = ground_truth
 
         self.system_type = system_type
-        self.dataset_setting = dataset_setting
+        self.environment = environment
+        self.dataset_name = dataset_name
+        self.experiment_type = experiment_type
+        self.use_metadata = use_metadata
+        self.error_details = error_details
 
-        # Store the metric dictionaries
         self.latencies = latencies
         self.tokens = tokens
         self.calls = calls
 
-        # Save evidence and get the file path
         self.evidence_log_path = self.save_evidence(evidence_data)
 
-        # Save metrics to SQLite
         self.save_to_db()
 
     def save_evidence(self, evidence_data):
         self.logger.info("Saving raw evidence to JSON for experiment ID %s.", self.id)
 
-        # Pull the path directly from the environment variable
         log_dir = os.environ.get("EXPERIMENTS_EVIDENCES_PATH", "data/experiments")
 
         if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
+            os.makedirs(log_dir, exist_ok=True)
             self.logger.info("Created experiments directory: %s", log_dir)
 
         file_path = os.path.join(log_dir, f"{self.id}.json")
@@ -219,31 +220,32 @@ class Experiment:
     def save_to_db(self):
         self.db.execute_query(
             """INSERT INTO experiments 
-               (id, claim_id, predicted_label, ground_truth, system_type, dataset_setting, 
+               (id, claim_id, predicted_label, ground_truth, system_type, environment, dataset_name, experiment_type, use_metadata,
                 latency_preprocessor, latency_retrieval, latency_generation, 
                 tokens_preprocessor, tokens_retrieval, tokens_generation,
                 calls_preprocessor, calls_retrieval, calls_generation,
-                evidence_log_path) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                error_details, evidence_log_path)  
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 self.id,
                 self.claim_id,
                 self.predicted_label,
                 self.ground_truth,
                 self.system_type,
-                self.dataset_setting,
-                # Latencies
+                self.environment,
+                self.dataset_name,
+                self.experiment_type,
+                self.use_metadata,
                 self.latencies.get("preprocessor", 0.0),
                 self.latencies.get("retrieval", 0.0),
                 self.latencies.get("generation", 0.0),
-                # Tokens
                 self.tokens.get("preprocessor", 0),
                 self.tokens.get("retrieval", 0),
                 self.tokens.get("generation", 0),
-                # Calls
                 self.calls.get("preprocessor", 0),
                 self.calls.get("retrieval", 0),
                 self.calls.get("generation", 0),
+                self.error_details,
                 self.evidence_log_path,
             ),
         )
